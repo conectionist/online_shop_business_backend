@@ -85,3 +85,21 @@ mysql -h 127.0.0.1 -P ${MYSQL_PORT} -u ${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQL
 # Or connect from inside the container
 docker-compose exec db mysql -u${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQL_DATABASE}
 ```
+
+### Running the API
+
+1. **Start the API Service**
+   ```bash
+   # Start both the API and database services
+   docker-compose up -d
+   ```
+
+2. **Access the API**
+   - Health check: http://localhost:8000/
+   - API documentation: http://localhost:8000/docs
+
+3. **View API Logs**
+   ```bash
+   docker-compose logs -f api
+   ```
+

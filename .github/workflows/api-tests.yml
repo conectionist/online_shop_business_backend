@@ -9,9 +9,21 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    
+    # Add Docker service to the workflow
+    services:
+      docker:
+        image: docker:dind
+        options: --privileged
 
     steps:
       - uses: actions/checkout@v3
+      
+      - name: Set up Docker and Docker Compose
+        run: |
+          # Install Docker Compose
+          sudo apt-get update
+          sudo apt-get install -y docker-compose
 
       - name: Set up environment
         run: |

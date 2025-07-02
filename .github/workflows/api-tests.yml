@@ -28,6 +28,7 @@ jobs:
       - name: Set up environment
         run: |
           mkdir -p test_reports
+          chmod 777 test_reports  # Ensure directory is writable by all users
 
       - name: Run API tests script
         run: |

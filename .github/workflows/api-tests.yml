@@ -1,0 +1,41 @@
+name: API Tests
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up environment
+        run: |
+          cp .env.test .env
+          mkdir -p test_reports
+
+      - name: Run API tests script
+        run: |
+          chmod +x ./run_api_tests.sh
+          ./run_api_tests.sh
+
+      - name: Upload test reports
+        if: always()  # Upload reports even if tests fail
+        uses: actions/upload-artifact@v3
+        with:
+          name: api-test-reports
+          path: test_reports/
+
+      # - name: Send notification on failure
+      #   if: failure()
+      #   uses: rtCamp/action-slack-notify@v2
+      #   env:
+      #     SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      #     SLACK_CHANNEL: api-tests
+      #     SLACK_COLOR: danger
+      #     SLACK_MESSAGE: 'API Tests Failed :x:'
+      #     SLACK_TITLE: 'Test Results'

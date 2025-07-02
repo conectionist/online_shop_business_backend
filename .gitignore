@@ -49,6 +49,12 @@ ENV/
 *.log
 logs/
 
+# Test reports
+test_reports/
+*.xml
+*.html
+reports/
+
 # OS specific
 .DS_Store
 .DS_Store?

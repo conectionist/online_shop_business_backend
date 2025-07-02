@@ -19,3 +19,13 @@ class HealthResponse(BaseModel):
 async def root():
     """Health check endpoint"""
     return {"status": "online", "version": API_VERSION}
+
+@app.get("/produse")
+async def produse(category: str, price: int):
+    """Produse endpoint with intentional bugs (no Query)"""
+    # If the category is 'fail', return a bogus dict (missing 'category' and 'price')
+    if price % 2 == 0:
+        return {"cat": category, "prc": price}
+    # Otherwise, return the correct response
+    else:
+        return {"category": category, "price": price}

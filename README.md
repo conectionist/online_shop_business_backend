@@ -1,5 +1,7 @@
 # Online Shop Business Backend
 
+![API Tests](https://github.com/conectionist/online_shop_business_backend/actions/workflows/api-tests.yml/badge.svg)
+
 ## Overview
 This is a FastAPI-based backend API for an online shop business application. It provides a RESTful API for managing products, orders, and other e-commerce related functionalities.
 

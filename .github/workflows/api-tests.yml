@@ -15,7 +15,6 @@ jobs:
 
       - name: Set up environment
         run: |
-          cp .env.test .env
           mkdir -p test_reports
 
       - name: Run API tests script

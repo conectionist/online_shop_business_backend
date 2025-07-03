@@ -35,11 +35,18 @@ echo "🏗️ Building test containers..."
 docker-compose -f docker-compose.test.yml --env-file .env.test build
 
 # Start the MySQL service
-# echo "🚀 Starting MySQL test environment..."
-# docker-compose -f docker-compose.test.yml --env-file .env.test up -d mysql_test
+echo "🚀 Starting MySQL test environment..."
+docker-compose -f docker-compose.test.yml --env-file .env.test up -d mysql_test
 
-# echo "⏳ Waiting for MySQL to be ready..."
-# sleep 5
+echo "⏳ Waiting for MySQL to be ready..."
+# Display a countdown
+TOTAL_WAIT=15
+for (( i=$TOTAL_WAIT; i>=1; i-- ))
+do
+  echo -ne "\r⌛ MySQL starting... $i seconds remaining "
+  sleep 1
+done
+echo -ne "\r✅ MySQL should be ready now!             \n"
 
 # Start the API service
 echo "🚀 Starting API test environment..."
@@ -47,7 +54,7 @@ docker-compose -f docker-compose.test.yml --env-file .env.test up -d api_server_
 
 # Wait for API server to be ready
 echo "⏳ Waiting for API server to be ready..."
-sleep 5
+sleep 2
 
 # Run the tests
 echo "🧪 Running API tests with pattern: ${TEST_PATTERN:-'*'}"

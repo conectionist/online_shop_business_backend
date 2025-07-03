@@ -5,12 +5,16 @@ from sqlalchemy import text
 
 from app.core.config import API_VERSION, API_TITLE, API_DESCRIPTION
 from app.core.database import get_db
+from app.api.api import api_router
 
 app = FastAPI(
     title=API_TITLE,
     description=API_DESCRIPTION,
     version=API_VERSION
 )
+
+# Include API router
+app.include_router(api_router, prefix="/api/v1")
 
 
 class HealthResponse(BaseModel):

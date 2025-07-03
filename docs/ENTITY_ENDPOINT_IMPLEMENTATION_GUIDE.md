@@ -10,11 +10,11 @@ The following entities need to be implemented in order of dependency. Check them
 
 #### Independent Entities (No Dependencies)
 - [x] **Units (Unitati)** - Units of measurement for products
-- [ ] **Categories (Categorii)** - Product categories
 - [ ] **Payment Methods (Modalitati de Plata)** - Methods of payment
 - [ ] **Delivery Types (Tipuri Livrare)** - Types of delivery options
 - [ ] **Delivery Schedules (Orare Livrari)** - Delivery time schedules
 - [ ] **Business Details (Business Details)** - Shop business information
+- [ ] **Categories (Categorii)** - Product categories
 - [ ] **Admins (Admins)** - Admin user management
 
 #### Dependent Entities (Level 1)

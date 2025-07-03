@@ -1,11 +1,23 @@
-from typing import Optional
+from typing import Optional, Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class UnitatBase(BaseModel):
     """Base schema for unit attributes"""
-    denumire: str = Field(..., description="The name of the unit", min_length=1, max_length=45)
+    denumire: Annotated[str, Field(
+        description="The name of the unit", 
+        min_length=1, 
+        max_length=45,
+        examples=["buc", "kg", "l"]
+    )]
+    
+    @field_validator('denumire')
+    @classmethod
+    def validate_denumire(cls, v):
+        if v is not None and v.strip() == "":
+            raise ValueError("denumire cannot be empty or just whitespace")
+        return v
 
 
 class UnitatCreate(UnitatBase):
@@ -20,7 +32,6 @@ class UnitatUpdate(BaseModel):
 
 class Unitat(UnitatBase):
     """Schema for returning unit data"""
-    id: int
+    id: Annotated[int, Field(gt=0, description="The unique identifier for the unit")]
     
-    class Config:
-        from_attributes = True  # Previously orm_mode in older Pydantic versions
+    model_config = ConfigDict(from_attributes=True)  # Modern Pydantic v2 approach

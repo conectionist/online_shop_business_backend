@@ -43,10 +43,10 @@ echo "⏳ Waiting for MySQL to be ready..."
 TOTAL_WAIT=15
 for (( i=$TOTAL_WAIT; i>=1; i-- ))
 do
-  echo -ne "\r⌛ MySQL starting... $i seconds remaining "
+  echo -ne "\r⌛ MySQL starting... Should be ready in about $i seconds"
   sleep 1
 done
-echo -ne "\r✅ MySQL should be ready now!             \n"
+echo -ne "\r✅ MySQL should be ready now!                         \n"
 
 # Start the API service
 echo "🚀 Starting API test environment..."

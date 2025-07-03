@@ -6,17 +6,31 @@ This document provides a step-by-step guide for adding new entity endpoints to t
 
 The following entities need to be implemented in order of dependency. Check them off as they are completed:
 
+### Implementation Order
+
+#### Independent Entities (No Dependencies)
 - [x] **Units (Unitati)** - Units of measurement for products
 - [ ] **Categories (Categorii)** - Product categories
 - [ ] **Payment Methods (Modalitati de Plata)** - Methods of payment
-- [ ] **Business Details (Business Details)** - Shop business information (has relationship with Payment Methods)
 - [ ] **Delivery Types (Tipuri Livrare)** - Types of delivery options
+- [ ] **Delivery Schedules (Orare Livrari)** - Delivery time schedules
+- [ ] **Business Details (Business Details)** - Shop business information
+- [ ] **Admins (Admins)** - Admin user management
+
+#### Dependent Entities (Level 1)
 - [ ] **Products (Produse)** - Main product entities (depends on Units and Categories)
-- [ ] **Lists (Liste)** - Product groupings/collections
-- [ ] **Products in Lists (Liste au Produse)** - Junction table
+- [ ] **Lists (Liste)** - Product groupings/collections (depends on Delivery Schedules)
+- [ ] **Business Details has Payment Methods** - Junction table (depends on Business Details and Payment Methods)
+
+#### Dependent Entities (Level 2)
+- [ ] **Secondary Images** - Additional product images (depends on Products)
+- [ ] **Temporary Products (Produse Temporare)** - Special product listings (depends on Products)
+- [ ] **Products in Lists (Liste au Produse)** - Junction table (depends on Products and Lists)
+- [ ] **Lists have Delivery Types** - Junction table (depends on Lists and Delivery Types)
 - [ ] **Orders (Comenzi)** - Customer orders (depends on Lists)
+
+#### Dependent Entities (Level 3)
 - [ ] **Order Products (Comenzi au Produse)** - Products in orders (depends on Orders, Products and Units)
-- [ ] **Admins (Admins)** - Admin users for system access
 
 ## Implementation Checklist
 

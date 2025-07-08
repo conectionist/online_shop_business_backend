@@ -8,7 +8,9 @@ The following entities need to be implemented in order of dependency. Check them
 
 ### Implementation Order
 
-#### Independent Entities (No Dependencies)
+### Core Entities
+
+#### Level 0: Independent Entities
 - [x] **Units (Unitati)** - Units of measurement for products
 - [x] **Payment Methods (Modalitati de Plata)** - Methods of payment
 - [ ] **Delivery Types (Tipuri Livrare)** - Types of delivery options
@@ -17,20 +19,23 @@ The following entities need to be implemented in order of dependency. Check them
 - [ ] **Categories (Categorii)** - Product categories
 - [ ] **Admins (Admins)** - Admin user management
 
-#### Dependent Entities (Level 1)
-- [ ] **Products (Produse)** - Main product entities (depends on Units and Categories)
-- [ ] **Lists (Liste)** - Product groupings/collections (depends on Delivery Schedules)
-- [ ] **Business Details has Payment Methods** - Junction table (depends on Business Details and Payment Methods)
+#### Level 1: First-Level Dependencies
+- [ ] **Products (Produse)** - (depends on `Units` and `Categories`)
+- [ ] **Lists (Liste)** - (depends on `Delivery Schedules`)
 
-#### Dependent Entities (Level 2)
-- [ ] **Secondary Images** - Additional product images (depends on Products)
-- [ ] **Temporary Products (Produse Temporare)** - Special product listings (depends on Products)
-- [ ] **Products in Lists (Liste au Produse)** - Junction table (depends on Products and Lists)
-- [ ] **Lists have Delivery Types** - Junction table (depends on Lists and Delivery Types)
-- [ ] **Orders (Comenzi)** - Customer orders (depends on Lists)
+#### Level 2: Second-Level Dependencies
+- [ ] **Secondary Images** - (depends on `Products`)
+- [ ] **Temporary Products (Produse Temporare)** - (depends on `Products`)
+- [ ] **Orders (Comenzi)** - (depends on `Lists`)
 
-#### Dependent Entities (Level 3)
-- [ ] **Order Products (Comenzi au Produse)** - Products in orders (depends on Orders, Products and Units)
+### Junction (Many-to-Many) Tables
+
+These tables connect core entities and should be implemented after their dependencies are in place.
+
+- [ ] **Business Details <> Payment Methods** - (depends on `Business Details`, `Payment Methods`)
+- [ ] **Lists <> Delivery Types** - (depends on `Lists`, `Delivery Types`)
+- [ ] **Lists <> Products** - (depends on `Lists`, `Products`)
+- [ ] **Orders <> Products (Comenzi au Produse)** - (depends on `Orders`, `Products`, `Units`)
 
 ## Implementation Checklist
 

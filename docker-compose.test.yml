@@ -67,7 +67,7 @@ services:
     environment:
       - SCHEMATHESIS_BASE_URL=http://api_server_test:8000
     volumes:
-      - ./test_reports:/reports
+      - ./test-reports:/reports
     networks:
       - test_network
 

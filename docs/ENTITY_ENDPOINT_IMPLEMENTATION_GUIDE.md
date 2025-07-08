@@ -10,7 +10,7 @@ The following entities need to be implemented in order of dependency. Check them
 
 #### Independent Entities (No Dependencies)
 - [x] **Units (Unitati)** - Units of measurement for products
-- [ ] **Payment Methods (Modalitati de Plata)** - Methods of payment
+- [x] **Payment Methods (Modalitati de Plata)** - Methods of payment
 - [ ] **Delivery Types (Tipuri Livrare)** - Types of delivery options
 - [ ] **Delivery Schedules (Orare Livrari)** - Delivery time schedules
 - [ ] **Business Details (Business Details)** - Shop business information
@@ -416,40 +416,6 @@ from app.api.endpoints import your_entity
 # Add this line to the existing api_router.include_router statements
 api_router.include_router(your_entity.router, prefix="/your-entities", tags=["your-entities"])
 ```
-
-### 6. Update Database Schema
-
-Add the new table to `db/schema.sql` if using raw SQL schema:
-
-```sql
--- -----------------------------------------------------
--- Table `online_shop`.`your_entities`
--- -----------------------------------------------------
-CREATE TABLE IF NOT EXISTS `online_shop`.`your_entities` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `name` VARCHAR(50) NOT NULL,
-  `description` VARCHAR(200) NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE INDEX `name_UNIQUE` (`name` ASC))
-ENGINE = InnoDB;
-```
-
-### 7. Add Test Data (Optional)
-
-Add seed data to `test/test_data/seed_data.sql` for testing:
-
-```sql
--- -----------------------------------------------------
--- Data for table `online_shop`.`your_entities`
--- -----------------------------------------------------
-START TRANSACTION;
-USE `online_shop`;
-INSERT INTO `online_shop`.`your_entities` (`id`, `name`, `description`) VALUES (DEFAULT, 'Test Entity 1', 'Description 1');
-INSERT INTO `online_shop`.`your_entities` (`id`, `name`, `description`) VALUES (DEFAULT, 'Test Entity 2', 'Description 2');
-
-COMMIT;
-```
-
 ## Best Practices
 
 ### Validation
@@ -494,19 +460,70 @@ COMMIT;
 
 ## Testing
 
-Test each new endpoint with Schemathesis to ensure it handles all edge cases properly:
+New endpoints must be covered by both contract tests and integration tests.
 
-1. Start the test environment
-   ```bash
-   ./run_api_tests.sh
-   ```
+### Contract Tests
 
-2. Check for common issues:
-   - 500 errors (should be converted to appropriate 4xx)
-   - Missing validation (e.g., allowing negative IDs)
-   - Schema violations
-   - Duplicate handling
-   - Empty field handling
+Test each new endpoint with Schemathesis to ensure it handles all edge cases properly. The CI pipeline runs these automatically, but you can run them locally:
+
+```bash
+./run_api_contract_tests.sh
+```
+
+### Integration Tests
+
+In addition to contract testing, it's crucial to add integration tests that cover the full CRUD (Create, Read, Update, Delete) lifecycle of the new entity.
+
+1.  **Create a new test file** in the `tests/integration/` directory. For an entity named `YourEntity`, the file should be named `test_your_entity_api.py`.
+
+2.  **Write a CRUD workflow test**. This test should perform all CRUD operations in a single, atomic test function to ensure the full lifecycle works as expected and to maintain test isolation.
+
+    Here is a template you can adapt:
+
+    ```python
+    # tests/integration/test_your_entity_api.py
+    import os
+    import requests
+
+    API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8001")
+    API_V1_STR = "/api/v1"
+    ENDPOINT = f"{API_BASE_URL}{API_V1_STR}/your-entities" # <-- Change this to your entity's endpoint
+
+    def test_your_entity_crud_workflow():
+        """
+        Tests the full Create, Read, Update, and Delete (CRUD) workflow for YourEntity.
+        """
+        # 1. CREATE a new entity
+        create_payload = {"name": "Test Name", "description": "Test Description"} # <-- Adjust payload
+        create_response = requests.post(ENDPOINT, json=create_payload)
+        assert create_response.status_code == 201
+        created_entity = create_response.json()
+        entity_id = created_entity["id"]
+
+        # 2. READ the created entity
+        read_response = requests.get(f"{ENDPOINT}/{entity_id}")
+        assert read_response.status_code == 200
+        assert read_response.json() == created_entity
+
+        # 3. UPDATE the entity
+        update_payload = {"name": "Updated Name", "description": "Updated Description"} # <-- Adjust payload
+        update_response = requests.put(f"{ENDPOINT}/{entity_id}", json=update_payload)
+        assert update_response.status_code == 200
+
+        # 4. DELETE the entity
+        delete_response = requests.delete(f"{ENDPOINT}/{entity_id}")
+        assert delete_response.status_code == 204
+
+        # 5. VERIFY the entity is deleted
+        verify_response = requests.get(f"{ENDPOINT}/{entity_id}")
+        assert verify_response.status_code == 404
+    ```
+
+3.  **Run the integration tests** to ensure everything works correctly:
+
+    ```bash
+    ./run_api_integration_tests.sh
+    ```
 
 ## Checklist Before Committing
 

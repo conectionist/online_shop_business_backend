@@ -8,13 +8,7 @@ INSERT INTO `online_shop`.`category` (`id`, `name`, `image_path`, `is_deleted`) 
 (3, 'Dairy', '/images/categories/dairy.jpg', 0),
 (4, 'Bakery', '/images/categories/bakery.jpg', 0);
 
--- Seed units
-INSERT INTO `online_shop`.`unitati` (`id`, `denumire`) VALUES 
-(1, 'buc'),
-(2, 'g'),
-(3, 'kg'),
-(4, 'l'),
-(5, 'ml');
+
 
 -- Seed products
 INSERT INTO `online_shop`.`produse` (`id`, `nume`, `cantitate`, `pret`, `primary_image_path`, `description`, `category_id`, `unitati_id`, `stock`, `is_deleted`) VALUES

@@ -16,7 +16,7 @@ The testing pipeline uses Schemathesis to perform property-based testing of the 
 To run the API tests, use the provided script:
 
 ```bash
-./run_api_tests.sh
+./run_api_contract_tests.sh
 ```
 
 ### Options
@@ -26,7 +26,7 @@ To run the API tests, use the provided script:
 
 Example:
 ```bash
-./run_api_tests.sh --keep-containers --test-pattern="GET /api/products*"
+./run_api_contract_tests.sh --keep-containers --test-pattern="GET /api/products*"
 ```
 
 ## Test Reports

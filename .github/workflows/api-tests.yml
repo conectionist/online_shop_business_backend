@@ -1,4 +1,4 @@
-name: API Tests
+name: API Contract and Integration Tests
 
 on:
   push:
@@ -19,10 +19,9 @@ on:
       - '.github/*.md'
 
 jobs:
-  test:
+  run-api-tests:
     runs-on: ubuntu-latest
     
-    # Add Docker service to the workflow
     services:
       docker:
         image: docker:dind
@@ -33,26 +32,32 @@ jobs:
       
       - name: Set up Docker and Docker Compose
         run: |
-          # Install Docker Compose
           sudo apt-get update
           sudo apt-get install -y docker-compose
 
       - name: Set up environment
         run: |
-          mkdir -p test_reports
-          chmod 777 test_reports  # Ensure directory is writable by all users
+          # Create the parent directory for test reports
+          mkdir -p test-reports
+          # The scripts will create subdirectories, so we just need to ensure the base is writable
+          chmod 777 test-reports
 
-      - name: Run API tests script
+      - name: Run API Contract Tests
         run: |
-          chmod +x ./run_api_tests.sh
-          ./run_api_tests.sh
+          chmod +x ./run_api_contract_tests.sh
+          ./run_api_contract_tests.sh
+
+      - name: Run API Integration Tests
+        run: |
+          chmod +x ./run_api_integration_tests.sh
+          ./run_api_integration_tests.sh
 
       - name: Upload test reports
         if: always()  # Upload reports even if tests fail
         uses: actions/upload-artifact@v4
         with:
           name: api-test-reports
-          path: test_reports/
+          path: test-reports/
 
       # - name: Send notification on failure
       #   if: failure()

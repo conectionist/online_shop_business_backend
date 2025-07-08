@@ -62,3 +62,6 @@ reports/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Test reports
+test-reports/

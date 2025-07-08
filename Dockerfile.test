@@ -1,0 +1,20 @@
+# Dockerfile.test
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first to leverage Docker cache
+COPY requirements-test.txt .
+RUN pip install --no-cache-dir -r requirements-test.txt
+
+# Copy test files
+COPY tests/integration/ /app/tests/integration/
+COPY scripts/run_api_integration_tests.py /app/scripts/
+
+# Command to run tests
+CMD ["python", "scripts/run_api_integration_tests.py"]

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set default values
-REPORT_DIR="./test_reports"
+REPORT_DIR="./test-reports/integration"
 KEEP_CONTAINERS=false
 
 # Parse command-line arguments
@@ -10,10 +10,6 @@ while [[ $# -gt 0 ]]; do
   case $key in
     --keep-containers)
       KEEP_CONTAINERS=true
-      shift
-      ;;
-    --test-pattern=*)
-      export TEST_PATTERN="${1#*=}"
       shift
       ;;
     *)
@@ -57,8 +53,8 @@ echo "⏳ Waiting for API server to be ready..."
 sleep 2
 
 # Run the tests
-echo "🧪 Running API tests with pattern: ${TEST_PATTERN:-'*'}"
-docker-compose -f docker-compose.test.yml --env-file .env.test run --rm api_tests
+echo "🧪 Running API integration tests..."
+docker-compose -f docker-compose.test.yml --env-file .env.test run --rm api_integration_tests
 TEST_EXIT_CODE=$?
 
 # Clean up containers unless --keep-containers is specified
@@ -72,10 +68,9 @@ fi
 # Show location of test reports
 echo "📊 Test reports available in ${REPORT_DIR}"
 
-# Show information about the HTML report
-if [ -f "${REPORT_DIR}/api_test_report.html" ]; then
-  echo "🌐 API Test HTML Report generated: ${REPORT_DIR}/api_test_report.html"
-  echo "   Open this file in a browser to see detailed test results."
+# Show information about the JSON report
+if [ -f "${REPORT_DIR}/integration_test_report.json" ]; then
+  echo "📄 JSON test report generated: ${REPORT_DIR}/integration_test_report.json"
 fi
 
 # Exit with the test exit code

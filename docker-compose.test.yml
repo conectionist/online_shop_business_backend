@@ -50,7 +50,7 @@ services:
       - test_network
 
   # Schemathesis container for API testing
-  api_tests:
+  api_contract_tests:
     image: schemathesis/schemathesis:stable
     depends_on:
       api_server_test:
@@ -68,6 +68,24 @@ services:
       - SCHEMATHESIS_BASE_URL=http://api_server_test:8000
     volumes:
       - ./test_reports:/reports
+    networks:
+      - test_network
+
+  api_integration_tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: online_shop_api_integration_tests
+    restart: "no"
+    environment:
+      - API_BASE_URL=http://api_server_test:8000
+    depends_on:
+      api_server_test:
+        condition: service_healthy
+    volumes:
+      - ./test-reports:/test-reports
+    command: >
+      sh -c "python scripts/run_api_integration_tests.py"
     networks:
       - test_network
 

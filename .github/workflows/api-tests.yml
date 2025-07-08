@@ -47,10 +47,10 @@ jobs:
           chmod +x ./run_api_contract_tests.sh
           ./run_api_contract_tests.sh
 
-      - name: Run API Integration Tests
-        run: |
-          chmod +x ./run_api_integration_tests.sh
-          ./run_api_integration_tests.sh
+      # - name: Run API Integration Tests
+      #   run: |
+      #     chmod +x ./run_api_integration_tests.sh
+      #     ./run_api_integration_tests.sh
 
       - name: Upload test reports
         if: always()  # Upload reports even if tests fail

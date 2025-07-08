@@ -3,7 +3,6 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, status, Query
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
 
 from app.core.database import get_db
 from app.schemas.unitati import Unitat, UnitatCreate, UnitatUpdate
@@ -152,11 +151,6 @@ def delete_unitati(
                 detail="Unit not found"
             )
         return None
-    except IntegrityError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot delete unit because it is in use by at least one product."
-        )
     except HTTPException:
         raise
     except ValidationError as e:

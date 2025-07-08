@@ -163,6 +163,12 @@ def delete_unitat(db: Session, unitat_id: int) -> bool:
         db.delete(db_unitat)
         db.commit()
         return True
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete unit because it is in use by at least one product."
+        )
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(

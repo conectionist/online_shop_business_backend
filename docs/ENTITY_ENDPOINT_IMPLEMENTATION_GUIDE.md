@@ -569,6 +569,34 @@ Contract tests ensure API endpoints match their OpenAPI specification:
 
 3. **Note:** No need to create custom contract tests for each entity as Schemathesis automatically tests against the OpenAPI schema
 
+### 9. Update Implementation Guide
+
+After successful implementation and testing:
+
+1. **Mark the entity as completed** in the `docs/ENTITY_ENDPOINT_IMPLEMENTATION_GUIDE.md` file by changing:
+   ```markdown
+   - [ ] **Entity Name** - Entity description
+   ```
+   to:
+   ```markdown
+   - [x] **Entity Name** - Entity description
+   ```
+
+### 10. Update Version Number
+
+1. **Increment the minor version** in `app/core/config.py` to reflect the addition of a new entity:
+   ```python
+   # Example: Change API_VERSION from "0.3.0" to "0.4.0"
+   API_VERSION = "0.4.0"
+   ```
+
+2. **Commit and push** all changes to the repository:
+   ```bash
+   git add .
+   git commit -m "Implement Entity Name with full CRUD operations and tests"
+   git push
+   ```
+
 ## Implementation Checklist
 
 Use this checklist for each entity implementation and check off items as they are completed:
@@ -611,5 +639,9 @@ Use this checklist for each entity implementation and check off items as they ar
 8. **Documentation**
    - [ ] Entity marked as completed in the implementation guide
    - [ ] Any special considerations or notes added to comments
+
+9. **Update Version**
+   - [ ] Minor version incremented in `app/core/config.py`
+   - [ ] Changes committed and pushed to repository
 
 **Final Check:** Verify that the implementation correctly handles all edge cases, follows project patterns, and maintains consistency with existing code.

@@ -15,7 +15,7 @@ The following entities need to be implemented in order of dependency. Check them
 - [x] **Payment Methods (Modalitati de Plata)** - Methods of payment
 - [x] **Delivery Types (Tipuri Livrare)** - Types of delivery options
 - [x] **Delivery Schedules (Orare Livrari)** - Delivery time schedules
-- [ ] **Business Details (Business Details)** - Shop business information
+- [x] **Business Details (Business Details)** - Shop business information
 - [ ] **Categories (Categorii)** - Product categories
 - [ ] **Admins (Admins)** - Admin user management
 

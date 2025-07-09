@@ -477,11 +477,14 @@ Before writing automated tests, manually test all endpoints to verify functional
    ```
 
 2. **Test each endpoint** using tools like cURL, Postman, or the Swagger UI at `http://localhost:8000/docs`:
-   - Create a new entity (POST)
-   - Get a list of entities (GET)
-   - Get a specific entity by ID (GET)
-   - Update an entity (PUT)
-   - Delete an entity (DELETE)
+   - Get a list of entities (`GET`)
+   - Create a new entity (`POST`)
+   - Get a list of entities to check if the entity was created (`GET`)
+   - Get the specific entity by ID (`GET /{id}`)
+   - Update the entity (`PUT /{id}`)
+   - Get the specific entity by ID to check if the update was successful (`GET /{id}`)
+   - Delete the entity (`DELETE /{id}`)
+   - Get a list of entities to check if the deletion was successful (`GET`)
 
 3. **Verify error handling** by intentionally triggering validation errors, 404s, etc.
 

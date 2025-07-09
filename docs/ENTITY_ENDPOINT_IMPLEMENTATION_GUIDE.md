@@ -590,7 +590,7 @@ After successful implementation and testing:
    API_VERSION = "0.4.0"
    ```
 
-2. **Commit and push** all changes to the repository:
+### 11. **Commit and push** all changes to the repository:
    ```bash
    git add .
    git commit -m "Implement Entity Name with full CRUD operations and tests"

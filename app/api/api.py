@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.endpoints import unitati, modalitati_plata, delivery_types, delivery_schedules
+from app.api.endpoints import unitati, modalitati_plata, delivery_types, delivery_schedules, business_details
 
 api_router = APIRouter()
 
@@ -20,4 +20,9 @@ api_router.include_router(
     delivery_schedules.router,
     prefix="/orare-livrari",
     tags=["orare-livrari"]
+)
+api_router.include_router(
+    business_details.router,
+    prefix="/detalii-business",
+    tags=["detalii-business"]
 )

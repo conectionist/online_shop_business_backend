@@ -37,7 +37,9 @@ These tables connect core entities and should be implemented after their depende
 - [ ] **Lists <> Products** - (depends on `Lists`, `Products`)
 - [ ] **Orders <> Products (Comenzi au Produse)** - (depends on `Orders`, `Products`, `Units`)
 
-## Implementation Checklist
+## Implementation Steps
+
+Follow these steps in order when implementing a new entity endpoint. **Important**: Use a baby steps approach - implement one step, get feedback, then proceed to the next step only after verification.
 
 ### 1. Create the Database Model
 
@@ -463,79 +465,151 @@ api_router.include_router(your_entity.router, prefix="/your-entities", tags=["yo
    - Use Field's description parameter
    - Provide examples where helpful
 
-## Testing
+## Manual Testing & Verification
 
-New endpoints must be covered by both contract tests and integration tests.
+### 6. Manual API Testing
 
-### Contract Tests
+Before writing automated tests, manually test all endpoints to verify functionality:
 
-Test each new endpoint with Schemathesis to ensure it handles all edge cases properly. The CI pipeline runs these automatically, but you can run them locally:
+1. **Start the API server** (if not already running):
+   ```bash
+   docker-compose up -d
+   ```
 
-```bash
-./run_api_contract_tests.sh
-```
+2. **Test each endpoint** using tools like cURL, Postman, or the Swagger UI at `http://localhost:8000/docs`:
+   - Create a new entity (POST)
+   - Get a list of entities (GET)
+   - Get a specific entity by ID (GET)
+   - Update an entity (PUT)
+   - Delete an entity (DELETE)
 
-### Integration Tests
+3. **Verify error handling** by intentionally triggering validation errors, 404s, etc.
 
-In addition to contract testing, it's crucial to add integration tests that cover the full CRUD (Create, Read, Update, Delete) lifecycle of the new entity.
+4. **Document any issues** and fix them before proceeding to automated testing.
 
-1.  **Create a new test file** in the `tests/integration/` directory. For an entity named `YourEntity`, the file should be named `test_your_entity_api.py`.
+## Automated Testing
 
-2.  **Write a CRUD workflow test**. This test should perform all CRUD operations in a single, atomic test function to ensure the full lifecycle works as expected and to maintain test isolation.
+### 7. Integration Tests
 
-    Here is a template you can adapt:
+Create integration tests using the `EntityTestUtils` class to leverage common test functionality:
 
-    ```python
-    # tests/integration/test_your_entity_api.py
-    import os
-    import requests
+1. **Check if entity needs custom test utilities**:
+   - If the entity follows the standard pattern with `denumire` field, use `EntityTestUtils` directly
+   - If the entity has different fields or requirements, create a custom test utility class
 
-    API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8001")
-    API_V1_STR = "/api/v1"
-    ENDPOINT = f"{API_BASE_URL}{API_V1_STR}/your-entities" # <-- Change this to your entity's endpoint
+2. **Create a test file** in `tests/integration/` directory following this template:
 
-    def test_your_entity_crud_workflow():
-        """
-        Tests the full Create, Read, Update, and Delete (CRUD) workflow for YourEntity.
-        """
-        # 1. CREATE a new entity
-        create_payload = {"name": "Test Name", "description": "Test Description"} # <-- Adjust payload
-        create_response = requests.post(ENDPOINT, json=create_payload)
-        assert create_response.status_code == 201
-        created_entity = create_response.json()
-        entity_id = created_entity["id"]
+   ```python
+   # Standard usage with EntityTestUtils (for entities with 'denumire' field)
+   from integration.test_utils import EntityTestUtils
+   
+   # Create a test utils instance for your entity
+   entity_utils = EntityTestUtils(entity_name="Your Entity", endpoint_path="your-entities")
+   
+   def test_entity_crud_workflow():
+       """Tests the full CRUD workflow for the entity"""
+       entity_utils.test_crud_workflow()
+   
+   def test_entity_list_and_pagination():
+       """Tests listing entities with pagination"""
+       entity_utils.test_list_and_pagination()
+   
+   def test_entity_validation():
+       """Tests validation for entity endpoints"""
+       entity_utils.test_validation()
+   ```
 
-        # 2. READ the created entity
-        read_response = requests.get(f"{ENDPOINT}/{entity_id}")
-        assert read_response.status_code == 200
-        assert read_response.json() == created_entity
+   For custom fields, create a custom test utility class:
 
-        # 3. UPDATE the entity
-        update_payload = {"name": "Updated Name", "description": "Updated Description"} # <-- Adjust payload
-        update_response = requests.put(f"{ENDPOINT}/{entity_id}", json=update_payload)
-        assert update_response.status_code == 200
+   ```python
+   class CustomEntityTestUtils(EntityTestUtils):
+       """Test utilities for custom entity"""
+       
+       def __init__(self):
+           super().__init__(entity_name="Custom Entity", endpoint_path="custom-entities")
+       
+       def create_entity(self, name=None):
+           """Override to use custom fields"""
+           if name is None:
+               name = self.generate_unique_name()
+               
+           create_response = requests.post(
+               f"{self.base_url}/",
+               json={"custom_field": name}
+           )
+           # Rest of implementation...
+       
+       def update_entity(self, entity_id, name):
+           """Override to use custom fields"""
+           # Implementation...
+       
+       def test_crud_workflow(self):
+           """Override to check custom fields"""
+           # Implementation...
+   ```
 
-        # 4. DELETE the entity
-        delete_response = requests.delete(f"{ENDPOINT}/{entity_id}")
-        assert delete_response.status_code == 204
+3. **Run integration tests**:
+   ```bash
+   ./run_api_integration_tests.sh
+   ```
 
-        # 5. VERIFY the entity is deleted
-        verify_response = requests.get(f"{ENDPOINT}/{entity_id}")
-        assert verify_response.status_code == 404
-    ```
+### 8. Contract Testing
 
-3.  **Run the integration tests** to ensure everything works correctly:
+Contract tests ensure API endpoints match their OpenAPI specification:
 
-    ```bash
-    ./run_api_integration_tests.sh
-    ```
+1. **Run contract tests** after implementing the entity:
+   ```bash
+   ./run_api_contract_tests.sh
+   ```
 
-## Checklist Before Committing
+2. **Address any failures** by:
+   - Fixing schema definitions if they don't match implementation
+   - Updating API implementation if it doesn't match contract
+   - Adding proper validation rules
 
-- [ ] Database model created
-- [ ] Pydantic schemas defined with proper validation
-- [ ] CRUD service functions implemented with error handling
-- [ ] API endpoints created with proper validation and documentation
-- [ ] Router registered in API V1
-- [ ] Database schema updated
-- [ ] All tests passing
+3. **Note:** No need to create custom contract tests for each entity as Schemathesis automatically tests against the OpenAPI schema
+
+## Implementation Checklist
+
+Use this checklist for each entity implementation and check off items as they are completed:
+
+1. **Database Model**
+   - [ ] SQLAlchemy model created in `app/models/` directory
+   - [ ] Proper field types, constraints, and relationships defined
+   - [ ] Table name matches database schema
+
+2. **Pydantic Schemas**
+   - [ ] Base schema with common fields and validators
+   - [ ] Create schema for POST requests
+   - [ ] Update schema with optional fields for PUT requests
+   - [ ] Response schema with ID field and ORM mode enabled
+
+3. **Service Layer**
+   - [ ] CRUD operations implemented (get_all, get_by_id, create, update, delete)
+   - [ ] Proper validation and error handling
+   - [ ] Transaction management with rollback on errors
+
+4. **API Endpoints**
+   - [ ] Router with all CRUD endpoints (GET, POST, GET by ID, PUT, DELETE)
+   - [ ] Appropriate response models, status codes, and error handling
+   - [ ] Parameter validation (path, query, body)
+   - [ ] OpenAPI documentation
+
+5. **Router Registration**
+   - [ ] Router added to main API router in `app/api/api.py`
+   - [ ] Proper prefix and tags applied
+
+6. **Manual Testing**
+   - [ ] All endpoints tested manually via Swagger UI or Postman
+   - [ ] Error scenarios verified
+
+7. **Automated Tests**
+   - [ ] Integration tests created using EntityTestUtils (standard or custom)
+   - [ ] Contract tests pass for new endpoints
+   - [ ] All tests running successfully in Docker environment
+
+8. **Documentation**
+   - [ ] Entity marked as completed in the implementation guide
+   - [ ] Any special considerations or notes added to comments
+
+**Final Check:** Verify that the implementation correctly handles all edge cases, follows project patterns, and maintains consistency with existing code.

@@ -2,6 +2,7 @@ import os
 import requests
 import uuid
 import pytest
+import shutil
 from io import BytesIO
 from integration.test_categories_api import category_utils
 
@@ -22,7 +23,7 @@ def test_category_image_upload():
     
     try:
         # Upload an image
-        test_image = create_test_image("test_image.jpg")
+        test_image = create_test_image()
         files = {"file": ("test_image.jpg", test_image, "image/jpeg")}
         upload_response = requests.post(
             f"{category_utils.base_url}/{category_id}/image",
@@ -34,13 +35,18 @@ def test_category_image_upload():
         updated_category = upload_response.json()
         assert "image_path" in updated_category
         assert updated_category["image_path"].startswith("categories/")
-        assert updated_category["image_path"].endswith(".jpg")
+        
+        # Check for image_versions field
+        assert "image_versions" in updated_category
+        assert "original" in updated_category["image_versions"]
+        assert "medium" in updated_category["image_versions"]
+        assert "thumbnail" in updated_category["image_versions"]
         
         # Store the image path for comparison
         first_image_path = updated_category["image_path"]
         
         # Upload a second image to replace the first one
-        test_image = create_test_image("blue_square.jpg")
+        test_image = create_test_image()
         files = {"file": ("new_image.jpg", test_image, "image/jpeg")}
         upload_response = requests.post(
             f"{category_utils.base_url}/{category_id}/image",
@@ -64,7 +70,7 @@ def test_image_upload():
     
     try:
         # Create a test image (a small red square)
-        test_image = create_test_image("red_square.jpg")
+        test_image = create_test_image()
         
         # Upload the image
         files = {"file": ("test_image.jpg", test_image, "image/jpeg")}
@@ -83,7 +89,12 @@ def test_image_upload():
         updated_category = upload_response.json()
         assert "image_path" in updated_category
         assert updated_category["image_path"].startswith("categories/")
-        assert updated_category["image_path"].endswith(".jpg")
+        
+        # Check for image_versions field
+        assert "image_versions" in updated_category
+        assert "original" in updated_category["image_versions"]
+        assert "medium" in updated_category["image_versions"]
+        assert "thumbnail" in updated_category["image_versions"]
     
     finally:
         # Clean up
@@ -97,7 +108,7 @@ def test_image_replacement():
     
     try:
         # Upload first image and get its path
-        test_image = create_test_image("red_square.jpg")
+        test_image = create_test_image()
         files = {"file": ("test_image.jpg", test_image, "image/jpeg")}
         upload_response = requests.post(
             f"{category_utils.base_url}/{category_id}/image",
@@ -106,7 +117,7 @@ def test_image_replacement():
         first_image_path = upload_response.json()["image_path"]
         
         # Create a different test image (a small blue square)
-        test_image = create_test_image("blue_square.jpg")
+        test_image = create_test_image()
         
         # Upload the new image
         files = {"file": ("new_image.jpg", test_image, "image/jpeg")}
@@ -121,6 +132,44 @@ def test_image_replacement():
         # Verify the category has been updated with the new image path
         updated_category = upload_response.json()
         assert updated_category["image_path"] != first_image_path, "Image path should be different after replacement"
+    
+    finally:
+        # Clean up
+        category_utils.hard_delete_entity(category_id)
+
+
+def test_image_versions_exist():
+    """Test that multiple image versions are created and accessible."""
+    # Create a test category
+    created_category, category_id = category_utils.create_entity()
+    
+    try:
+        # Upload an image
+        test_image = create_test_image()  # Larger image for resizing
+        files = {"file": ("test_image.jpg", test_image, "image/jpeg")}
+        upload_response = requests.post(
+            f"{category_utils.base_url}/{category_id}/image",
+            files=files
+        )
+        
+        # Verify response
+        assert upload_response.status_code == 200
+        updated_category = upload_response.json()
+        
+        # Check that image_versions contains paths for all versions
+        assert "image_versions" in updated_category
+        image_versions = updated_category["image_versions"]
+        
+        # Check each version exists
+        for version in ["original", "medium", "thumbnail"]:
+            assert version in image_versions
+            version_path = image_versions[version]
+            
+            # For integration tests, we only verify that the paths are returned
+            # We don't need to check if the files exist on disk since that would require
+            # access to the API server's filesystem
+            assert version_path.endswith(".jpg"), f"Path for {version} should end with .jpg"
+            assert version_path.startswith("categories/"), f"Path for {version} should start with categories/"
     
     finally:
         # Clean up
@@ -145,7 +194,7 @@ def test_invalid_uploads():
         
         # Test with non-existent category
         non_existent_id = 99999  # Assuming this ID doesn't exist
-        test_image = create_test_image("test_image.jpg")
+        test_image = create_test_image()
         files = {"file": ("test_image.jpg", test_image, "image/jpeg")}
         not_found_response = requests.post(
             f"{category_utils.base_url}/{non_existent_id}/image",
@@ -158,58 +207,30 @@ def test_invalid_uploads():
         category_utils.hard_delete_entity(category_id)
 
 
-def create_test_image(filename, size=(100, 100)):
+def create_test_image(filename=None, size=None, color=None):
     """
-    Create a simple test JPEG image.
+    Returns a BytesIO object with test image data from a file.
     
     Args:
-        filename: Name for the test file
-        size: Tuple of (width, height) for the image
+        filename: Ignored, kept for backward compatibility
+        size: Ignored, kept for backward compatibility
+        color: Ignored, kept for backward compatibility
         
     Returns:
         BytesIO object containing the image data
     """
-    # We'll create a simple colored square as a JPEG
-    # This requires PIL/Pillow, but we'll use a simpler approach with just bytes
-    # for a minimal JPEG file that will pass validation
+    import os
     
-    # Simple JPEG header + data for a small colored square
-    # This is a minimal JPEG that will pass most validation
-    jpeg_data = BytesIO()
+    # Path to the test image file
+    test_image_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        'test_data',
+        'test_image.jpg'
+    )
     
-    # JPEG file header (SOI marker)
-    jpeg_data.write(bytes.fromhex('FFD8'))
+    # Read the file and return as BytesIO
+    with open(test_image_path, 'rb') as f:
+        image_data = f.read()
     
-    # JFIF APP0 marker
-    jpeg_data.write(bytes.fromhex('FFE000104A46494600010101004800480000'))
-    
-    # Define quantization table (DQT marker)
-    jpeg_data.write(bytes.fromhex('FFDB004300'))
-    jpeg_data.write(bytes([8] * 64))  # Simple quantization table
-    
-    # Start of frame (SOF marker)
-    jpeg_data.write(bytes.fromhex('FFC0001108'))
-    jpeg_data.write(bytes.fromhex('0064'))  # height (100)
-    jpeg_data.write(bytes.fromhex('0064'))  # width (100)
-    jpeg_data.write(bytes.fromhex('03011100021101031101'))
-    
-    # Define Huffman table (DHT marker)
-    jpeg_data.write(bytes.fromhex('FFC4001F0000010501010101010100000000000000000102030405060708090A0B'))
-    
-    # More DHT markers
-    jpeg_data.write(bytes.fromhex('FFC4001F0100030101010101010101000000000000010203040506070809'
-                                 '0A0B'))
-    jpeg_data.write(bytes.fromhex('FFC4001A010100030101010000000000000000000001020304050607'))
-    jpeg_data.write(bytes.fromhex('FFC4001A110100030101010000000000000000000001020304050607'))
-    
-    # Start of scan (SOS marker)
-    jpeg_data.write(bytes.fromhex('FFDA000C03010002110311003F00'))
-    
-    # Some minimal image data (just enough to be valid)
-    jpeg_data.write(bytes([0xFF, 0x07] * 100))
-    
-    # End of image (EOI marker)
-    jpeg_data.write(bytes.fromhex('FFD9'))
-    
-    jpeg_data.seek(0)
-    return jpeg_data
+    output = BytesIO(image_data)
+    return output

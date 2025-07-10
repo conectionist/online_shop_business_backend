@@ -1,11 +1,13 @@
 from typing import List, Optional
+import os
+import shutil
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.core.file_upload import delete_file
+from app.core.file_upload import delete_file, get_upload_dir
 from app.models.category import Category
 from app.schemas.category import CategoryCreate, CategoryUpdate
 
@@ -347,16 +349,24 @@ def hard_delete_category(db: Session, category_id: int) -> bool:
         if db_category is None:
             return False
         
-        # Store the image path before deletion for cleanup
-        image_path = db_category.image_path
+        # Store the image directory path before deletion for cleanup
+        image_dir_path = db_category.image_path
         
         # Attempt to delete from database
         db.delete(db_category)
         db.commit()
         
-        # Delete the associated image file if it exists
-        if image_path:
-            delete_file(image_path)
+        # Delete the associated image directory and all its contents if it exists
+        if image_dir_path:
+            # Get the full directory path
+            full_dir_path = os.path.join(get_upload_dir(), image_dir_path)
+            
+            # Check if it's a directory and delete it with all contents
+            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                shutil.rmtree(full_dir_path)
+            else:
+                # Fallback to the old method for backward compatibility
+                delete_file(image_dir_path)
             
         return True
     except IntegrityError:

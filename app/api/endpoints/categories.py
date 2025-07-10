@@ -5,7 +5,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.file_upload import save_upload_file, delete_file
+from app.core.file_upload import delete_file
+from app.core.image_processing import process_and_save_image_versions
 from app.schemas.category import Category, CategoryCreate, CategoryUpdate
 from app.services.category import (
     create_category,
@@ -26,7 +27,12 @@ router = APIRouter()
                 "id": 1,
                 "name": "Electronics",
                 "description": "Electronic devices and accessories",
-                "image_path": "categories/f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg",
+                "image_path": "categories/f47ac10b-58cc-4372-a567-0e02b2c3d479",
+                "image_versions": {
+                    "original": "categories/f47ac10b-58cc-4372-a567-0e02b2c3d479/f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg",
+                    "medium": "categories/f47ac10b-58cc-4372-a567-0e02b2c3d479/f47ac10b-58cc-4372-a567-0e02b2c3d479-medium.jpg",
+                    "thumbnail": "categories/f47ac10b-58cc-4372-a567-0e02b2c3d479/f47ac10b-58cc-4372-a567-0e02b2c3d479-thumbnail.jpg"
+                },
                 "is_deleted": False
             }
         }
@@ -49,9 +55,10 @@ def upload_category_image(
     - Supported file formats: JPEG, PNG, GIF
     - Maximum file size: 5MB
     - If the category already has an image, the old image will be replaced
-    - The image filename will be converted to a secure UUID-based name
+    - The image directory will have a UUID-based name
+    - Multiple versions of the image will be created (original, medium, thumbnail)
     
-    Returns the updated category object with the new image_path.
+    Returns the updated category object with the new image_path and image_versions.
     """
     try:
         # Check if category exists
@@ -62,18 +69,26 @@ def upload_category_image(
                 detail="Category not found"
             )
         
-        # Save the file to the uploads directory in a 'categories' subdirectory
-        relative_path = save_upload_file(file, subdirectory="categories")
+        # Process and save multiple versions of the image
+        # This will create a directory with the original, medium, and thumbnail versions
+        image_dir_path = process_and_save_image_versions(file, subdirectory="categories")
         
-        # If category already has an image, delete the old one
+        # If category already has an image, delete the old directory and all its contents
         if category.image_path:
-            delete_file(category.image_path)
+            # We need to delete all files in the directory
+            import os
+            import shutil
+            from app.core.file_upload import get_upload_dir
+            
+            full_dir_path = os.path.join(get_upload_dir(), category.image_path)
+            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                shutil.rmtree(full_dir_path)
         
-        # Update the category with the new image path
+        # Update the category with the new image directory path
         updated_category = update_category(
             db=db, 
             category_id=category_id, 
-            category=CategoryUpdate(image_path=relative_path)
+            category=CategoryUpdate(image_path=image_dir_path)
         )
         
         return updated_category

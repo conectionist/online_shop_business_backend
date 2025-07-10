@@ -4,3 +4,4 @@ pydantic==2.11.7
 sqlalchemy==2.0.41
 mysql-connector-python==9.3.0
 python-multipart==0.0.20
+Pillow==11.3.0

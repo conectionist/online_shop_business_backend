@@ -1,7 +1,8 @@
-from typing import Optional, Annotated
+from typing import Optional, Annotated, Dict
 from datetime import datetime
+import os
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
 
 
 class CategoryBase(BaseModel):
@@ -15,10 +16,10 @@ class CategoryBase(BaseModel):
     )]
     
     image_path: Annotated[str, Field(
-        description="Path to the category image",
+        description="Path to the category image directory",
         min_length=1,
         max_length=256,
-        examples=["/images/categories/fruits.jpg"]
+        examples=["categories/f47ac10b-58cc-4372-a567-0e02b2c3d479"]
     )]
     
     @field_validator('name', 'image_path')
@@ -46,7 +47,7 @@ class CategoryUpdate(BaseModel):
     
     image_path: Optional[str] = Field(
         None,
-        description="Path to the category image",
+        description="Path to the category image directory",
         min_length=1,
         max_length=256
     )
@@ -71,6 +72,28 @@ class Category(CategoryBase):
     created_at: Annotated[datetime, Field(description="Creation timestamp")]
     updated_at: Annotated[datetime, Field(description="Last update timestamp")]
     is_deleted: bool
+    
+    @computed_field
+    @property
+    def image_versions(self) -> Dict[str, str]:
+        """Generate paths for different image versions based on the image directory"""
+        if not self.image_path:
+            return {}
+        
+        # Extract the image ID from the path
+        image_id = os.path.basename(self.image_path)
+        
+        # Get file extension - we'll assume .jpg for now as a default
+        # In a real-world scenario, we might want to store the extension in the DB
+        # or check which file exists in the directory
+        ext = ".jpg"
+        
+        # Return paths for all versions
+        return {
+            "original": os.path.join(self.image_path, f"{image_id}{ext}"),
+            "medium": os.path.join(self.image_path, f"{image_id}-medium{ext}"),
+            "thumbnail": os.path.join(self.image_path, f"{image_id}-thumbnail{ext}")
+        }
     
     model_config = ConfigDict(
         from_attributes=True,

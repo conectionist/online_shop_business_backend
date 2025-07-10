@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -37,11 +37,12 @@ def read_business_details(
 
 @router.post("/", response_model=BusinessDetails, status_code=status.HTTP_201_CREATED, responses={
     201: {"description": "Business details created successfully"},
+    409: {"description": "Business details record already exists"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
-def create_business_details_endpoint(business_details: BusinessDetailsCreate, db: Session = Depends(get_db)):
-    """Create a new business details record"""
+def create_business_details_endpoint(business_details: BusinessDetailsCreate = Body(..., description="Business details data"), db: Session = Depends(get_db)):
+    """Create a new business details record (fails with 409 if a record already exists)"""
     try:
         return create_business_details(db=db, business_details=business_details)
     except HTTPException as e:
@@ -84,7 +85,7 @@ def read_business_details_by_id(
 })
 def update_business_details_endpoint(
     business_details_id: int = Path(..., gt=0, description="The ID of the business details to update"),
-    business_details: BusinessDetailsUpdate = ...,
+    business_details: BusinessDetailsUpdate = Body(..., description="Updated business details data"),
     db: Session = Depends(get_db)
 ):
     """Update a business details record"""

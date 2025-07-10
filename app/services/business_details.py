@@ -79,9 +79,20 @@ def create_business_details(db: Session, business_details: BusinessDetailsCreate
         Created BusinessDetails object
         
     Raises:
-        HTTPException: If a database error occurs
+        HTTPException: If a database error occurs or if a record already exists
     """
     try:
+        # Check if any business details record already exists
+        existing_count = db.query(BusinessDetails).count()
+        
+        if existing_count > 0:
+            # Business details is a singleton entity, so we should not create multiple records
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Business details record already exists. Use PUT to update the existing record."
+            )
+            
+        # Create new record
         db_business_details = BusinessDetails(
             adresa=business_details.adresa,
             telefon=business_details.telefon,
@@ -94,6 +105,12 @@ def create_business_details(db: Session, business_details: BusinessDetailsCreate
         db.commit()
         db.refresh(db_business_details)
         return db_business_details
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Conflict error: {str(e)}"
+        )
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(

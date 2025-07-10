@@ -6,6 +6,7 @@ from sqlalchemy import text
 from app.core.config import API_VERSION, API_TITLE, API_DESCRIPTION
 from app.core.database import get_db
 from app.api.api import api_router
+from app.api.endpoints.system_config import mount_static_files
 
 app = FastAPI(
     title=API_TITLE,
@@ -15,6 +16,9 @@ app = FastAPI(
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")
+
+# Mount static files for placeholders
+mount_static_files(app)
 
 
 class HealthResponse(BaseModel):

@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.endpoints import unitati, modalitati_plata, delivery_types, delivery_schedules, business_details, categories
+from app.api.endpoints import unitati, modalitati_plata, delivery_types, delivery_schedules, business_details, categories, system_config
 
 api_router = APIRouter()
 
@@ -30,4 +30,9 @@ api_router.include_router(
     categories.router,
     prefix="/categories",
     tags=["categories"]
+)
+api_router.include_router(
+    system_config.router,
+    prefix="/system",
+    tags=["system-config"]
 )

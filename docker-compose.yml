@@ -18,6 +18,7 @@ services:
       - db
     volumes:
       - uploads_data:/app/uploads
+      - ./config/placeholders:/app/config/placeholders
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 5s

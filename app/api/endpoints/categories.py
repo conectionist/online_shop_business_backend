@@ -1,10 +1,11 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.file_upload import save_upload_file, delete_file
 from app.schemas.category import Category, CategoryCreate, CategoryUpdate
 from app.services.category import (
     create_category,
@@ -16,6 +17,73 @@ from app.services.category import (
 )
 
 router = APIRouter()
+
+
+@router.post("/{category_id}/image", response_model=Category, responses={
+    200: {"description": "Image uploaded successfully", "content": {
+        "application/json": {
+            "example": {
+                "id": 1,
+                "name": "Electronics",
+                "description": "Electronic devices and accessories",
+                "image_path": "categories/f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg",
+                "is_deleted": False
+            }
+        }
+    }},
+    400: {"description": "Bad request, e.g., invalid file format or size"},
+    404: {"description": "Category not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def upload_category_image(
+    category_id: int = Path(..., gt=0, description="The ID of the category to upload an image for"),
+    file: UploadFile = File(..., description="The image file to upload (JPEG, PNG, or GIF, max 5MB)"),
+    db: Session = Depends(get_db)
+):
+    """Upload an image for a specific category
+    
+    This endpoint allows uploading an image file for a category. The image will be stored
+    in the server's filesystem and the path will be saved in the category record.
+    
+    - Supported file formats: JPEG, PNG, GIF
+    - Maximum file size: 5MB
+    - If the category already has an image, the old image will be replaced
+    - The image filename will be converted to a secure UUID-based name
+    
+    Returns the updated category object with the new image_path.
+    """
+    try:
+        # Check if category exists
+        category = get_category_by_id(db, category_id=category_id)
+        if not category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Category not found"
+            )
+        
+        # Save the file to the uploads directory in a 'categories' subdirectory
+        relative_path = save_upload_file(file, subdirectory="categories")
+        
+        # If category already has an image, delete the old one
+        if category.image_path:
+            delete_file(category.image_path)
+        
+        # Update the category with the new image path
+        updated_category = update_category(
+            db=db, 
+            category_id=category_id, 
+            category=CategoryUpdate(image_path=relative_path)
+        )
+        
+        return updated_category
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
 
 
 @router.get("/", response_model=List[Category], responses={

@@ -13,8 +13,11 @@ services:
       - DB_USER=${MYSQL_USER}
       - DB_PASSWORD=${MYSQL_PASSWORD}
       - DB_NAME=${MYSQL_DATABASE}
+      - UPLOAD_FOLDER=/app/uploads
     depends_on:
       - db
+    volumes:
+      - uploads_data:/app/uploads
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 5s
@@ -44,4 +47,6 @@ services:
 
 volumes:
   mysql_data:
+    driver: local
+  uploads_data:
     driver: local

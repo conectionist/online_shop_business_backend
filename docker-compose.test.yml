@@ -37,9 +37,12 @@ services:
       - DB_PASSWORD=${TEST_MYSQL_PASSWORD}
       - DB_NAME=${TEST_MYSQL_DATABASE}
       - ENVIRONMENT=test
+      - UPLOAD_FOLDER=/app/uploads
     depends_on:
       mysql_test:
         condition: service_healthy
+    volumes:
+      - test_uploads_data:/app/uploads
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 5s
@@ -95,3 +98,5 @@ networks:
 
 volumes:
   test_reports:
+  test_uploads_data:
+    driver: local

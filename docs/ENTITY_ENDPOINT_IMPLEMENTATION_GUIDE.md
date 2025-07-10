@@ -16,7 +16,7 @@ The following entities need to be implemented in order of dependency. Check them
 - [x] **Delivery Types (Tipuri Livrare)** - Types of delivery options
 - [x] **Delivery Schedules (Orare Livrari)** - Delivery time schedules
 - [x] **Business Details (Business Details)** - Shop business information
-- [ ] **Categories (Categorii)** - Product categories
+- [x] **Categories (Categorii)** - Product categories
 - [ ] **Admins (Admins)** - Admin user management
 
 #### Level 1: First-Level Dependencies

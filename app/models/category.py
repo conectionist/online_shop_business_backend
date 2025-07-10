@@ -9,7 +9,7 @@ class Category(Base):
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String(45), nullable=False)
-    image_path = Column(String(256), nullable=False)
+    image_path = Column(String(256), nullable=True)
     created_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     updated_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
     is_deleted = Column(Boolean, nullable=False, default=False, server_default=text("0"))

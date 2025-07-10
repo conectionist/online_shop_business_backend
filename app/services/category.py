@@ -132,17 +132,11 @@ def create_category(db: Session, category: CategoryCreate) -> Category:
     Raises:
         HTTPException: If validation fails or a database error occurs
     """
-    # Validate inputs
+    # Validate name (image_path is now optional)
     if not category.name or category.name.strip() == "":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Category name cannot be empty"
-        )
-    
-    if not category.image_path or category.image_path.strip() == "":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Category image path cannot be empty"
         )
     
     # Check if a category with this name already exists (including soft-deleted ones)
@@ -152,7 +146,7 @@ def create_category(db: Session, category: CategoryCreate) -> Category:
             # If it exists but is soft-deleted, we can restore it
             try:
                 existing.is_deleted = False
-                existing.image_path = category.image_path  # Update with new image path
+                existing.image_path = category.image_path  # Update with new image path (can be None)
                 db.commit()
                 db.refresh(existing)
                 return existing
@@ -171,6 +165,7 @@ def create_category(db: Session, category: CategoryCreate) -> Category:
     
     # Create new category
     try:
+        # image_path can be None, in which case the placeholder will be used
         db_category = Category(
             name=category.name,
             image_path=category.image_path,
@@ -217,44 +212,55 @@ def update_category(db: Session, category_id: int, category: CategoryUpdate) -> 
             detail=f"Invalid ID: {category_id} - must be positive"
         )
     
-    # Prepare update data
-    update_data = category.model_dump(exclude_unset=True)
-    if not update_data:
+    # Check if any fields are provided for update
+    # We need to check if fields are present in the request, not just if they're None
+    # For image_path, None is a valid value (to use placeholder)
+    fields_provided = [
+        hasattr(category, 'name') and category.name is not None,
+        hasattr(category, 'image_path'),  # image_path can be None explicitly
+        hasattr(category, 'is_deleted') and category.is_deleted is not None
+    ]
+    if not any(fields_provided):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No valid fields to update"
-        )
-    
-    # Validate name if provided
-    if "name" in update_data and (not update_data["name"] or update_data["name"].strip() == ""):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Category name cannot be empty"
-        )
-    
-    # Validate image_path if provided
-    if "image_path" in update_data and (not update_data["image_path"] or update_data["image_path"].strip() == ""):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Category image path cannot be empty"
+            detail="No fields provided for update"
         )
     
     try:
-        # Check if category exists
-        db_category = get_category_by_id(db, category_id, include_deleted=True)
+        # Get the category to update
+        db_category = db.query(Category).filter(Category.id == category_id).first()
+        if db_category is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Category with ID {category_id} not found"
+            )
         
-        # If name is being updated, check for duplicates
-        if "name" in update_data and update_data["name"] != db_category.name:
-            existing = get_category_by_name(db, update_data["name"], include_deleted=True)
-            if existing and existing.id != category_id:
+        # Update name if provided
+        if category.name is not None:
+            # Check if the new name already exists for another category
+            existing = db.query(Category).filter(
+                and_(
+                    Category.name == category.name,
+                    Category.id != category_id
+                )
+            ).first()
+            
+            if existing:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"A category with the name '{update_data['name']}' already exists"
+                    detail=f"A category with the name '{category.name}' already exists"
                 )
+            
+            db_category.name = category.name
         
-        # Apply updates
-        for key, value in update_data.items():
-            setattr(db_category, key, value)
+        # Update image_path if provided
+        # Note: image_path can be explicitly set to None to use the placeholder image
+        if category.image_path is not None or hasattr(category, 'image_path'):
+            db_category.image_path = category.image_path
+        
+        # Update is_deleted if provided
+        if category.is_deleted is not None:
+            db_category.is_deleted = category.is_deleted
         
         db.commit()
         db.refresh(db_category)

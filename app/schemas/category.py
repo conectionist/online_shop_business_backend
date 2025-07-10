@@ -15,12 +15,13 @@ class CategoryBase(BaseModel):
         examples=["Fruits", "Vegetables", "Dairy"]
     )]
     
-    image_path: Annotated[str, Field(
+    image_path: Optional[str] = Field(
+        None,
         description="Path to the category image directory",
         min_length=1,
         max_length=256,
         examples=["categories/f47ac10b-58cc-4372-a567-0e02b2c3d479"]
-    )]
+    )
     
     @field_validator('name', 'image_path')
     @classmethod
@@ -47,8 +48,7 @@ class CategoryUpdate(BaseModel):
     
     image_path: Optional[str] = Field(
         None,
-        description="Path to the category image directory",
-        min_length=1,
+        description="Path to the category image directory (None for placeholder image)",
         max_length=256
     )
     
@@ -78,7 +78,13 @@ class Category(CategoryBase):
     def image_versions(self) -> Dict[str, str]:
         """Generate paths for different image versions based on the image directory"""
         if not self.image_path:
-            return {}
+            # Return placeholder image path from system config
+            # The client should use the system config endpoint to get the actual placeholder path
+            return {
+                "original": "/api/v1/static/placeholders/category_placeholder.jpg",
+                "medium": "/api/v1/static/placeholders/category_placeholder.jpg",
+                "thumbnail": "/api/v1/static/placeholders/category_placeholder.jpg"
+            }
         
         # Extract the image ID from the path
         image_id = os.path.basename(self.image_path)

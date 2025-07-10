@@ -16,13 +16,14 @@ class CategoryTestUtils(EntityTestUtils):
         short_uuid = str(uuid.uuid4())[:8]
         return f"{prefix}-{short_uuid}"
     
-    def create_entity(self, name=None, image_path=None):
+    def create_entity(self, name=None, image_path=None, use_placeholder=False):
         """
         Create a new category with the given name and image path.
         
         Args:
             name: Name for the category, will generate unique if None
             image_path: Image path for the category, will generate if None
+            use_placeholder: If True, don't include image_path in the request (use placeholder)
             
         Returns:
             Tuple of (entity_data, entity_id)
@@ -30,12 +31,17 @@ class CategoryTestUtils(EntityTestUtils):
         if name is None:
             name = self.generate_unique_name()
             
-        if image_path is None:
+        if image_path is None and not use_placeholder:
             image_path = f"/images/categories/{uuid.uuid4()}.jpg"
+        
+        # Prepare request data
+        request_data = {"name": name}
+        if not use_placeholder:  # Only include image_path if not using placeholder
+            request_data["image_path"] = image_path
             
         create_response = requests.post(
             f"{self.base_url}/",
-            json={"name": name, "image_path": image_path}
+            json=request_data
         )
         assert create_response.status_code == 201, (
             f"Failed to create {self.entity_name}. "
@@ -45,7 +51,13 @@ class CategoryTestUtils(EntityTestUtils):
         created_entity = create_response.json()
         assert "id" in created_entity
         assert created_entity["name"] == name
-        assert created_entity["image_path"] == image_path
+        
+        if use_placeholder:
+            assert created_entity["image_path"] is None
+            assert "image_versions" in created_entity
+            assert created_entity["image_versions"] is not None
+        else:
+            assert created_entity["image_path"] == image_path
         
         return created_entity, created_entity["id"]
     
@@ -316,6 +328,67 @@ class CategoryTestUtils(EntityTestUtils):
         finally:
             # Clean up
             self.hard_delete_entity(entity_id)
+            
+    def test_optional_image_path(self):
+        """
+        Test creating and updating categories with optional image paths.
+        """
+        try:
+            # 1. Create a category without an image path (using placeholder)
+            name = self.generate_unique_name("NoImage")
+            created_entity, entity_id = self.create_entity(name=name, use_placeholder=True)
+            
+            # 2. Verify the image_path is None
+            assert created_entity["image_path"] is None
+            
+            # 3. Verify the image_versions property contains placeholder paths
+            assert "image_versions" in created_entity
+            assert created_entity["image_versions"] is not None
+            assert "original" in created_entity["image_versions"]
+            assert "thumbnail" in created_entity["image_versions"]
+            assert "medium" in created_entity["image_versions"]
+            
+            # 4. Verify all image versions point to the placeholder image
+            placeholder_path = "/api/v1/static/placeholders/category_placeholder.jpg"
+            for version, path in created_entity["image_versions"].items():
+                assert path == placeholder_path, f"Expected {version} to be {placeholder_path}, got {path}"
+            
+            # 4. Update the category to add an image path
+            new_image_path = f"/images/categories/{uuid.uuid4()}.jpg"
+            updated_entity = self.update_entity(entity_id, image_path=new_image_path)
+            assert updated_entity["image_path"] == new_image_path
+            
+            # 5. Update the category to explicitly set image_path to None
+            # We need to use a direct API call with null (None in Python, but null in JSON)
+            update_response = requests.put(
+                f"{self.base_url}/{entity_id}",
+                json={"image_path": None}  # This will be sent as null in JSON
+            )
+            assert update_response.status_code == 200, (
+                f"Failed to update category with null image_path. "
+                f"Expected 200, got {update_response.status_code}: {update_response.text}"
+            )
+            
+            updated_entity = update_response.json()
+            # Verify the image_path is None after update
+            assert updated_entity["image_path"] is None
+            
+            # 6. Verify the image_versions property contains placeholder paths again
+            assert "image_versions" in updated_entity
+            assert updated_entity["image_versions"] is not None
+            assert "original" in updated_entity["image_versions"]
+            assert "thumbnail" in updated_entity["image_versions"]
+            assert "medium" in updated_entity["image_versions"]
+            
+            # 7. Verify all image versions point to the placeholder image
+            placeholder_path = "/api/v1/static/placeholders/category_placeholder.jpg"
+            for version, path in updated_entity["image_versions"].items():
+                assert path == placeholder_path, f"Expected {version} to be {placeholder_path}, got {path}"
+            
+        finally:
+            # Clean up
+            if entity_id:
+                self.hard_delete_entity(entity_id)
 
 
 # Create a test utils instance for categories
@@ -350,3 +423,9 @@ def test_category_error_handling():
     Tests error handling for various scenarios.
     """
     category_utils.test_error_handling()
+
+def test_category_optional_image_path():
+    """
+    Tests creating and updating categories with optional image paths.
+    """
+    category_utils.test_optional_image_path()

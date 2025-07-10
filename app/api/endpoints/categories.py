@@ -132,7 +132,10 @@ def read_categories(
     500: {"description": "Internal server error"}
 })
 def create_category_endpoint(category: CategoryCreate, db: Session = Depends(get_db)):
-    """Create a new category"""
+    """Create a new category
+    
+    The image_path is optional. If not provided, a placeholder image will be used.
+    """
     try:
         return create_category(db=db, category=category)
     except HTTPException:
@@ -189,7 +192,11 @@ def update_category_endpoint(
     category: CategoryUpdate = Body(..., description="Updated category data"),
     db: Session = Depends(get_db)
 ):
-    """Update an existing category"""
+    """Update an existing category
+    
+    The image_path is optional. If not provided in the update, the existing value will be kept.
+    If explicitly set to null, a placeholder image will be used.
+    """
     try:
         return update_category(db=db, category_id=category_id, category=category)
     except HTTPException:

@@ -5,10 +5,10 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.unitati import Unitati
-from app.schemas.unitati import UnitatCreate, UnitatUpdate
+from app.schemas.unitati import UnitCreate, UnitUpdate
 
 
-def get_unitati(db: Session, skip: int = 0, limit: int = 100) -> List[Unitati]:
+def get_units(db: Session, skip: int = 0, limit: int = 100) -> List[Unitati]:
     """Get all units with pagination"""
     try:
         return db.query(Unitati).offset(skip).limit(limit).all()
@@ -20,16 +20,16 @@ def get_unitati(db: Session, skip: int = 0, limit: int = 100) -> List[Unitati]:
         )
 
 
-def get_unitat_by_id(db: Session, unitat_id: int) -> Optional[Unitati]:
+def get_unit_by_id(db: Session, unit_id: int) -> Optional[Unitati]:
     """Get a specific unit by ID"""
-    if unitat_id <= 0:
+    if unit_id <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Unit ID must be a positive integer"
         )
     
     try:
-        return db.query(Unitati).filter(Unitati.id == unitat_id).first()
+        return db.query(Unitati).filter(Unitati.id == unit_id).first()
     except SQLAlchemyError as e:
         # Log error here if you have logging configured
         raise HTTPException(
@@ -38,7 +38,7 @@ def get_unitat_by_id(db: Session, unitat_id: int) -> Optional[Unitati]:
         )
 
 
-def get_unitat_by_denumire(db: Session, denumire: str) -> Optional[Unitati]:
+def get_unit_by_denumire(db: Session, denumire: str) -> Optional[Unitati]:
     """Get a specific unit by name"""
     if not denumire or denumire.strip() == "":
         raise HTTPException(
@@ -55,33 +55,33 @@ def get_unitat_by_denumire(db: Session, denumire: str) -> Optional[Unitati]:
         )
 
 
-def create_unitat(db: Session, unitat: UnitatCreate) -> Unitati:
+def create_unit(db: Session, unit: UnitCreate) -> Unitati:
     """Create a new unit"""
-    if not unitat.denumire or unitat.denumire.strip() == "":
+    if not unit.denumire or unit.denumire.strip() == "":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Unit name cannot be empty"
         )
         
     # Check if a unit with this name already exists
-    existing = get_unitat_by_denumire(db, unitat.denumire)
+    existing = get_unit_by_denumire(db, unit.denumire)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"A unit with the name '{unitat.denumire}' already exists"
+            detail=f"A unit with the name '{unit.denumire}' already exists"
         )
         
     try:
-        db_unitat = Unitati(denumire=unitat.denumire)
-        db.add(db_unitat)
+        db_unit = Unitati(denumire=unit.denumire)
+        db.add(db_unit)
         db.commit()
-        db.refresh(db_unitat)
-        return db_unitat
+        db.refresh(db_unit)
+        return db_unit
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"A unit with the name '{unitat.denumire}' already exists"
+            detail=f"A unit with the name '{unit.denumire}' already exists"
         )
     except SQLAlchemyError as e:
         db.rollback()
@@ -91,53 +91,53 @@ def create_unitat(db: Session, unitat: UnitatCreate) -> Unitati:
         )
 
 
-def update_unitat(db: Session, unitat_id: int, unitat: UnitatUpdate) -> Optional[Unitati]:
+def update_unit(db: Session, unit_id: int, unit: UnitUpdate) -> Optional[Unitati]:
     """Update an existing unit"""
-    if unitat_id <= 0:
+    if unit_id <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Unit ID must be a positive integer"
         )
     
     # Check if there's something to update
-    if unitat.denumire is None:
+    if unit.denumire is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="No update data provided"
         )
         
-    if unitat.denumire and unitat.denumire.strip() == "":
+    if unit.denumire and unit.denumire.strip() == "":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Unit name cannot be empty"
         )
     
-    db_unitat = get_unitat_by_id(db, unitat_id)
-    if db_unitat is None:
+    db_unit = get_unit_by_id(db, unit_id)
+    if db_unit is None:
         return None
     
     # If a new name is provided, check it doesn't clash with another unit
-    if unitat.denumire and unitat.denumire != db_unitat.denumire:
-        existing = get_unitat_by_denumire(db, unitat.denumire)
-        if existing and existing.id != unitat_id:
+    if unit.denumire and unit.denumire != db_unit.denumire:
+        existing = get_unit_by_denumire(db, unit.denumire)
+        if existing and existing.id != unit_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"A unit with the name '{unitat.denumire}' already exists"
+                detail=f"A unit with the name '{unit.denumire}' already exists"
             )
         
     try:
         # Update attributes if they are provided
-        if unitat.denumire is not None:
-            db_unitat.denumire = unitat.denumire
+        if unit.denumire is not None:
+            db_unit.denumire = unit.denumire
             
         db.commit()
-        db.refresh(db_unitat)
-        return db_unitat
+        db.refresh(db_unit)
+        return db_unit
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"A unit with the name '{unitat.denumire}' already exists"
+            detail=f"A unit with the name '{unit.denumire}' already exists"
         )
     except SQLAlchemyError as e:
         db.rollback()
@@ -147,20 +147,20 @@ def update_unitat(db: Session, unitat_id: int, unitat: UnitatUpdate) -> Optional
         )
 
 
-def delete_unitat(db: Session, unitat_id: int) -> bool:
+def delete_unit(db: Session, unit_id: int) -> bool:
     """Delete a unit by ID"""
-    if unitat_id <= 0:
+    if unit_id <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Unit ID must be a positive integer"
         )
         
-    db_unitat = get_unitat_by_id(db, unitat_id)
-    if db_unitat is None:
+    db_unit = get_unit_by_id(db, unit_id)
+    if db_unit is None:
         return False
     
     try:
-        db.delete(db_unitat)
+        db.delete(db_unit)
         db.commit()
         return True
     except IntegrityError:

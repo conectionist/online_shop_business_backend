@@ -2,11 +2,11 @@
 
 # Unitati services
 from app.services.unitati import (  # noqa: F401
-    create_unitat,
-    delete_unitat,
-    get_unitat_by_id,
-    get_unitati,
-    update_unitat,
+    create_unit,
+    delete_unit,
+    get_unit_by_id,
+    get_units,
+    update_unit,
 )
 
 # Modalitati Plata services

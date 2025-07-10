@@ -3,7 +3,7 @@ from typing import Optional, Annotated
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
-class UnitatBase(BaseModel):
+class UnitBase(BaseModel):
     """Base schema for unit attributes"""
     denumire: Annotated[str, Field(
         description="The name of the unit", 
@@ -20,17 +20,17 @@ class UnitatBase(BaseModel):
         return v
 
 
-class UnitatCreate(UnitatBase):
+class UnitCreate(UnitBase):
     """Schema for creating a new unit"""
     pass
 
 
-class UnitatUpdate(BaseModel):
+class UnitUpdate(BaseModel):
     """Schema for updating an existing unit"""
     denumire: Optional[str] = Field(None, description="The name of the unit", min_length=1, max_length=45)
 
 
-class Unitat(UnitatBase):
+class Unit(UnitBase):
     """Schema for returning unit data"""
     id: Annotated[int, Field(gt=0, description="The unique identifier for the unit")]
     

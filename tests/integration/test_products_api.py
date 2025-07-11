@@ -1,6 +1,15 @@
 import os
 import requests
 import uuid
+
+# Path to test image
+TEST_IMAGE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'test_data', 'test_image.jpg')
+
+# Read test image file
+def get_test_image_content():
+    with open(TEST_IMAGE_PATH, 'rb') as f:
+        return f.read()
+
 from integration.test_utils import EntityTestUtils
 
 # Create a custom test utils class for products
@@ -56,14 +65,12 @@ class ProductTestUtils(EntityTestUtils):
         }
         
         # Optionally include image if specified
-        # In real tests, we would upload an actual file here
         files = {}
         if not use_placeholder and image_path:
-            # For testing without actual file uploads, we'll create a simple file-like object
-            # In a complete implementation, you would use an actual file
-            dummy_file_content = b"test image content"
+            # For testing, use the actual test image file
+            test_image_content = get_test_image_content()
             files = {
-                'primary_image': (f'test_image.jpg', dummy_file_content, 'image/jpeg')
+                'primary_image': ('test_image.jpg', test_image_content, 'image/jpeg')
             }
             
         create_response = requests.post(
@@ -123,10 +130,10 @@ class ProductTestUtils(EntityTestUtils):
         # Handle image upload separately
         files = {}
         if image_path is not None:
-            # For testing without actual file uploads, use a simple file-like object
-            dummy_file_content = b"test image content"
+            # For testing, use the actual test image file
+            test_image_content = get_test_image_content()
             files = {
-                'primary_image': (f'test_image.jpg', dummy_file_content, 'image/jpeg')
+                'primary_image': ('test_image.jpg', test_image_content, 'image/jpeg')
             }
             
         update_response = requests.put(
@@ -472,6 +479,58 @@ class ProductTestUtils(EntityTestUtils):
             # Clean up
             if entity_id:
                 self.hard_delete_entity(entity_id)
+                
+    def test_dedicated_image_upload(self):
+        """
+        Test the dedicated image upload endpoint for products.
+        """
+        entity_id = None
+        try:
+            # 1. First create a product
+            name = self.generate_unique_name("ImageUpload")
+            created_entity, entity_id = self.create_entity(name=name, use_placeholder=True)
+            
+            # 2. Verify the initial image path is a placeholder
+            assert created_entity["primary_image_path"] == "products/placeholder"
+            
+            # 3. Upload an image using the dedicated endpoint
+            test_image_content = get_test_image_content()
+            files = {
+                'file': ('test_image.jpg', test_image_content, 'image/jpeg')
+            }
+            
+            upload_response = requests.post(
+                f"{self.base_url}/{entity_id}/image",
+                files=files
+            )
+            assert upload_response.status_code == 200, (
+                f"Failed to upload image for product. "
+                f"Expected 200, got {upload_response.status_code}: {upload_response.text}"
+            )
+            
+            # 4. Verify the response contains updated product data
+            updated_entity = upload_response.json()
+            assert updated_entity["id"] == entity_id
+            assert updated_entity["primary_image_path"] != "products/placeholder"
+            
+            # 5. Verify image_versions are present and correct
+            assert "image_versions" in updated_entity
+            assert "original" in updated_entity["image_versions"]
+            assert "medium" in updated_entity["image_versions"]
+            assert "thumbnail" in updated_entity["image_versions"]
+            
+            # 6. Get the product to verify the image path was persisted
+            get_response = requests.get(f"{self.base_url}/{entity_id}")
+            assert get_response.status_code == 200
+            
+            retrieved_entity = get_response.json()
+            assert retrieved_entity["primary_image_path"] != "products/placeholder"
+            assert "image_versions" in retrieved_entity
+            
+        finally:
+            # Clean up
+            if entity_id:
+                self.hard_delete_entity(entity_id)
 
 
 # Create a test utils instance for products
@@ -512,3 +571,9 @@ def test_product_optional_image_path():
     Tests creating and updating products with optional image paths.
     """
     product_utils.test_optional_image_path()
+
+def test_product_dedicated_image_upload():
+    """
+    Tests the dedicated image upload endpoint for products.
+    """
+    product_utils.test_dedicated_image_upload()

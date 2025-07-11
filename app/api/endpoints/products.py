@@ -1,13 +1,16 @@
 from typing import List, Optional
+import os
+import shutil
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, UploadFile, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.core.database import get_db
 from app.core.file_upload import (
-    delete_file, save_upload_file, is_valid_image
+    delete_file, save_upload_file, is_valid_image, get_upload_dir
 )
+from app.core.image_processing import process_and_save_image_versions
 from app.models.product import Product
 from app.schemas.product import Product as ProductSchema
 from app.schemas.product import ProductCreate, ProductUpdate
@@ -17,6 +20,93 @@ from app.services.product import (
 )
 
 router = APIRouter()
+
+
+@router.post("/{product_id}/image", response_model=ProductSchema, responses={
+    200: {"description": "Image uploaded successfully", "content": {
+        "application/json": {
+            "example": {
+                "id": 1,
+                "nume": "Laptop",
+                "cantitate": 10,
+                "pret": 1999.99,
+                "description": "High-performance laptop",
+                "primary_image_path": "products/f47ac10b-58cc-4372-a567-0e02b2c3d479",
+                "image_versions": {
+                    "original": "products/f47ac10b-58cc-4372-a567-0e02b2c3d479/f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg",
+                    "medium": "products/f47ac10b-58cc-4372-a567-0e02b2c3d479/f47ac10b-58cc-4372-a567-0e02b2c3d479-medium.jpg",
+                    "thumbnail": "products/f47ac10b-58cc-4372-a567-0e02b2c3d479/f47ac10b-58cc-4372-a567-0e02b2c3d479-thumbnail.jpg"
+                },
+                "is_deleted": False
+            }
+        }
+    }},
+    400: {"description": "Bad request, e.g., invalid file format or size"},
+    404: {"description": "Product not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def upload_product_image(
+    product_id: int = Path(..., gt=0, description="The ID of the product to upload an image for"),
+    file: UploadFile = File(..., description="The image file to upload (JPEG, PNG, or GIF, max 5MB)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload an image for a specific product
+    
+    This endpoint allows uploading an image file for a product. The image will be stored
+    in the server's filesystem and the path will be saved in the product record.
+    
+    - Supported file formats: JPEG, PNG, GIF
+    - Maximum file size: 5MB
+    - If the product already has an image, the old image will be replaced
+    - The image directory will have a UUID-based name
+    - Multiple versions of the image will be created (original, medium, thumbnail)
+    
+    Returns the updated product object with the new image path and image versions.
+    """
+    try:
+        # Check if product exists
+        product = get_product_by_id(db, product_id=product_id)
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+        
+        # Process and save multiple versions of the image
+        # This will create a directory with the original, medium, and thumbnail versions
+        image_dir_path = process_and_save_image_versions(file, subdirectory="products")
+        
+        # If product already has an image, delete the old directory and all its contents
+        if product.primary_image_path and product.primary_image_path != "products/placeholder":
+            # Extract the directory path (might be just a file path in older records)
+            old_path = product.primary_image_path
+            # Check if this is a directory path from process_and_save_image_versions
+            full_dir_path = os.path.join(get_upload_dir(), old_path)
+            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                shutil.rmtree(full_dir_path)
+            else:
+                # Handle old-style single image file if present
+                full_file_path = os.path.join(get_upload_dir(), old_path)
+                if os.path.exists(full_file_path) and os.path.isfile(full_file_path):
+                    os.remove(full_file_path)
+        
+        # Update the product with the new image directory path
+        updated_product = update_product(
+            db=db, 
+            product_id=product_id, 
+            product=ProductUpdate(primary_image_path=image_dir_path)
+        )
+        
+        return updated_product
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
 
 
 @router.get("/", response_model=List[ProductSchema], responses={
@@ -335,8 +425,9 @@ def create_product_endpoint(
                     ]
                 )
             
-            # Save the uploaded file
-            primary_image_path = save_upload_file(primary_image, "products")
+            # Process and save multiple versions of the image
+            # This will create a directory with original, medium, and thumbnail versions
+            primary_image_path = process_and_save_image_versions(primary_image, subdirectory="products")
         
         # Create product data using validated values
         product_data = ProductCreate(
@@ -354,9 +445,15 @@ def create_product_endpoint(
         return create_product(db=db, product=product_data)
         
     except HTTPException as e:
-        # If an HTTP exception occurred and a file was saved, clean it up
+        # If an HTTP exception occurred and an image directory was created, clean it up
         if primary_image_path != "products/placeholder":
-            delete_file(primary_image_path)
+            # Handle directory structure created by process_and_save_image_versions
+            full_dir_path = os.path.join(get_upload_dir(), primary_image_path)
+            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                shutil.rmtree(full_dir_path)
+            else:
+                # Fallback to single file cleanup for backward compatibility
+                delete_file(primary_image_path)
         raise
     except IntegrityError as e:
         # Cleanup any uploaded file
@@ -545,8 +642,9 @@ def update_product_endpoint(
                     ]
                 )
                 
-            # Save the uploaded file
-            primary_image_path = save_upload_file(primary_image, "products")
+            # Process and save multiple versions of the image
+            # This will create a directory with original, medium, and thumbnail versions
+            primary_image_path = process_and_save_image_versions(primary_image, subdirectory="products")
         
         # Create update dictionary with only provided fields
         update_dict = {}
@@ -579,9 +677,15 @@ def update_product_endpoint(
         
         return updated_product
     except HTTPException:
-        # If an HTTP exception occurred and a file was saved, clean it up
-        if primary_image_path:
-            delete_file(primary_image_path)
+        # If an HTTP exception occurred and an image directory was created, clean it up
+        if primary_image_path and primary_image_path != "products/placeholder":
+            # Handle directory structure created by process_and_save_image_versions
+            full_dir_path = os.path.join(get_upload_dir(), primary_image_path)
+            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                shutil.rmtree(full_dir_path)
+            else:
+                # Fallback to single file cleanup for backward compatibility
+                delete_file(primary_image_path)
         raise
 
 

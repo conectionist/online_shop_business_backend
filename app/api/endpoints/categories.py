@@ -1,11 +1,15 @@
-from typing import List, Optional
+from typing import List, Optional, Annotated
+import math
+import os
+import shutil
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Path, Query, HTTPException, Body, status, UploadFile, File, Form
 from pydantic import ValidationError
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
-
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from app.core.database import get_db
-from app.core.file_upload import delete_file
+from app.core.file_upload import delete_file, is_valid_image, get_upload_dir
 from app.core.image_processing import process_and_save_image_versions
 from app.schemas.category import Category, CategoryCreate, CategoryUpdate
 from app.services.category import (
@@ -127,18 +131,60 @@ def read_categories(
 
 @router.post("/", response_model=Category, status_code=status.HTTP_201_CREATED, responses={
     201: {"description": "Category created successfully"},
-    400: {"description": "Bad request, e.g., duplicate category name"},
+    400: {"description": "Bad request, e.g., duplicate category name or invalid image"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
-def create_category_endpoint(category: CategoryCreate, db: Session = Depends(get_db)):
+def create_category_endpoint(
+    name: str = Form(..., description="The name of the category"),
+    primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
+    db: Session = Depends(get_db)
+):
     """Create a new category
     
-    The image_path is optional. If not provided, a placeholder image will be used.
+    Accepts multipart/form-data with a name field and optional image file.
+    If no image is provided, a placeholder image will be used.
     """
     try:
-        return create_category(db=db, category=category)
-    except HTTPException:
+        # Initialize image_path to None (will use placeholder)
+        primary_image_path = None
+        
+        # Process and save image if provided
+        if primary_image:
+            # Validate image
+            from app.core.file_upload import is_valid_image
+            if not is_valid_image(primary_image):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=[
+                        {
+                            "loc": ["body", "primary_image"],
+                            "msg": "Invalid image format",
+                            "type": "value_error.image"
+                        }
+                    ]
+                )
+                
+            # Process and save multiple versions of the image
+            primary_image_path = process_and_save_image_versions(primary_image, subdirectory="categories")
+        
+        # Create category object
+        category = CategoryCreate(name=name, image_path=primary_image_path)
+        
+        # Create the category in the database
+        created_category = create_category(db=db, category=category)
+        return created_category
+    except HTTPException as e:
+        # If an HTTP exception occurred and an image directory was created, clean it up
+        if primary_image and primary_image_path:
+            # Handle directory structure created by process_and_save_image_versions
+            import os
+            import shutil
+            from app.core.file_upload import get_upload_dir
+            
+            full_dir_path = os.path.join(get_upload_dir(), primary_image_path)
+            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                shutil.rmtree(full_dir_path)
         raise
     except ValidationError as e:
         raise HTTPException(
@@ -146,6 +192,15 @@ def create_category_endpoint(category: CategoryCreate, db: Session = Depends(get
             detail=str(e)
         )
     except Exception as e:
+        # If any other exception occurred, also clean up image directory if created
+        if primary_image and primary_image_path:
+            import os
+            import shutil
+            from app.core.file_upload import get_upload_dir
+            
+            full_dir_path = os.path.join(get_upload_dir(), primary_image_path)
+            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                shutil.rmtree(full_dir_path)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)}"
@@ -182,24 +237,107 @@ def read_category(
 
 @router.put("/{category_id}", response_model=Category, responses={
     200: {"description": "Category updated successfully"},
-    400: {"description": "Bad request, e.g., duplicate category name"},
+    400: {"description": "Bad request, e.g., duplicate category name or invalid image"},
     404: {"description": "Category not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
 def update_category_endpoint(
     category_id: int = Path(..., gt=0, description="The ID of the category to update"),
-    category: CategoryUpdate = Body(..., description="Updated category data"),
+    name: Optional[str] = Form(None, description="The name of the category"),
+    primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
+    clear_image: bool = Form(False, description="If true, will clear the image and use placeholder"),
     db: Session = Depends(get_db)
 ):
     """Update an existing category
     
-    The image_path is optional. If not provided in the update, the existing value will be kept.
-    If explicitly set to null, a placeholder image will be used.
+    Accepts multipart/form-data with optional name and image file.
+    - If name is not provided, the existing name will be kept.
+    - If primary_image is not provided, the existing image will be kept unless clear_image is true.
+    - If clear_image is true, the image will be removed and placeholder will be used.
     """
     try:
-        return update_category(db=db, category_id=category_id, category=category)
-    except HTTPException:
+        # First check if the category exists
+        existing_category = get_category_by_id(db, category_id=category_id)
+        if not existing_category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Category with ID {category_id} not found"
+            )
+            
+        # Initialize update data and image path
+        update_dict = {}
+        primary_image_path = None
+        
+        # Add name to update if provided
+        if name is not None:
+            update_dict["name"] = name
+        
+        # Handle image updates
+        if clear_image:
+            # Explicitly set image path to None to use placeholder
+            update_dict["image_path"] = None
+            
+            # Clean up old image directory if it exists
+            if existing_category.image_path:
+                import os
+                import shutil
+                from app.core.file_upload import get_upload_dir
+                
+                full_dir_path = os.path.join(get_upload_dir(), existing_category.image_path)
+                if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                    shutil.rmtree(full_dir_path)
+        
+        elif primary_image:
+            # Validate image
+            from app.core.file_upload import is_valid_image
+            if not is_valid_image(primary_image):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=[
+                        {
+                            "loc": ["body", "primary_image"],
+                            "msg": "Invalid image format",
+                            "type": "value_error.image"
+                        }
+                    ]
+                )
+                
+            # Process and save multiple versions of the image
+            primary_image_path = process_and_save_image_versions(primary_image, subdirectory="categories")
+            update_dict["image_path"] = primary_image_path
+            
+            # Clean up old image directory if it exists
+            if existing_category.image_path:
+                import os
+                import shutil
+                from app.core.file_upload import get_upload_dir
+                
+                full_dir_path = os.path.join(get_upload_dir(), existing_category.image_path)
+                if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                    shutil.rmtree(full_dir_path)
+        
+        # If no fields were provided for update, return existing category
+        if not update_dict:
+            return existing_category
+            
+        # Create an update data object
+        category_update = CategoryUpdate(**update_dict)
+        
+        # Update the category
+        updated_category = update_category(db=db, category_id=category_id, category=category_update)
+        
+        return updated_category
+    except HTTPException as e:
+        # If an HTTP exception occurred and an image directory was created, clean it up
+        if primary_image and primary_image_path:
+            import os
+            import shutil
+            from app.core.file_upload import get_upload_dir
+            
+            full_dir_path = os.path.join(get_upload_dir(), primary_image_path)
+            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                shutil.rmtree(full_dir_path)
         raise
     except ValidationError as e:
         raise HTTPException(
@@ -207,6 +345,15 @@ def update_category_endpoint(
             detail=str(e)
         )
     except Exception as e:
+        # If any other exception occurred, also clean up image directory if created
+        if primary_image and primary_image_path:
+            import os
+            import shutil
+            from app.core.file_upload import get_upload_dir
+            
+            full_dir_path = os.path.join(get_upload_dir(), primary_image_path)
+            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                shutil.rmtree(full_dir_path)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)}"

@@ -120,17 +120,19 @@ def get_category_by_name(db: Session, name: str, include_deleted: bool = False) 
 # CREATE new category
 def create_category(db: Session, category: CategoryCreate) -> Category:
     """
-    Create a new category.
+    Create a new category or restore a soft-deleted one.
+    
+    If a soft-deleted category with the same name exists, it will be restored instead.
     
     Args:
         db: Database session
         category: CategoryCreate object containing the data
         
     Returns:
-        Created Category object
+        Created or restored Category object
         
     Raises:
-        HTTPException: If validation fails or a database error occurs
+        HTTPException: If a duplicate name is found (status 400) or other validation/database errors occur
     """
     # Validate name (image_path is now optional)
     if not category.name or category.name.strip() == "":
@@ -139,29 +141,30 @@ def create_category(db: Session, category: CategoryCreate) -> Category:
             detail="Category name cannot be empty"
         )
     
-    # Check if a category with this name already exists (including soft-deleted ones)
-    existing = get_category_by_name(db, category.name, include_deleted=True)
-    if existing:
-        if existing.is_deleted:
-            # If it exists but is soft-deleted, we can restore it
-            try:
-                existing.is_deleted = False
-                existing.image_path = category.image_path  # Update with new image path (can be None)
-                db.commit()
-                db.refresh(existing)
-                return existing
-            except SQLAlchemyError as e:
-                db.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Database error occurred: {str(e)}"
-                )
-        else:
-            # If it exists and is not deleted, return an error
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"A category with the name '{category.name}' already exists"
-            )
+    # First check if category with the same name already exists (not soft-deleted)
+    existing_active = db.query(Category).filter(
+        and_(Category.name == category.name, Category.is_deleted == False)
+    ).first()
+    
+    if existing_active:
+        # Return 400 Bad Request for duplicate name
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Category with name '{category.name}' already exists"
+        )
+    
+    # Check if a soft-deleted category with the same name exists
+    soft_deleted_category = db.query(Category).filter(
+        and_(Category.name == category.name, Category.is_deleted == True)
+    ).first()
+    
+    if soft_deleted_category:
+        # Restore the soft-deleted category
+        soft_deleted_category.is_deleted = False
+        soft_deleted_category.image_path = category.image_path
+        db.commit()
+        db.refresh(soft_deleted_category)
+        return soft_deleted_category
     
     # Create new category
     try:

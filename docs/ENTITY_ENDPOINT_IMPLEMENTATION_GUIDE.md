@@ -20,7 +20,7 @@ The following entities need to be implemented in order of dependency. Check them
 - [ ] **Admins (Admins)** - Admin user management
 
 #### Level 1: First-Level Dependencies
-- [ ] **Products (Produse)** - (depends on `Units` and `Categories`)
+- [x] **Products (Produse)** - (depends on `Units` and `Categories`)
 - [ ] **Lists (Liste)** - (depends on `Delivery Schedules`)
 
 #### Level 2: Second-Level Dependencies
@@ -476,7 +476,7 @@ Before writing automated tests, manually test all endpoints to verify functional
    docker-compose up -d
    ```
 
-2. **Test each endpoint** using tools like cURL, Postman, or the Swagger UI at `http://localhost:8000/docs`:
+2. **Test each endpoint** using cURL requests at `http://localhost:8000/docs`:
    - Get a list of entities (`GET`)
    - Create a new entity (`POST`)
    - Get a list of entities to check if the entity was created (`GET`)

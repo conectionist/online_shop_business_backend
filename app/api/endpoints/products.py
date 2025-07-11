@@ -547,6 +547,7 @@ def update_product_endpoint(
     unitati_id: Optional[int] = Form(None),
     stock: Optional[int] = Form(None),
     primary_image: Optional[UploadFile] = File(None),
+    clear_image: bool = Form(False),
     db: Session = Depends(get_db),
 ):
     """
@@ -627,8 +628,18 @@ def update_product_endpoint(
         # First get the existing product to ensure it exists
         existing_product = get_product_by_id(db, product_id)
         
-        # Process image upload if provided
-        if primary_image and primary_image.filename:
+        # Handle clearing the image if requested
+        if clear_image:
+            # If the product has an image and it's not already the placeholder
+            if existing_product.primary_image_path and existing_product.primary_image_path != "products/placeholder":
+                # Delete the existing image directory
+                full_dir_path = os.path.join(get_upload_dir(), existing_product.primary_image_path)
+                if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                    shutil.rmtree(full_dir_path)
+                # Set to placeholder
+                primary_image_path = "products/placeholder"
+        # Process image upload if provided (only if not clearing the image)
+        elif primary_image and primary_image.filename:
             # Check that the file is a valid image
             if not is_valid_image(primary_image):
                 raise HTTPException(

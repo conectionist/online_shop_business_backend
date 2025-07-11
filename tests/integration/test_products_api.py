@@ -441,44 +441,77 @@ class ProductTestUtils(EntityTestUtils):
         """
         Test creating and updating products with optional image paths.
         """
-        entity_id = None
         try:
-            # 1. Create product without specifying image_path
-            name = self.generate_unique_name("NoImage")
-            created_entity, entity_id = self.create_entity(name=name, use_placeholder=True)
+            # 1. First, create a product with an image
+            test_image_content = get_test_image_content()
+            prod_name = self.generate_unique_name("ImageTestProduct")
             
-            # 2. Verify the primary_image_path is set when no image is provided
-            # Could be a placeholder or default path
-            assert created_entity["primary_image_path"] is not None
-            initial_path = created_entity["primary_image_path"]
+            # Create a product with an image using direct form data
+            form_data = {
+                "nume": prod_name,
+                "cantitate": "10",
+                "pret": "100",
+                "description": f"Description for {prod_name}",
+                "category_id": "1",
+                "unitati_id": "1",
+                "stock": "5"
+            }
             
-            # 3. Update the product to add an image path
-            updated_entity = self.update_entity(entity_id, image_path="any_image.jpg")
+            files = {
+                'primary_image': ('test_image.jpg', test_image_content, 'image/jpeg')
+            }
             
-            # 4. Check that image path is set (not checking exact value since the API generates a UUID)
-            assert updated_entity["primary_image_path"] is not None
+            create_response = requests.post(
+                f"{self.base_url}/",
+                data=form_data,
+                files=files
+            )
             
-            # 5. Update with some other data but no image
-            update_response = requests.put(
+            assert create_response.status_code == 201, (
+                f"Failed to create product with image. "
+                f"Expected 201, got {create_response.status_code}: {create_response.text}"
+            )
+            
+            created_entity = create_response.json()
+            entity_id = created_entity["id"]
+            
+            # Verify the image was set properly
+            assert created_entity["primary_image_path"] != "products/placeholder"
+            assert created_entity["primary_image_path"].startswith("products/")
+            assert "image_versions" in created_entity
+            
+            # 2. Now test clearing the image with clear_image parameter
+            # Give the product a new unique name to avoid conflicts
+            new_name = self.generate_unique_name("ClearedProduct")  
+            
+            clear_data = {
+                "clear_image": "true",
+                "nume": new_name  # Always include a unique name
+            }
+            
+            clear_response = requests.put(
                 f"{self.base_url}/{entity_id}",
-                data={"nume": f"Updated-{name}"}
-            )
-            assert update_response.status_code == 200, (
-                f"Failed to update product name. "
-                f"Expected 200, got {update_response.status_code}: {update_response.text}"
+                data=clear_data
             )
             
-            # 6. Verify the update was successful
-            updated_entity = update_response.json()
-            assert updated_entity["nume"] == f"Updated-{name}"
+            assert clear_response.status_code == 200, (
+                f"Failed to clear product image. "
+                f"Expected 200, got {clear_response.status_code}: {clear_response.text}"
+            )
             
-            # The primary_image_path should still be present
-            assert updated_entity["primary_image_path"] is not None
+            cleared_entity = clear_response.json()
+            
+            # Verify the image was cleared and set to placeholder
+            assert cleared_entity["primary_image_path"] == "products/placeholder"
+            assert cleared_entity["nume"] == new_name
             
         finally:
             # Clean up
-            if entity_id:
-                self.hard_delete_entity(entity_id)
+            try:
+                if 'entity_id' in locals():
+                    self.hard_delete_entity(entity_id)
+            except Exception as e:
+                print(f"Error during test cleanup: {e}")
                 
     def test_dedicated_image_upload(self):
         """
@@ -486,14 +519,38 @@ class ProductTestUtils(EntityTestUtils):
         """
         entity_id = None
         try:
-            # 1. First create a product
-            name = self.generate_unique_name("ImageUpload")
-            created_entity, entity_id = self.create_entity(name=name, use_placeholder=True)
+            # Use our create_entity method with a truly unique name but without an image
+            unique_name = self.generate_unique_name("Upload" + str(uuid.uuid4())[:8])
             
-            # 2. Verify the initial image path is a placeholder
+            # Create the form data directly to have full control over the request
+            form_data = {
+                "nume": unique_name,
+                "cantitate": "10",
+                "pret": "100",
+                "description": f"Description for {unique_name}",
+                "category_id": "1",
+                "unitati_id": "1",
+                "stock": "5"
+            }
+            
+            # No image files for initial creation (placeholder will be used)
+            create_response = requests.post(
+                f"{self.base_url}/",
+                data=form_data
+            )
+            
+            assert create_response.status_code == 201, (
+                f"Failed to create product without image. "
+                f"Expected 201, got {create_response.status_code}: {create_response.text}"
+            )
+            
+            created_entity = create_response.json()
+            entity_id = created_entity["id"]
+            
+            # Verify we're starting with a placeholder image
             assert created_entity["primary_image_path"] == "products/placeholder"
             
-            # 3. Upload an image using the dedicated endpoint
+            # Now upload an image using the dedicated endpoint
             test_image_content = get_test_image_content()
             files = {
                 'file': ('test_image.jpg', test_image_content, 'image/jpeg')
@@ -503,23 +560,24 @@ class ProductTestUtils(EntityTestUtils):
                 f"{self.base_url}/{entity_id}/image",
                 files=files
             )
+            
             assert upload_response.status_code == 200, (
                 f"Failed to upload image for product. "
                 f"Expected 200, got {upload_response.status_code}: {upload_response.text}"
             )
             
-            # 4. Verify the response contains updated product data
+            # Verify the response contains updated product data
             updated_entity = upload_response.json()
             assert updated_entity["id"] == entity_id
             assert updated_entity["primary_image_path"] != "products/placeholder"
             
-            # 5. Verify image_versions are present and correct
+            # Verify image versions are present
             assert "image_versions" in updated_entity
             assert "original" in updated_entity["image_versions"]
             assert "medium" in updated_entity["image_versions"]
             assert "thumbnail" in updated_entity["image_versions"]
             
-            # 6. Get the product to verify the image path was persisted
+            # Get the product to verify the image path was persisted
             get_response = requests.get(f"{self.base_url}/{entity_id}")
             assert get_response.status_code == 200
             
@@ -529,8 +587,11 @@ class ProductTestUtils(EntityTestUtils):
             
         finally:
             # Clean up
-            if entity_id:
-                self.hard_delete_entity(entity_id)
+            try:
+                if entity_id:
+                    self.hard_delete_entity(entity_id)
+            except Exception as e:
+                print(f"Error during test cleanup: {e}")
 
 
 # Create a test utils instance for products

@@ -531,6 +531,20 @@ def test_category_image_versions():
                 assert version_path.startswith("categories/"), f"Path for {version} should start with categories/"
             else:  # If using placeholder
                 assert "placeholder" in version_path, f"Path for {version} should contain 'placeholder'"
+        
+        # Verify image persistence - fetch the category again to ensure image data is persisted
+        get_response = requests.get(f"{category_utils.base_url}/{category_id}")
+        assert get_response.status_code == 200
+        
+        retrieved_entity = get_response.json()
+        assert "image_path" in retrieved_entity
+        assert retrieved_entity["image_path"] == created_category["image_path"]
+        assert "image_versions" in retrieved_entity
+        
+        # Verify image versions are consistent between create response and GET response
+        for version in ["original", "medium", "thumbnail"]:
+            assert version in retrieved_entity["image_versions"]
+            assert retrieved_entity["image_versions"][version] == created_category["image_versions"][version]
     
     finally:
         # Clean up

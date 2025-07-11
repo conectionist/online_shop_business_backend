@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS `online_shop`.`produse` (
   `nume` VARCHAR(45) NOT NULL,
   `cantitate` SMALLINT NOT NULL,
   `pret` SMALLINT NOT NULL,
-  `primary_image_path` VARCHAR(256) NOT NULL,
+  `primary_image_path` VARCHAR(256) NULL,
   `description` VARCHAR(1500) NULL DEFAULT NULL,
   `category_id` INT NOT NULL,
   `unitati_id` INT NOT NULL,

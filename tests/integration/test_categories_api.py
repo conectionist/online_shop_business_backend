@@ -1,6 +1,9 @@
 import os
-import requests
 import uuid
+import requests
+import pytest
+import shutil
+from io import BytesIO
 from integration.test_utils import EntityTestUtils
 
 # Function to get test image content for file uploads
@@ -482,3 +485,86 @@ def test_category_optional_image_path():
     Tests creating and updating categories with optional image paths.
     """
     category_utils.test_optional_image_path()
+
+
+def test_category_image_replacement():
+    """
+    Test replacing an existing image with a new one.
+    """
+    # Create a test category
+    created_category, category_id = category_utils.create_entity()
+    
+    try:
+        # Store the first image path for comparison
+        first_image_path = created_category["image_path"]
+        
+        # Upload a second image to replace the first one
+        updated_entity = category_utils.update_entity(category_id, with_image=True)
+        
+        # Verify the image path has changed
+        assert updated_entity["image_path"] != first_image_path, "Image path should be different after replacement"
+        
+    finally:
+        # Clean up
+        category_utils.hard_delete_entity(category_id)
+
+
+def test_category_image_versions():
+    """
+    Test that multiple image versions are created and accessible.
+    """
+    # Create a test category
+    created_category, category_id = category_utils.create_entity()
+    
+    try:
+        # Check that image_versions contains paths for all versions
+        assert "image_versions" in created_category
+        image_versions = created_category["image_versions"]
+        
+        # Check each version exists
+        for version in ["original", "medium", "thumbnail"]:
+            assert version in image_versions
+            version_path = image_versions[version]
+            
+            if created_category["image_path"] is not None:  # If we have an actual image
+                assert version_path.endswith(".jpg"), f"Path for {version} should end with .jpg"
+                assert version_path.startswith("categories/"), f"Path for {version} should start with categories/"
+            else:  # If using placeholder
+                assert "placeholder" in version_path, f"Path for {version} should contain 'placeholder'"
+    
+    finally:
+        # Clean up
+        category_utils.hard_delete_entity(category_id)
+
+
+def test_category_invalid_image_uploads():
+    """
+    Test validation for image uploads.
+    """
+    # Create a test category
+    created_category, category_id = category_utils.create_entity()
+    
+    try:
+        # Test with invalid file type (plain text as fake image)
+        text_file = BytesIO(b"This is not an image")
+        files = {"file": ("test.txt", text_file, "text/plain")}
+        invalid_type_response = requests.post(
+            f"{category_utils.base_url}/{category_id}/image",
+            files=files
+        )
+        # The server should reject invalid files
+        assert invalid_type_response.status_code in [400, 422], "Should reject non-image files"
+        
+        # Test with non-existent category
+        non_existent_id = 99999  # Assuming this ID doesn't exist
+        test_image = get_test_image_content()
+        files = {"file": ("test_image.jpg", test_image, "image/jpeg")}
+        not_found_response = requests.post(
+            f"{category_utils.base_url}/{non_existent_id}/image",
+            files=files
+        )
+        assert not_found_response.status_code == 404, "Should reject uploads to non-existent categories"
+    
+    finally:
+        # Clean up
+        category_utils.hard_delete_entity(category_id)

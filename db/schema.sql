@@ -101,6 +101,29 @@ COLLATE = utf8mb4_0900_ai_ci;
 
 
 -- -----------------------------------------------------
+-- Table `online_shop`.`product_images`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `online_shop`.`product_images` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `path` VARCHAR(256) NOT NULL,
+  `produse_id` INT NOT NULL,
+  `position` SMALLINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE INDEX `id_UNIQUE` (`id` ASC),
+  UNIQUE INDEX `path_UNIQUE` (`path` ASC),
+  INDEX `idx_product_images_position` (`position` ASC),
+  INDEX `fk_product_images_produse1_idx` (`produse_id` ASC),
+  CONSTRAINT `fk_product_images_produse1`
+    FOREIGN KEY (`produse_id`)
+    REFERENCES `online_shop`.`produse` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_0900_ai_ci;
+
+
+-- -----------------------------------------------------
 -- Table `online_shop`.`orare_livrari`
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `online_shop`.`orare_livrari` (

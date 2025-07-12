@@ -1,8 +1,10 @@
-from typing import Optional, Annotated, Dict
+from typing import Optional, Annotated, Dict, List
 from datetime import datetime
 import os
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
+
+from app.schemas.product_image import ProductImage as ProductImageSchema
 
 
 class ProductBase(BaseModel):
@@ -34,12 +36,8 @@ class ProductBase(BaseModel):
         examples=["Fresh apples from local farms"]
     )
     
-    primary_image_path: Optional[str] = Field(
-        None,
-        description="Path to the product's primary image",
-        max_length=256,
-        examples=["products/f47ac10b-58cc-4372-a567-0e02b2c3d479"]
-    )
+    # primary_image_path field has been replaced by the images relationship
+    # Images are now managed through the product_images endpoints
     
     category_id: Annotated[int, Field(
         description="ID of the category this product belongs to",
@@ -60,7 +58,7 @@ class ProductBase(BaseModel):
         examples=[10, 50, 100]
     )
     
-    @field_validator('nume', 'description', 'primary_image_path')
+    @field_validator('nume', 'description')
     @classmethod
     def validate_not_empty(cls, v):
         if v is not None and v.strip() == "":
@@ -101,11 +99,8 @@ class ProductUpdate(BaseModel):
         max_length=1500
     )
     
-    primary_image_path: Optional[str] = Field(
-        None,
-        description="Path to the product's primary image",
-        max_length=256
-    )
+    # primary_image_path field has been replaced by the images relationship
+    # Images are now managed through the product_images endpoints
     
     category_id: Optional[int] = Field(
         None,
@@ -130,7 +125,7 @@ class ProductUpdate(BaseModel):
         description="Soft delete flag"
     )
     
-    @field_validator('nume', 'description', 'primary_image_path')
+    @field_validator('nume', 'description')
     @classmethod
     def validate_not_empty(cls, v):
         if v is not None and v.strip() == "":
@@ -145,31 +140,34 @@ class Product(ProductBase):
     created_at: Annotated[datetime, Field(description="Creation timestamp")]
     updated_at: Annotated[datetime, Field(description="Last update timestamp")]
     is_deleted: bool
+    images: List[ProductImageSchema] = Field(default_factory=list, description="Collection of product images")
     
     @computed_field
     @property
     def image_versions(self) -> Dict[str, str]:
         """Generate paths for different image versions based on the primary image"""
-        if not self.primary_image_path:
-            # Return placeholder image path from system config
+        # Find primary image (position=0) or first image if no primary
+        primary_image = None
+        if self.images:
+            for image in self.images:
+                if image.position == 0:
+                    primary_image = image
+                    break
+            
+            # If no image has position=0, use the first one
+            if not primary_image and self.images:
+                primary_image = self.images[0]
+        
+        # If there are no images, return placeholder
+        if not primary_image:
             return {
                 "original": "/api/v1/static/placeholders/product_placeholder.jpg",
                 "medium": "/api/v1/static/placeholders/product_placeholder.jpg",
                 "thumbnail": "/api/v1/static/placeholders/product_placeholder.jpg"
             }
         
-        # Extract the image ID from the path
-        image_id = os.path.basename(self.primary_image_path)
-        
-        # Get file extension - we'll assume .jpg for now as a default
-        ext = ".jpg"
-        
-        # Return paths for all versions
-        return {
-            "original": os.path.join(self.primary_image_path, f"{image_id}{ext}"),
-            "medium": os.path.join(self.primary_image_path, f"{image_id}-medium{ext}"),
-            "thumbnail": os.path.join(self.primary_image_path, f"{image_id}-thumbnail{ext}")
-        }
+        # Use the image_versions from the primary image
+        return primary_image.image_versions
     
     model_config = ConfigDict(
         from_attributes=True,

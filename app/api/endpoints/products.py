@@ -22,91 +22,7 @@ from app.services.product import (
 router = APIRouter()
 
 
-@router.post("/{product_id}/image", response_model=ProductSchema, responses={
-    200: {"description": "Image uploaded successfully", "content": {
-        "application/json": {
-            "example": {
-                "id": 1,
-                "nume": "Laptop",
-                "cantitate": 10,
-                "pret": 1999.99,
-                "description": "High-performance laptop",
-                "primary_image_path": "products/f47ac10b-58cc-4372-a567-0e02b2c3d479",
-                "image_versions": {
-                    "original": "products/f47ac10b-58cc-4372-a567-0e02b2c3d479/f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg",
-                    "medium": "products/f47ac10b-58cc-4372-a567-0e02b2c3d479/f47ac10b-58cc-4372-a567-0e02b2c3d479-medium.jpg",
-                    "thumbnail": "products/f47ac10b-58cc-4372-a567-0e02b2c3d479/f47ac10b-58cc-4372-a567-0e02b2c3d479-thumbnail.jpg"
-                },
-                "is_deleted": False
-            }
-        }
-    }},
-    400: {"description": "Bad request, e.g., invalid file format or size"},
-    404: {"description": "Product not found"},
-    422: {"description": "Validation error"},
-    500: {"description": "Internal server error"}
-})
-def upload_product_image(
-    product_id: int = Path(..., gt=0, description="The ID of the product to upload an image for"),
-    file: UploadFile = File(..., description="The image file to upload (JPEG, PNG, or GIF, max 5MB)"),
-    db: Session = Depends(get_db)
-):
-    """
-    Upload an image for a specific product
-    
-    This endpoint allows uploading an image file for a product. The image will be stored
-    in the server's filesystem and the path will be saved in the product record.
-    
-    - Supported file formats: JPEG, PNG, GIF
-    - Maximum file size: 5MB
-    - If the product already has an image, the old image will be replaced
-    - The image directory will have a UUID-based name
-    - Multiple versions of the image will be created (original, medium, thumbnail)
-    
-    Returns the updated product object with the new image path and image versions.
-    """
-    try:
-        # Check if product exists
-        product = get_product_by_id(db, product_id=product_id)
-        if not product:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found"
-            )
-        
-        # Process and save multiple versions of the image
-        # This will create a directory with the original, medium, and thumbnail versions
-        image_dir_path = process_and_save_image_versions(file, subdirectory="products")
-        
-        # If product already has an image, delete the old directory and all its contents
-        if product.primary_image_path and product.primary_image_path != "products/placeholder":
-            # Extract the directory path (might be just a file path in older records)
-            old_path = product.primary_image_path
-            # Check if this is a directory path from process_and_save_image_versions
-            full_dir_path = os.path.join(get_upload_dir(), old_path)
-            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
-                shutil.rmtree(full_dir_path)
-            else:
-                # Handle old-style single image file if present
-                full_file_path = os.path.join(get_upload_dir(), old_path)
-                if os.path.exists(full_file_path) and os.path.isfile(full_file_path):
-                    os.remove(full_file_path)
-        
-        # Update the product with the new image directory path
-        updated_product = update_product(
-            db=db, 
-            product_id=product_id, 
-            product=ProductUpdate(primary_image_path=image_dir_path)
-        )
-        
-        return updated_product
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}"
-        )
+# Removed deprecated single image upload endpoint - use product_images endpoints instead
 
 
 @router.get("/", response_model=List[ProductSchema], responses={
@@ -237,13 +153,12 @@ def read_product(
 def create_product_endpoint(
     nume: str = Form(...),
     cantitate: str = Form(...),  # Changed to str to handle validation manually
-    pret: str = Form(...),      # Changed to str to handle validation manually
+    pret: str = Form(...),       # Changed to str to handle validation manually
     description: Optional[str] = Form(None),
-    category_id: str = Form(...),  # Changed to str to handle validation manually
+    category_id: str = Form(...), # Changed to str to handle validation manually
     unitati_id: str = Form(...),  # Changed to str to handle validation manually
     stock: str = Form(...),       # Changed to str to handle validation manually
-    primary_image: Optional[UploadFile] = File(None),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db)
 ):
     """
     Create a new product.
@@ -256,9 +171,13 @@ def create_product_endpoint(
     - **category_id**: ID of the associated category
     - **unitati_id**: ID of the associated unit
     - **stock**: Stock quantity
-    - **primary_image**: Optional primary image file upload
+    
+    Note: To add images to this product, use the /products/{product_id}/images endpoint 
+    after creating the product. Multiple images can be associated with a product,
+    with the ability to set image order and designate a primary image.
+    
+    Returns the created product.
     """
-    primary_image_path = "products/placeholder"  # Default placeholder
     
     try:
         # Validate nume (name) - ensure it's not empty
@@ -304,7 +223,7 @@ def create_product_endpoint(
         
         # Convert and validate pret
         try:
-            pret_val = int(pret)
+            pret_val = float(pret)
             if pret_val <= 0:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -323,8 +242,8 @@ def create_product_endpoint(
                 detail=[
                     {
                         "loc": ["body", "pret"],
-                        "msg": "value is not a valid integer",
-                        "type": "type_error.integer"
+                        "msg": "value is not a valid float",
+                        "type": "type_error.float"
                     }
                 ]
             )
@@ -410,32 +329,12 @@ def create_product_endpoint(
                 ]
             )
         
-        # Process file upload if provided
-        if primary_image and primary_image.filename:
-            # Check that the file is a valid image
-            if not is_valid_image(primary_image):
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=[
-                        {
-                            "loc": ["body", "primary_image"],
-                            "msg": "Invalid image format or corrupted file",
-                            "type": "value_error.image"
-                        }
-                    ]
-                )
-            
-            # Process and save multiple versions of the image
-            # This will create a directory with original, medium, and thumbnail versions
-            primary_image_path = process_and_save_image_versions(primary_image, subdirectory="products")
-        
         # Create product data using validated values
         product_data = ProductCreate(
             nume=nume_str,
             cantitate=cantitate_val,
             pret=pret_val,
             description=description or "",
-            primary_image_path=primary_image_path,
             category_id=category_id_val,
             unitati_id=unitati_id_val,
             stock=stock_val
@@ -444,22 +343,7 @@ def create_product_endpoint(
         # Create the product
         return create_product(db=db, product=product_data)
         
-    except HTTPException as e:
-        # If an HTTP exception occurred and an image directory was created, clean it up
-        if primary_image_path != "products/placeholder":
-            # Handle directory structure created by process_and_save_image_versions
-            full_dir_path = os.path.join(get_upload_dir(), primary_image_path)
-            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
-                shutil.rmtree(full_dir_path)
-            else:
-                # Fallback to single file cleanup for backward compatibility
-                delete_file(primary_image_path)
-        raise
     except IntegrityError as e:
-        # Cleanup any uploaded file
-        if primary_image_path != "products/placeholder":
-            delete_file(primary_image_path)
-        
         # Return a 400 error for integrity issues (better for contract tests)
         if "foreign key constraint fails" in str(e).lower():
             if "category_id" in str(e).lower():
@@ -497,10 +381,6 @@ def create_product_endpoint(
                 )
                 
     except SQLAlchemyError as e:
-        # Cleanup any uploaded file
-        if primary_image_path != "products/placeholder":
-            delete_file(primary_image_path)
-        
         # Return a 400 error for database issues (better for contract tests)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -515,9 +395,6 @@ def create_product_endpoint(
         
     except Exception as e:
         # Handle any other unexpected errors
-        if primary_image_path != "products/placeholder":
-            delete_file(primary_image_path)
-        
         # For contract tests, return 400 instead of 500 to avoid test failures
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -531,29 +408,41 @@ def create_product_endpoint(
         )
 
 
-@router.put("/{product_id}", response_model=ProductSchema, responses={
-    200: {"description": "Successful Response"},
-    400: {"description": "Bad Request"},
+@router.patch("/{product_id}", response_model=ProductSchema, responses={
+    200: {"description": "Product updated successfully"},
     404: {"description": "Product not found"},
-    422: {"description": "Validation Error"}
+    422: {"description": "Validation error"},
+    500: {"description": "Internal Server Error"}
 })
 def update_product_endpoint(
     product_id: int,
     nume: Optional[str] = Form(None),
     cantitate: Optional[int] = Form(None),
-    pret: Optional[int] = Form(None),
+    pret: Optional[float] = Form(None),
     description: Optional[str] = Form(None),
     category_id: Optional[int] = Form(None),
     unitati_id: Optional[int] = Form(None),
     stock: Optional[int] = Form(None),
-    primary_image: Optional[UploadFile] = File(None),
-    clear_image: bool = Form(False),
     db: Session = Depends(get_db),
 ):
     """
     Update a product.
     
     All fields are optional - only provided fields will be updated.
+    
+    Form data:
+    - **nume**: Product name
+    - **cantitate**: Product quantity
+    - **pret**: Product price
+    - **description**: Product description
+    - **category_id**: ID of the associated category
+    - **unitati_id**: ID of the associated unit
+    - **stock**: Stock quantity
+    
+    Note: To manage product images, use the /products/{product_id}/images endpoint.
+    Images can be added, updated, reordered, or deleted using the dedicated endpoints.
+    
+    Returns the updated product.
     """
     # Validate ID first
     try:
@@ -622,40 +511,14 @@ def update_product_endpoint(
             ]
         )
         
-    # Use placeholder if no image is provided but don't override existing value
-    primary_image_path = None
     try:
-        # First get the existing product to ensure it exists
+        # Check if product exists
         existing_product = get_product_by_id(db, product_id)
-        
-        # Handle clearing the image if requested
-        if clear_image:
-            # If the product has an image and it's not already the placeholder
-            if existing_product.primary_image_path and existing_product.primary_image_path != "products/placeholder":
-                # Delete the existing image directory
-                full_dir_path = os.path.join(get_upload_dir(), existing_product.primary_image_path)
-                if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
-                    shutil.rmtree(full_dir_path)
-                # Set to placeholder
-                primary_image_path = "products/placeholder"
-        # Process image upload if provided (only if not clearing the image)
-        elif primary_image and primary_image.filename:
-            # Check that the file is a valid image
-            if not is_valid_image(primary_image):
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=[
-                        {
-                            "loc": ["body", "primary_image"],
-                            "msg": "Invalid image format",
-                            "type": "value_error.image"
-                        }
-                    ]
-                )
-                
-            # Process and save multiple versions of the image
-            # This will create a directory with original, medium, and thumbnail versions
-            primary_image_path = process_and_save_image_versions(primary_image, subdirectory="products")
+        if not existing_product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product with ID {product_id} not found"
+            )
         
         # Create update dictionary with only provided fields
         update_dict = {}
@@ -667,8 +530,6 @@ def update_product_endpoint(
             update_dict["pret"] = pret
         if description is not None:
             update_dict["description"] = description
-        if primary_image_path is not None:
-            update_dict["primary_image_path"] = primary_image_path
         if category_id is not None:
             update_dict["category_id"] = category_id
         if unitati_id is not None:
@@ -688,15 +549,7 @@ def update_product_endpoint(
         
         return updated_product
     except HTTPException:
-        # If an HTTP exception occurred and an image directory was created, clean it up
-        if primary_image_path and primary_image_path != "products/placeholder":
-            # Handle directory structure created by process_and_save_image_versions
-            full_dir_path = os.path.join(get_upload_dir(), primary_image_path)
-            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
-                shutil.rmtree(full_dir_path)
-            else:
-                # Fallback to single file cleanup for backward compatibility
-                delete_file(primary_image_path)
+        # Re-raise the exception
         raise
 
 

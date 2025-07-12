@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.file_upload import delete_file, get_upload_dir
 from app.models.product import Product
+from app.models.product_image import ProductImage
 from app.schemas.product import ProductCreate, ProductUpdate
 
 
@@ -177,7 +178,7 @@ def create_product(db: Session, product: ProductCreate) -> Product:
                     existing_product.cantitate = product.cantitate
                     existing_product.pret = product.pret
                     existing_product.description = product.description or ""
-                    existing_product.primary_image_path = product.primary_image_path or "products/placeholder"
+                    # primary_image_path removed - images are now managed through product_images relationship
                     existing_product.category_id = product.category_id
                     existing_product.unitati_id = product.unitati_id
                     existing_product.stock = product.stock
@@ -213,7 +214,7 @@ def create_product(db: Session, product: ProductCreate) -> Product:
             cantitate=product.cantitate,
             pret=product.pret,
             description=product.description or "",
-            primary_image_path=product.primary_image_path or "products/placeholder",
+            # primary_image_path removed - images are now managed through product_images relationship
             category_id=product.category_id,
             unitati_id=product.unitati_id,
             stock=product.stock,
@@ -335,8 +336,7 @@ def update_product(db: Session, product_id: int, product: ProductUpdate) -> Prod
                 
         # Handle image update
         old_image_path = None
-        if "primary_image_path" in update_data and update_data["primary_image_path"] != db_product.primary_image_path:
-            old_image_path = db_product.primary_image_path
+        # primary_image_path handling removed - images are now managed through product_images relationship
                 
         # Update product attributes
         for key, value in update_data.items():
@@ -457,24 +457,28 @@ def hard_delete_product(db: Session, product_id: int) -> bool:
         if db_product is None:
             return False
         
-        # Store the image path before deletion for cleanup
-        image_path = db_product.primary_image_path
+        # Store all image paths before deletion for cleanup
+        # The images will be automatically deleted from the database due to cascade
+        # But we need to clean up the files on disk
+        image_paths = [image.path for image in db_product.images]
         
-        # Attempt to delete from database
+        # primary_image_path field has been removed from the model
+        
+        # Attempt to delete from database (will cascade delete product_images)
         db.delete(db_product)
         db.commit()
         
-        # Delete the associated image file if it exists
-        if image_path:
-            # Get the full directory path
-            full_dir_path = os.path.join(get_upload_dir(), image_path)
-            
-            # Check if it's a directory and delete it with all contents
-            if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
-                shutil.rmtree(full_dir_path)
-            else:
-                # Fallback to the old method for backward compatibility
-                delete_file(image_path)
+        # Delete all the associated image directories
+        for image_path in image_paths:
+            if image_path:
+                # Get the full directory path
+                full_dir_path = os.path.join(get_upload_dir(), image_path)
+                
+                # Check if it's a directory and delete it with all contents
+                if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                    shutil.rmtree(full_dir_path)
+        
+        # Legacy primary_image_path field handling has been completely removed
             
         return True
     except IntegrityError:

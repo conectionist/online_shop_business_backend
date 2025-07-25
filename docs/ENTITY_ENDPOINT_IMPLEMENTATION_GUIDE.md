@@ -21,7 +21,7 @@ The following entities need to be implemented in order of dependency. Check them
 
 #### Level 1: First-Level Dependencies
 - [x] **Products (Produse)** - (depends on `Units` and `Categories`)
-- [ ] **Lists (Liste)** - (depends on `Delivery Schedules`)
+- [x] **Lists (Liste)** - (depends on `Delivery Schedules`)
 
 #### Level 2: Second-Level Dependencies
 - [ ] **Secondary Images** - (depends on `Products`)

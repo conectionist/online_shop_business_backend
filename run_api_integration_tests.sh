@@ -24,15 +24,15 @@ mkdir -p "$REPORT_DIR"
 
 # Stop and remove any existing containers
 echo "🧹 Cleaning up any existing test containers..."
-docker-compose -f docker-compose.test.yml --env-file .env.test down -v --remove-orphans
+docker compose -f docker-compose.test.yml --env-file .env.test down -v --remove-orphans
 
 # Build and start the test containers
 echo "🏗️ Building test containers..."
-docker-compose -f docker-compose.test.yml --env-file .env.test build
+docker compose -f docker-compose.test.yml --env-file .env.test build
 
 # Start the MySQL service
 echo "🚀 Starting MySQL test environment..."
-docker-compose -f docker-compose.test.yml --env-file .env.test up -d mysql_test
+docker compose -f docker-compose.test.yml --env-file .env.test up -d mysql_test
 
 echo "⏳ Waiting for MySQL to be ready..."
 # Display a countdown
@@ -46,7 +46,7 @@ echo -ne "\r✅ MySQL should be ready now!                         \n"
 
 # Start the API service
 echo "🚀 Starting API test environment..."
-docker-compose -f docker-compose.test.yml --env-file .env.test up -d api_server_test
+docker compose -f docker-compose.test.yml --env-file .env.test up -d api_server_test
 
 # Wait for API server to be ready
 echo "⏳ Waiting for API server to be ready..."
@@ -54,13 +54,13 @@ sleep 2
 
 # Run the tests
 echo "🧪 Running API integration tests..."
-docker-compose -f docker-compose.test.yml --env-file .env.test run --rm api_integration_tests
+docker compose -f docker-compose.test.yml --env-file .env.test run --rm api_integration_tests
 TEST_EXIT_CODE=$?
 
 # Clean up containers unless --keep-containers is specified
 if [ "$KEEP_CONTAINERS" = false ]; then
   echo "🧹 Cleaning up test containers..."
-  docker-compose -f docker-compose.test.yml --env-file .env.test down -v
+  docker compose -f docker-compose.test.yml --env-file .env.test down -v
 else
   echo "🔍 Containers kept running for inspection"
 fi

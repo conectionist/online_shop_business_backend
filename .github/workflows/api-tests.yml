@@ -59,6 +59,15 @@ jobs:
           name: api-test-reports
           path: test-reports/
 
+      - name: Build Docker image
+        run: docker build -t ghcr.io/${{ github.repository_owner }}/online-shop-backend:${{ github.sha }} .
+
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push Docker image to GHCR
+        run: docker push ghcr.io/${{ github.repository_owner }}/online-shop-backend:${{ github.sha }}
+
       # - name: Send notification on failure
       #   if: failure()
       #   uses: rtCamp/action-slack-notify@v2

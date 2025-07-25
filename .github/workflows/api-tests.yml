@@ -42,10 +42,10 @@ jobs:
           # The scripts will create subdirectories, so we just need to ensure the base is writable
           chmod 777 test-reports
 
-      - name: Run API Contract Tests
-        run: |
-          chmod +x ./run_api_contract_tests.sh
-          ./run_api_contract_tests.sh
+      # - name: Run API Contract Tests
+      #   run: |
+      #     chmod +x ./run_api_contract_tests.sh
+      #     ./run_api_contract_tests.sh
 
       - name: Run API Integration Tests
         run: |

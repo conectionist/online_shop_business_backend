@@ -147,9 +147,11 @@ CREATE TABLE IF NOT EXISTS `online_shop`.`liste` (
   `orare_livrari_id` INT NOT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_deleted` TINYINT NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE INDEX `id_UNIQUE` (`id` ASC),
   INDEX `idx_liste_data` (`data` ASC),
+  INDEX `idx_liste_is_deleted` (`is_deleted` ASC),
   INDEX `fk_liste_orare_livrari1_idx` (`orare_livrari_id` ASC),
   CONSTRAINT `fk_liste_orare_livrari1`
     FOREIGN KEY (`orare_livrari_id`)

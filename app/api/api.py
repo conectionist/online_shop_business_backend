@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.endpoints import unitati, modalitati_plata, delivery_types, delivery_schedules, business_details, categories, system_config, products, product_images
+from app.api.endpoints import unitati, modalitati_plata, delivery_types, delivery_schedules, business_details, categories, system_config, products, product_images, lists
 
 api_router = APIRouter()
 
@@ -45,4 +45,9 @@ api_router.include_router(
     product_images.router,
     prefix="/products",
     tags=["product-images"]
+)
+api_router.include_router(
+    lists.router,
+    prefix="/liste",
+    tags=["liste"]
 )

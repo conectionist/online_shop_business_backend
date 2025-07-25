@@ -256,9 +256,9 @@ def update_category(db: Session, category_id: int, category: CategoryUpdate) -> 
             
             db_category.name = category.name
         
-        # Update image_path if provided
+        # Update image_path if explicitly included in the update request
         # Note: image_path can be explicitly set to None to use the placeholder image
-        if category.image_path is not None or hasattr(category, 'image_path'):
+        if hasattr(category, '__fields_set__') and 'image_path' in category.__fields_set__:
             db_category.image_path = category.image_path
         
         # Update is_deleted if provided

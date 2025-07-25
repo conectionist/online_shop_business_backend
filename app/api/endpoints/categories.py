@@ -244,17 +244,18 @@ def read_category(
 })
 def update_category_endpoint(
     category_id: int = Path(..., gt=0, description="The ID of the category to update"),
-    name: Optional[str] = Form(None, description="The name of the category"),
+    name: str = Form(..., description="The name of the category"),
     primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
     clear_image: bool = Form(False, description="If true, will clear the image and use placeholder"),
     db: Session = Depends(get_db)
 ):
-    """Update an existing category
+    """Update an existing category (PUT - full replacement)
     
-    Accepts multipart/form-data with optional name and image file.
-    - If name is not provided, the existing name will be kept.
-    - If primary_image is not provided, the existing image will be kept unless clear_image is true.
-    - If clear_image is true, the image will be removed and placeholder will be used.
+    Accepts multipart/form-data with required name and optional image file.
+    - Name is required for a PUT operation (replaces the entire resource)
+    - If primary_image is not provided:
+      - If clear_image is true: the image will be removed and placeholder will be used
+      - If clear_image is false: the image will be set to placeholder (following PUT semantics)
     """
     try:
         # First check if the category exists
@@ -269,7 +270,129 @@ def update_category_endpoint(
         update_dict = {}
         primary_image_path = None
         
-        # Add name to update if provided
+        # In PUT semantics, we always set the name (it's required)
+        update_dict["name"] = name
+        
+        # Handle image updates
+        if clear_image:
+            # Explicitly set image path to None to use placeholder
+            update_dict["image_path"] = None
+            
+            # Clean up old image directory if it exists
+            if existing_category.image_path:
+                import os
+                import shutil
+                from app.core.file_upload import get_upload_dir
+                
+                full_dir_path = os.path.join(get_upload_dir(), existing_category.image_path)
+                if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                    shutil.rmtree(full_dir_path)
+        
+        elif primary_image:
+            # If image is provided, process it
+            # Validate image
+            from app.core.file_upload import is_valid_image
+            if not is_valid_image(primary_image):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=[
+                        {
+                            "loc": ["body", "primary_image"],
+                            "msg": "Invalid image format",
+                            "type": "value_error.image"
+                        }
+                    ]
+                )
+                
+            # Process and save multiple versions of the image
+            primary_image_path = process_and_save_image_versions(primary_image, subdirectory="categories")
+            update_dict["image_path"] = primary_image_path
+            
+            # Clean up old image directory if it exists
+            if existing_category.image_path:
+                import os
+                import shutil
+                from app.core.file_upload import get_upload_dir
+                
+                full_dir_path = os.path.join(get_upload_dir(), existing_category.image_path)
+                if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                    shutil.rmtree(full_dir_path)
+        else:
+            # If no image is provided and clear_image is false, still set to null (PUT semantics)
+            # This follows proper PUT behavior of replacing the entire resource
+            update_dict["image_path"] = None
+            
+            # Clean up old image directory if it exists
+            if existing_category.image_path:
+                import os
+                import shutil
+                from app.core.file_upload import get_upload_dir
+                
+                full_dir_path = os.path.join(get_upload_dir(), existing_category.image_path)
+                if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
+                    shutil.rmtree(full_dir_path)
+        
+        # If no fields were provided for update, return existing category
+        if not update_dict:
+            return existing_category
+            
+        # Create an update data object
+        category_update = CategoryUpdate(**update_dict)
+        
+        # Update the category
+        updated_category = update_category(
+            db=db,
+            category_id=category_id,
+            category=category_update
+        )
+        return updated_category
+    except HTTPException as e:
+        # Re-raise HTTP exceptions
+        raise e
+    except Exception as e:
+        # Handle other exceptions
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.patch("/{category_id}", response_model=Category, responses={
+    200: {"description": "Category updated successfully"},
+    400: {"description": "Bad request, e.g., duplicate category name or invalid image"},
+    404: {"description": "Category not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def patch_category_endpoint(
+    category_id: int = Path(..., gt=0, description="The ID of the category to update"),
+    name: Optional[str] = Form(None, description="The name of the category"),
+    primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
+    clear_image: bool = Form(False, description="If true, will clear the image and use placeholder"),
+    db: Session = Depends(get_db)
+):
+    """Partially update an existing category (PATCH - only update provided fields)
+    
+    Accepts multipart/form-data with optional fields to update:
+    - If name is not provided, the existing name will be kept
+    - If primary_image is not provided:
+      - If clear_image is true: the image will be removed and placeholder will be used
+      - If clear_image is false: the existing image will be kept
+    """
+    try:
+        # First check if the category exists
+        existing_category = get_category_by_id(db, category_id=category_id)
+        if not existing_category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Category with ID {category_id} not found"
+            )
+        
+        # Initialize update data and image path
+        update_dict = {}
+        primary_image_path = None
+        
+        # Add name to update only if provided
         if name is not None:
             update_dict["name"] = name
         
@@ -289,6 +412,7 @@ def update_category_endpoint(
                     shutil.rmtree(full_dir_path)
         
         elif primary_image:
+            # If image is provided, process it
             # Validate image
             from app.core.file_upload import is_valid_image
             if not is_valid_image(primary_image):
@@ -325,8 +449,11 @@ def update_category_endpoint(
         category_update = CategoryUpdate(**update_dict)
         
         # Update the category
-        updated_category = update_category(db=db, category_id=category_id, category=category_update)
-        
+        updated_category = update_category(
+            db=db,
+            category_id=category_id,
+            category=category_update
+        )
         return updated_category
     except HTTPException as e:
         # If an HTTP exception occurred and an image directory was created, clean it up

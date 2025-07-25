@@ -1,0 +1,10 @@
+---
+trigger: always_on
+---
+
+1. The project uses docker. For this reason, no dependencies will be installed on the user's machine unless absolutely necessary. Any dependencies will be added in the appropriate places (e.g. requirements.txt).
+2. If we change some code, always make sure to build the docker containers before testing the code modifications.
+3. Always use docker compose, not docker-compose.
+4. When working with the docker test container (docker-compose.test.yml), always specify the appropriate env file: .env.test.
+5. Python tests will not be run manually. Instead they will be run via docker (there are also some scripts that facilitate this).
+6. In short, whenever it's possible to use docker, use docker! Not something else.

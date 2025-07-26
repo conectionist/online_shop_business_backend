@@ -308,6 +308,14 @@ def soft_delete_category(db: Session, category_id: int) -> bool:
             detail=f"Invalid ID: {category_id} - must be positive"
         )
     
+    # Protect against deletion of the default "Uncategorized" category
+    from app.core.constants import UNCATEGORIZED_CATEGORY_ID
+    if category_id == UNCATEGORIZED_CATEGORY_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete the default 'Uncategorized' category"
+        )
+    
     try:
         # Check if category exists and is not already deleted
         db_category = db.query(Category).filter(
@@ -321,7 +329,6 @@ def soft_delete_category(db: Session, category_id: int) -> bool:
         from app.models.product import Product
         
         # Update all products in this category to use the default "Uncategorized" category
-        from app.core.constants import UNCATEGORIZED_CATEGORY_ID
         products_to_update = db.query(Product).filter(Product.category_id == category_id).all()
         for product in products_to_update:
             product.category_id = UNCATEGORIZED_CATEGORY_ID  # Default to "Uncategorized"
@@ -363,6 +370,14 @@ def hard_delete_category(db: Session, category_id: int) -> bool:
             detail=f"Invalid ID: {category_id} - must be positive"
         )
     
+    # Protect against deletion of the default "Uncategorized" category
+    from app.core.constants import UNCATEGORIZED_CATEGORY_ID
+    if category_id == UNCATEGORIZED_CATEGORY_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete the default 'Uncategorized' category"
+        )
+    
     try:
         # Check if category exists
         db_category = db.query(Category).filter(Category.id == category_id).first()
@@ -373,7 +388,6 @@ def hard_delete_category(db: Session, category_id: int) -> bool:
         from app.models.product import Product
         
         # Update all products in this category to use the default "Uncategorized" category
-        from app.core.constants import UNCATEGORIZED_CATEGORY_ID
         products_to_update = db.query(Product).filter(Product.category_id == category_id).all()
         for product in products_to_update:
             product.category_id = UNCATEGORIZED_CATEGORY_ID  # Default to "Uncategorized"

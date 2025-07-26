@@ -822,3 +822,42 @@ def test_category_deletion_cascade():
             requests.delete(f"{category_utils.base_url}/{category_id}")
         except:
             pass
+
+
+def test_cannot_delete_uncategorized_category():
+    """
+    Tests that the default "Uncategorized" category (ID 1) cannot be deleted.
+    """
+    # Try to soft delete the Uncategorized category
+    soft_delete_response = requests.delete(f"{category_utils.base_url}/1")
+    assert soft_delete_response.status_code == 403, (
+        f"Expected 403 Forbidden when trying to soft delete Uncategorized category, "
+        f"got {soft_delete_response.status_code}: {soft_delete_response.text}"
+    )
+    
+    # Verify the error message
+    error_detail = soft_delete_response.json().get("detail", "")
+    assert "Cannot delete the default 'Uncategorized' category" in error_detail
+    
+    # Try to hard delete the Uncategorized category
+    hard_delete_response = requests.delete(f"{category_utils.base_url}/1?permanent=true")
+    assert hard_delete_response.status_code == 403, (
+        f"Expected 403 Forbidden when trying to hard delete Uncategorized category, "
+        f"got {hard_delete_response.status_code}: {hard_delete_response.text}"
+    )
+    
+    # Verify the error message
+    error_detail = hard_delete_response.json().get("detail", "")
+    assert "Cannot delete the default 'Uncategorized' category" in error_detail
+    
+    # Verify the category still exists and is not deleted
+    get_response = requests.get(f"{category_utils.base_url}/1")
+    assert get_response.status_code == 200, (
+        f"Expected 200 OK when getting Uncategorized category, "
+        f"got {get_response.status_code}: {get_response.text}"
+    )
+    
+    category_data = get_response.json()
+    assert category_data["id"] == 1
+    assert category_data["name"] == "Uncategorized"
+    assert category_data["is_deleted"] == False

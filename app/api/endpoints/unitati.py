@@ -108,7 +108,42 @@ def update_units(
     unit: UnitUpdate = ...,
     db: Session = Depends(get_db)
 ):
-    """Update an existing unit"""
+    """Update an existing unit (PUT - full replacement)"""
+    try:
+        db_unit = update_unit(db=db, unit_id=unit_id, unit=unit)
+        if db_unit is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Unit not found"
+            )
+        return db_unit
+    except HTTPException:
+        raise
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+
+@router.patch("/{unit_id}", response_model=Unit, responses={
+    200: {"description": "Unit updated successfully"},
+    400: {"description": "Bad request, e.g., duplicate unit name"},
+    404: {"description": "Unit not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def patch_units(
+    unit_id: int = Path(..., gt=0, description="The ID of the unit to update"),
+    unit: UnitUpdate = ...,
+    db: Session = Depends(get_db)
+):
+    """Partially update an existing unit (PATCH - only update provided fields)"""
     try:
         db_unit = update_unit(db=db, unit_id=unit_id, unit=unit)
         if db_unit is None:

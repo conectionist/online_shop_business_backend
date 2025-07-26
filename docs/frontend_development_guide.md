@@ -80,17 +80,30 @@ curl -X GET "http://localhost:8000/api/v1/categories?include_deleted=true" \
 ```json
 [
   {
-    "id": 1,
-    "name": "Fruits",
-    "image_path": "categories/a1b2c3d4-5678-90ab-cdef-123456789012",
+    "id": 62,
+    "name": "Test Category with Image",
+    "image_path": "categories/21902c3b5129433ea7d1fb73c40f251f",
     "image_versions": {
-      "original": "categories/a1b2c3d4-5678-90ab-cdef-123456789012/a1b2c3d4-5678-90ab-cdef-123456789012.jpg",
-      "medium": "categories/a1b2c3d4-5678-90ab-cdef-123456789012/a1b2c3d4-5678-90ab-cdef-123456789012-medium.jpg",
-      "thumbnail": "categories/a1b2c3d4-5678-90ab-cdef-123456789012/a1b2c3d4-5678-90ab-cdef-123456789012-thumbnail.jpg"
+      "original": "categories/21902c3b5129433ea7d1fb73c40f251f/21902c3b5129433ea7d1fb73c40f251f.jpg",
+      "medium": "categories/21902c3b5129433ea7d1fb73c40f251f/21902c3b5129433ea7d1fb73c40f251f-medium.jpg",
+      "thumbnail": "categories/21902c3b5129433ea7d1fb73c40f251f/21902c3b5129433ea7d1fb73c40f251f-thumbnail.jpg"
     },
     "is_deleted": false,
-    "created_at": "2024-01-15T10:30:00.000000Z",
-    "updated_at": "2024-01-15T10:30:00.000000Z"
+    "created_at": "2025-07-26T07:23:15.000000Z",
+    "updated_at": "2025-07-26T07:23:15.000000Z"
+  },
+  {
+    "id": 61,
+    "name": "Test Category",
+    "image_path": null,
+    "image_versions": {
+      "original": "/api/v1/static/placeholders/category_placeholder.jpg",
+      "medium": "/api/v1/static/placeholders/category_placeholder.jpg",
+      "thumbnail": "/api/v1/static/placeholders/category_placeholder.jpg"
+    },
+    "is_deleted": false,
+    "created_at": "2025-07-26T07:23:06.000000Z",
+    "updated_at": "2025-07-26T07:23:06.000000Z"
   }
 ]
 ```
@@ -114,17 +127,17 @@ curl -X GET "http://localhost:8000/api/v1/categories/1?include_deleted=true" \
 **Response Example**:
 ```json
 {
-  "id": 1,
-  "name": "Fruits",
-  "image_path": "categories/a1b2c3d4-5678-90ab-cdef-123456789012",
+  "id": 62,
+  "name": "Test Category with Image",
+  "image_path": "categories/21902c3b5129433ea7d1fb73c40f251f",
   "image_versions": {
-    "original": "categories/a1b2c3d4-5678-90ab-cdef-123456789012/a1b2c3d4-5678-90ab-cdef-123456789012.jpg",
-    "medium": "categories/a1b2c3d4-5678-90ab-cdef-123456789012/a1b2c3d4-5678-90ab-cdef-123456789012-medium.jpg",
-    "thumbnail": "categories/a1b2c3d4-5678-90ab-cdef-123456789012/a1b2c3d4-5678-90ab-cdef-123456789012-thumbnail.jpg"
+    "original": "categories/21902c3b5129433ea7d1fb73c40f251f/21902c3b5129433ea7d1fb73c40f251f.jpg",
+    "medium": "categories/21902c3b5129433ea7d1fb73c40f251f/21902c3b5129433ea7d1fb73c40f251f-medium.jpg",
+    "thumbnail": "categories/21902c3b5129433ea7d1fb73c40f251f/21902c3b5129433ea7d1fb73c40f251f-thumbnail.jpg"
   },
   "is_deleted": false,
-  "created_at": "2024-01-15T10:30:00.000000Z",
-  "updated_at": "2024-01-15T10:30:00.000000Z"
+  "created_at": "2025-07-26T07:23:15.000000Z",
+  "updated_at": "2025-07-26T07:23:15.000000Z"
 }
 ```
 
@@ -178,7 +191,7 @@ curl -X PUT "http://localhost:8000/api/v1/categories/3" \
 
 **cURL Example** (update with new image):
 ```bash
-curl -X PUT "http://localhost:8000/api/v1/categories/1/" \
+curl -X PUT "http://localhost:8000/api/v1/categories/3" \
   -H "accept: application/json" \
   -F "name=Fresh Fruits" \
   -F "primary_image=@fresh_fruits.jpg"
@@ -186,11 +199,14 @@ curl -X PUT "http://localhost:8000/api/v1/categories/1/" \
 
 **cURL Example** (clear image and use placeholder):
 ```bash
-curl -X PUT "http://localhost:8000/api/v1/categories/1/" \
+curl -X PUT "http://localhost:8000/api/v1/categories/3" \
   -H "accept: application/json" \
   -F "name=Fresh Fruits" \
   -F "clear_image=true"
 ```
+
+**Parameter:**
+- `clear_image` (boolean, optional): If true, clears the image and uses the placeholder image for the category.
 
 #### 5. Partially Update Category
 **Use Case**: Admin updating specific category fields
@@ -217,6 +233,9 @@ curl -X PATCH "http://localhost:8000/api/v1/categories/1/" \
   -H "accept: application/json" \
   -F "clear_image=true"
 ```
+
+**Parameter:**
+- `clear_image` (boolean, optional): If true, clears the image and uses the placeholder image for the category.
 
 **Response Example (PUT with name only - image reset to placeholder):**
 ```json
@@ -268,7 +287,6 @@ curl -X PATCH "http://localhost:8000/api/v1/categories/1/" \
   "updated_at": "2024-01-15T15:45:00.000000Z"
 }
 ```
-```
 
 #### 6. Delete Category
 **Use Case**: Admin removing categories (soft delete)
@@ -286,7 +304,36 @@ curl -X DELETE "http://localhost:8000/api/v1/categories/4?permanent=true" \
   -H "accept: application/json"
 ```
 
+**Parameter:**
+- `permanent` (boolean, optional): If true, performs a permanent (hard) delete. Otherwise, performs a soft delete.
+
 **Response**: HTTP 204 No Content (successful deletion)
+
+#### Soft Delete Restoration Behavior
+
+When creating a category with a name that matches a previously soft-deleted category, the system will **restore the deleted category** instead of creating a new one. This ensures data consistency and prevents accidental duplicates.
+
+**Example**:
+1. Create category "Fruits" (ID: 5)
+2. Soft delete category "Fruits" 
+3. Create category "Fruits" again → **Restores the original category (ID: 5)** instead of creating a new one
+
+**Response for restoration**:
+```json
+{
+  "id": 5,
+  "name": "Fruits",
+  "image_path": null,
+  "created_at": "2024-01-15T10:30:00.000000Z",
+  "updated_at": "2024-01-15T15:45:00.000000Z",
+  "is_deleted": false,
+  "image_versions": {
+    "original": "/api/v1/static/placeholders/category_placeholder.jpg",
+    "medium": "/api/v1/static/placeholders/category_placeholder.jpg",
+    "thumbnail": "/api/v1/static/placeholders/category_placeholder.jpg"
+  }
+}
+```
 
 #### Error Handling Examples
 
@@ -301,7 +348,7 @@ curl -X GET "http://localhost:8000/api/v1/categories/999"
 curl -X POST "http://localhost:8000/api/v1/categories" \
   -H "accept: application/json" \
   -F "image=@category.jpg"
-# Response: 422 {"detail":[{"loc":["body","name"],"msg":"field required","type":"value_error.missing"}]}
+# Response: 422 {"detail":"1 validation error for CategoryCreate\nname\n  String should have at least 1 character [type=string_too_short, input_value='', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_too_short"}
 ```
 
 **409 Conflict** (duplicate category name):

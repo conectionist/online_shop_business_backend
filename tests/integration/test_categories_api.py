@@ -338,7 +338,12 @@ class CategoryTestUtils(EntityTestUtils):
                 f"{self.base_url}/",
                 data={"name": unique_name}
             )
-            assert duplicate_response.status_code == 400, "Should not allow duplicate names"
+            assert duplicate_response.status_code == 409, "Should return 409 Conflict for duplicate names"
+            
+            # Verify the error message
+            error_data = duplicate_response.json()
+            assert "detail" in error_data
+            assert f"Category with name '{unique_name}' already exists" in error_data["detail"]
             
         finally:
             # Clean up

@@ -147,9 +147,9 @@ def create_category(db: Session, category: CategoryCreate) -> Category:
     ).first()
     
     if existing_active:
-        # Return 400 Bad Request for duplicate name
+        # Return 409 Conflict for duplicate name (REST API best practice)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_409_CONFLICT,
             detail=f"Category with name '{category.name}' already exists"
         )
     
@@ -181,7 +181,7 @@ def create_category(db: Session, category: CategoryCreate) -> Category:
     except IntegrityError:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_409_CONFLICT,
             detail=f"A category with the name '{category.name}' already exists"
         )
     except SQLAlchemyError as e:

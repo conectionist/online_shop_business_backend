@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS `online_shop`.`category` (
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `is_deleted` TINYINT NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
+  UNIQUE INDEX `name_UNIQUE` (`name` ASC),
   INDEX `idx_category_is_deleted` (`is_deleted` ASC))
 ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4

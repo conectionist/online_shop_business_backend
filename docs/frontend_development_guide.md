@@ -832,6 +832,290 @@ curl -X POST "http://localhost:8001/api/v1/products/" \
 
 (de produse disponibile pentru urmatoarea comanda)
 
+#### 1. Get All Lists
+
+**Use Case**: Display all available product lists
+
+**API**: `GET /api/v1/liste/`
+
+**Description**: Retrieves all lists with pagination support and optional inclusion of deleted ones
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/liste/" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (with pagination):
+```bash
+curl -X GET "http://localhost:8001/api/v1/liste/?skip=0&limit=10" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (include deleted):
+```bash
+curl -X GET "http://localhost:8001/api/v1/liste/?include_deleted=true" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+[
+  {
+    "data": "2025-07-26",
+    "is_current": true,
+    "is_published": false,
+    "mesaj_introducere": "Test List",
+    "alte_detalii": "Test details",
+    "numar_whatsapp": "+40712345678",
+    "orare_livrari_id": 8,
+    "id": 19,
+    "created_at": "2025-07-26T15:10:57",
+    "updated_at": "2025-07-26T15:10:57",
+    "is_deleted": false
+  }
+]
+```
+
+**Parameters**:
+- `skip` (integer, optional): Number of lists to skip for pagination (default: 0)
+- `limit` (integer, optional): Maximum number of lists to return (default: 100, max: 1000)
+- `include_deleted` (boolean, optional): Whether to include soft-deleted lists (default: false)
+
+#### 2. Get Specific List
+
+**Use Case**: Display specific list details
+
+**API**: `GET /api/v1/liste/{list_id}`
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/liste/19" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (include deleted):
+```bash
+curl -X GET "http://localhost:8001/api/v1/liste/19?include_deleted=true" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "data": "2025-07-26",
+  "is_current": true,
+  "is_published": false,
+  "mesaj_introducere": "Test List",
+  "alte_detalii": "Test details",
+  "numar_whatsapp": "+40712345678",
+  "orare_livrari_id": 8,
+  "id": 19,
+  "created_at": "2025-07-26T15:10:57",
+  "updated_at": "2025-07-26T15:10:57",
+  "is_deleted": false
+}
+```
+
+#### 3. Create New List
+
+**Use Case**: Admin creating a new product list
+
+**API**: `POST /api/v1/liste/`
+
+**cURL Example**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": "2025-07-26",
+    "is_current": true,
+    "is_published": false,
+    "mesaj_introducere": "Test List",
+    "alte_detalii": "Test details",
+    "numar_whatsapp": "+40712345678",
+    "orare_livrari_id": 8
+  }'
+```
+
+**Response Example**:
+```json
+{
+  "data": "2025-07-26",
+  "is_current": true,
+  "is_published": false,
+  "mesaj_introducere": "Test List",
+  "alte_detalii": "Test details",
+  "numar_whatsapp": "+40712345678",
+  "orare_livrari_id": 8,
+  "id": 19,
+  "created_at": "2025-07-26T15:10:57",
+  "updated_at": "2025-07-26T15:10:57",
+  "is_deleted": false
+}
+```
+
+**Required Fields**:
+- `data` (date): Date of the list (format: YYYY-MM-DD)
+- `is_current` (boolean): Flag indicating if this is the current list
+- `orare_livrari_id` (integer): ID of the associated delivery schedule (must be > 0)
+
+**Optional Fields**:
+- `is_published` (boolean): Flag indicating if the list is published
+- `mesaj_introducere` (string): Introduction message for the list (max 45 characters)
+- `alte_detalii` (string): Additional details for the list (max 500 characters)
+- `numar_whatsapp` (string): WhatsApp number for contact (format: +?[0-9]{10,15})
+
+#### 4. Partially Update List
+
+**Use Case**: Admin updating specific list fields
+
+**API**: `PATCH /api/v1/liste/{list_id}`
+
+**Description**: Partially updates a list resource. Only updates fields explicitly provided.
+
+**cURL Example**:
+```bash
+curl -X PATCH "http://localhost:8001/api/v1/liste/19" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mesaj_introducere": "Updated Test List",
+    "is_published": true
+  }'
+```
+
+**Response Example**:
+```json
+{
+  "data": "2025-07-26",
+  "is_current": true,
+  "is_published": true,
+  "mesaj_introducere": "Updated Test List",
+  "alte_detalii": "Test details",
+  "numar_whatsapp": "+40712345678",
+  "orare_livrari_id": 8,
+  "id": 19,
+  "created_at": "2025-07-26T15:10:57",
+  "updated_at": "2025-07-26T15:11:10",
+  "is_deleted": false
+}
+```
+
+**Optional Fields** (all fields are optional for PATCH):
+- `data` (date): Date of the list (format: YYYY-MM-DD)
+- `is_current` (boolean): Flag indicating if this is the current list
+- `is_published` (boolean): Flag indicating if the list is published
+- `mesaj_introducere` (string): Introduction message for the list (max 45 characters)
+- `alte_detalii` (string): Additional details for the list (max 500 characters)
+- `numar_whatsapp` (string): WhatsApp number for contact (format: +?[0-9]{10,15})
+- `orare_livrari_id` (integer): ID of the associated delivery schedule (must be > 0)
+
+#### 5. Update List (Full Replacement)
+
+**Use Case**: Admin completely replacing list information
+
+**API**: `PUT /api/v1/liste/{list_id}`
+
+**Description**: Fully replaces a list resource. All fields are required for PUT operations.
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8001/api/v1/liste/19" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": "2025-07-27",
+    "is_current": false,
+    "is_published": true,
+    "mesaj_introducere": "Full Update List",
+    "alte_detalii": "Updated details",
+    "numar_whatsapp": "+40787654321",
+    "orare_livrari_id": 9
+  }'
+```
+
+**Response Example**:
+```json
+{
+  "data": "2025-07-27",
+  "is_current": false,
+  "is_published": true,
+  "mesaj_introducere": "Full Update List",
+  "alte_detalii": "Updated details",
+  "numar_whatsapp": "+40787654321",
+  "orare_livrari_id": 9,
+  "id": 19,
+  "created_at": "2025-07-26T15:10:57",
+  "updated_at": "2025-07-26T15:11:18",
+  "is_deleted": false
+}
+```
+
+**Required Fields** (all fields are required for PUT):
+- `data` (date): Date of the list (format: YYYY-MM-DD)
+- `is_current` (boolean): Flag indicating if this is the current list
+- `is_published` (boolean): Flag indicating if the list is published
+- `mesaj_introducere` (string): Introduction message for the list (max 45 characters)
+- `alte_detalii` (string): Additional details for the list (max 500 characters)
+- `numar_whatsapp` (string): WhatsApp number for contact (format: +?[0-9]{10,15})
+- `orare_livrari_id` (integer): ID of the associated delivery schedule (must be > 0)
+
+#### 6. Delete List
+
+**Use Case**: Admin removing lists (soft delete by default)
+
+**API**: `DELETE /api/v1/liste/{list_id}`
+
+**cURL Example** (soft delete - default):
+```bash
+curl -X DELETE "http://localhost:8001/api/v1/liste/19" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (hard delete):
+```bash
+curl -X DELETE "http://localhost:8001/api/v1/liste/19?soft_delete=false" \
+  -H "accept: application/json"
+```
+
+**Parameter:**
+- `soft_delete` (boolean, optional): If true, performs a soft delete; otherwise, hard delete (default: true)
+
+**Response Example** (soft delete):
+```json
+{
+  "message": "List with ID 19 has been soft deleted"
+}
+```
+
+#### Error Handling Examples
+
+**404 Not Found**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/liste/999"
+# Response: 404 {"detail":"List with ID 999 not found"}
+```
+
+**422 Validation Error** (missing required fields):
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"mesaj_introducere": "Test List"}'
+# Response: 422 {"detail":[{"type":"missing","loc":["body","data"],"msg":"Field required","input":{"mesaj_introducere":"Test List"}},{"type":"missing","loc":["body","is_current"],"msg":"Field required","input":{"mesaj_introducere":"Test List"}},{"type":"missing","loc":["body","orare_livrari_id"],"msg":"Field required","input":{"mesaj_introducere":"Test List"}}]}
+```
+
+**400 Bad Request** (invalid foreign key):
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"data": "2025-07-26", "is_current": true, "orare_livrari_id": 999}'
+# Response: 400 {"detail":"Invalid delivery schedule ID: 999"}
+```
+
 ### Comenzi
 
 

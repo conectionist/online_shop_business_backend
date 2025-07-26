@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, Path
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 
@@ -67,11 +67,27 @@ def create_list_endpoint(
     500: {"description": "Internal server error"}
 })
 def update_list_endpoint(
-    list_id: int,
-    list_data: ListUpdate,
+    list_id: int = Path(..., gt=0, description="The ID of the list to update"),
+    list_data: ListUpdate = ...,
     db: Session = Depends(get_db)
 ):
-    """Update an existing list"""
+    """Update an existing list (PUT - full replacement)"""
+    return update_list(db=db, list_id=list_id, list_data=list_data)
+
+
+@router.patch("/{list_id}", response_model=ListSchema, responses={
+    200: {"description": "List updated successfully"},
+    400: {"description": "Bad request, e.g., no valid fields to update"},
+    404: {"description": "List not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def patch_list_endpoint(
+    list_id: int = Path(..., gt=0, description="The ID of the list to update"),
+    list_data: ListUpdate = ...,
+    db: Session = Depends(get_db)
+):
+    """Partially update an existing list (PATCH - only update provided fields)"""
     return update_list(db=db, list_id=list_id, list_data=list_data)
 
 

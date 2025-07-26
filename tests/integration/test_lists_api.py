@@ -316,6 +316,258 @@ class ListTestUtils(EntityTestUtils):
 list_utils = ListTestUtils()
 
 
+def test_patch_with_valid_data():
+    """
+    Test PATCH with valid data.
+    """
+    # Create a list for testing
+    created_entity, entity_id = list_utils.create_entity()
+    
+    try:
+        # PATCH with new message
+        new_message = "Patched Message"
+        patch_response = requests.patch(
+            f"{list_utils.base_url}/{entity_id}",
+            json={"mesaj_introducere": new_message}
+        )
+        assert patch_response.status_code == 200, (
+            f"PATCH should return 200, got {patch_response.status_code}: {patch_response.text}"
+        )
+        
+        patched_entity = patch_response.json()
+        assert patched_entity["mesaj_introducere"] == new_message
+        assert patched_entity["id"] == entity_id
+        
+        # Verify the change persisted
+        retrieved_entity = list_utils.get_entity(entity_id)
+        assert retrieved_entity["mesaj_introducere"] == new_message
+        
+    finally:
+        # Clean up
+        list_utils.delete_entity(entity_id)
+
+
+def test_patch_with_empty_json():
+    """
+    Test PATCH with empty JSON (should return 400 - no valid fields to update).
+    """
+    # Create a list for testing
+    created_entity, entity_id = list_utils.create_entity()
+    
+    try:
+        # PATCH with empty JSON should return 400 (no valid fields to update)
+        empty_patch_response = requests.patch(
+            f"{list_utils.base_url}/{entity_id}",
+            json={}
+        )
+        assert empty_patch_response.status_code == 400, (
+            f"PATCH with empty JSON should return 400, got {empty_patch_response.status_code}"
+        )
+        
+        # Verify the error message
+        error_data = empty_patch_response.json()
+        assert "detail" in error_data
+        assert "No valid fields to update" in error_data["detail"]
+        
+    finally:
+        # Clean up
+        list_utils.delete_entity(entity_id)
+
+
+def test_patch_with_non_existent_list():
+    """
+    Test PATCH with non-existent list ID.
+    """
+    non_existent_response = requests.patch(
+        f"{list_utils.base_url}/99999",
+        json={"mesaj_introducere": "test"}
+    )
+    assert non_existent_response.status_code == 404, (
+        f"PATCH with non-existent ID should return 404, got {non_existent_response.status_code}"
+    )
+
+
+def test_patch_with_invalid_data():
+    """
+    Test PATCH with invalid data (should return 422).
+    """
+    # Create a list for testing
+    created_entity, entity_id = list_utils.create_entity()
+    
+    try:
+        # PATCH with message that's too long (exceeds 45 char limit)
+        long_message = "This message is way too long and exceeds the 45 character limit for this field"
+        invalid_patch_response = requests.patch(
+            f"{list_utils.base_url}/{entity_id}",
+            json={"mesaj_introducere": long_message}
+        )
+        assert invalid_patch_response.status_code == 422, (
+            f"PATCH with invalid data should return 422, got {invalid_patch_response.status_code}"
+        )
+        
+        # Verify the error message
+        error_data = invalid_patch_response.json()
+        assert "detail" in error_data
+        
+    finally:
+        # Clean up
+        list_utils.delete_entity(entity_id)
+
+
+def test_patch_multiple_fields():
+    """
+    Test PATCH with multiple fields at once.
+    """
+    # Create a list for testing
+    created_entity, entity_id = list_utils.create_entity()
+    
+    try:
+        # PATCH with multiple fields
+        patch_data = {
+            "mesaj_introducere": "Multi Field Update",
+            "is_published": False,
+            "alte_detalii": "Updated details for testing"
+        }
+        
+        patch_response = requests.patch(
+            f"{list_utils.base_url}/{entity_id}",
+            json=patch_data
+        )
+        assert patch_response.status_code == 200, (
+            f"PATCH should return 200, got {patch_response.status_code}: {patch_response.text}"
+        )
+        
+        patched_entity = patch_response.json()
+        assert patched_entity["mesaj_introducere"] == "Multi Field Update"
+        assert patched_entity["is_published"] is False
+        assert patched_entity["alte_detalii"] == "Updated details for testing"
+        assert patched_entity["id"] == entity_id
+        
+        # Verify the changes persisted
+        retrieved_entity = list_utils.get_entity(entity_id)
+        assert retrieved_entity["mesaj_introducere"] == "Multi Field Update"
+        assert retrieved_entity["is_published"] is False
+        assert retrieved_entity["alte_detalii"] == "Updated details for testing"
+        
+    finally:
+        # Clean up
+        list_utils.delete_entity(entity_id)
+
+
+def test_patch_with_invalid_foreign_key():
+    """
+    Test PATCH with invalid foreign key (orare_livrari_id).
+    """
+    # Create a list for testing
+    created_entity, entity_id = list_utils.create_entity()
+    
+    try:
+        # PATCH with invalid delivery schedule ID
+        invalid_patch_response = requests.patch(
+            f"{list_utils.base_url}/{entity_id}",
+            json={"orare_livrari_id": 999999}  # Non-existent ID
+        )
+        assert invalid_patch_response.status_code == 400, (
+            f"PATCH with invalid foreign key should return 400, got {invalid_patch_response.status_code}"
+        )
+        
+        # Verify the error message
+        error_data = invalid_patch_response.json()
+        assert "detail" in error_data
+        
+    finally:
+        # Clean up
+        list_utils.delete_entity(entity_id)
+
+
+def test_patch_with_partial_data_works():
+    """
+    Test that PATCH accepts partial data.
+    """
+    # Create a list for testing
+    created_entity, entity_id = list_utils.create_entity()
+    
+    try:
+        # PATCH with partial data (should work)
+        patch_data = {"mesaj_introducere": "Patched Message"}
+        patch_response = requests.patch(
+            f"{list_utils.base_url}/{entity_id}",
+            json=patch_data
+        )
+        assert patch_response.status_code == 200
+        
+        # Verify the change
+        patched_entity = patch_response.json()
+        assert patched_entity["mesaj_introducere"] == "Patched Message"
+        
+    finally:
+        # Clean up
+        list_utils.delete_entity(entity_id)
+
+
+def test_put_with_empty_json_fails():
+    """
+    Test that PUT rejects empty JSON.
+    """
+    # Create a list for testing
+    created_entity, entity_id = list_utils.create_entity()
+    
+    try:
+        # PUT with empty JSON (should fail)
+        put_response = requests.put(
+            f"{list_utils.base_url}/{entity_id}",
+            json={}  # Empty JSON for PUT should fail
+        )
+        assert put_response.status_code == 400, (
+            f"PUT with empty JSON should return 400, got {put_response.status_code}"
+        )
+        
+        # Verify the error message
+        error_data = put_response.json()
+        assert "detail" in error_data
+        assert "No valid fields to update" in error_data["detail"]
+        
+    finally:
+        # Clean up
+        list_utils.delete_entity(entity_id)
+
+
+def test_put_with_complete_data_works():
+    """
+    Test that PUT accepts complete data.
+    """
+    # Create a list for testing
+    created_entity, entity_id = list_utils.create_entity()
+    
+    try:
+        # PUT with complete data (should work)
+        # Get current entity to use as base for complete PUT
+        current_entity = list_utils.get_entity(entity_id)
+        put_data = {
+            "data": current_entity["data"],
+            "is_current": current_entity["is_current"],
+            "is_published": current_entity["is_published"],
+            "mesaj_introducere": "PUT Updated Message",
+            "alte_detalii": current_entity["alte_detalii"],
+            "numar_whatsapp": current_entity["numar_whatsapp"],
+            "orare_livrari_id": current_entity["orare_livrari_id"]
+        }
+        
+        put_response = requests.put(
+            f"{list_utils.base_url}/{entity_id}",
+            json=put_data
+        )
+        assert put_response.status_code == 200
+        
+        # Verify the change
+        final_entity = list_utils.get_entity(entity_id)
+        assert final_entity["mesaj_introducere"] == "PUT Updated Message"
+        
+    finally:
+        # Clean up
+        list_utils.delete_entity(entity_id)
+
+
 def test_list_crud_workflow():
     """
     Tests the full Create, Read, Update, and Delete (CRUD) workflow for lists.

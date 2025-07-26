@@ -88,7 +88,35 @@ def update_delivery_schedule_endpoint(
     delivery_schedule: DeliveryScheduleUpdate = ...,
     db: Session = Depends(get_db)
 ):
-    """Update a delivery schedule"""
+    """Update a delivery schedule (PUT - full replacement)"""
+    try:
+        return update_delivery_schedule(
+            db=db, 
+            delivery_schedule_id=delivery_schedule_id, 
+            delivery_schedule=delivery_schedule
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+
+@router.patch("/{delivery_schedule_id}", response_model=DeliverySchedule, responses={
+    200: {"description": "Delivery schedule updated successfully"},
+    400: {"description": "Bad request, e.g., no valid fields to update"},
+    404: {"description": "Delivery schedule not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def patch_delivery_schedule(
+    delivery_schedule_id: int = Path(..., gt=0, description="The ID of the delivery schedule to update"),
+    delivery_schedule: DeliveryScheduleUpdate = ...,
+    db: Session = Depends(get_db)
+):
+    """Partially update a delivery schedule (PATCH - only update provided fields)"""
     try:
         return update_delivery_schedule(
             db=db, 

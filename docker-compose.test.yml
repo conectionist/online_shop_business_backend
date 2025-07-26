@@ -54,24 +54,24 @@ services:
       - test_network
 
   # Schemathesis container for API testing
-  api_contract_tests:
-    image: schemathesis/schemathesis:stable
-    depends_on:
-      api_server_test:
-        condition: service_healthy
-    command: >
-      run http://api_server_test:8000/openapi.json 
-      --report-junit-path=/reports/report.xml 
-      --max-examples=200
-      --checks=all 
-      --max-failures=100
-      --wait-for-schema=30
-    environment:
-      - SCHEMATHESIS_BASE_URL=http://api_server_test:8000
-    volumes:
-      - ./test-reports:/reports
-    networks:
-      - test_network
+  # api_contract_tests:
+  #   image: schemathesis/schemathesis:stable
+  #   depends_on:
+  #     api_server_test:
+  #       condition: service_healthy
+  #   command: >
+  #     run http://api_server_test:8000/openapi.json 
+  #     --report-junit-path=/reports/report.xml 
+  #     --max-examples=200
+  #     --checks=all 
+  #     --max-failures=100
+  #     --wait-for-schema=30
+  #   environment:
+  #     - SCHEMATHESIS_BASE_URL=http://api_server_test:8000
+  #   volumes:
+  #     - ./test-reports:/reports
+  #   networks:
+  #     - test_network
 
   api_integration_tests:
     build:

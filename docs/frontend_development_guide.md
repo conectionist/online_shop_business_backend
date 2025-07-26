@@ -178,8 +178,11 @@ curl -X POST "http://localhost:8000/api/v1/categories/" \
 ```
 
 #### 4. Edit Specific Category (Full Update)
+
 **Use Case**: Admin completely replacing category information
+
 **API**: `PUT /api/v1/categories/{category_id}`
+
 **Description**: Fully replaces a category resource. The `name` field is required. If no image is provided and `clear_image` is false, the image will be reset to null (placeholder). If `clear_image` is true, the image will be cleared. If an image is provided, it will replace the existing image.
 
 **cURL Example** (update name only - will reset image to placeholder):
@@ -209,8 +212,11 @@ curl -X PUT "http://localhost:8000/api/v1/categories/3" \
 - `clear_image` (boolean, optional): If true, clears the image and uses the placeholder image for the category.
 
 #### 5. Partially Update Category
+
 **Use Case**: Admin updating specific category fields
+
 **API**: `PATCH /api/v1/categories/{category_id}`
+
 **Description**: Partially updates a category resource. Only updates fields explicitly provided. If no image is provided and `clear_image` is false, the existing image is preserved. If `clear_image` is true, the image will be cleared. If an image is provided, it will replace the existing image.
 
 **cURL Example** (update name only - preserves existing image):
@@ -362,8 +368,11 @@ curl -X POST "http://localhost:8000/api/v1/categories" \
 ### Produse
 
 #### 1. Get All Products
+
 **Use Case**: Display product catalog or listings
+
 **API**: `GET /api/v1/products/`
+
 **Description**: Retrieves all products with pagination support and optional filtering
 
 **cURL Example**:
@@ -422,7 +431,9 @@ curl -X GET "http://localhost:8001/api/v1/products/?category_id=1" \
 - `category_id` (integer, optional): Filter products by category ID
 
 #### 2. Get Specific Product
+
 **Use Case**: Display product details page
+
 **API**: `GET /api/v1/products/{product_id}`
 
 **cURL Example**:
@@ -461,7 +472,9 @@ curl -X GET "http://localhost:8001/api/v1/products/8?include_deleted=true" \
 ```
 
 #### 3. Create New Product
+
 **Use Case**: Admin adding new products to catalog
+
 **API**: `POST /api/v1/products/`
 
 **cURL Example** (basic product):
@@ -512,8 +525,11 @@ curl -X POST "http://localhost:8001/api/v1/products/" \
 - `description` (string): Product description
 
 #### 4. Partially Update Product
+
 **Use Case**: Admin updating specific product fields
+
 **API**: `PATCH /api/v1/products/{product_id}`
+
 **Description**: Partially updates a product resource. Only updates fields explicitly provided.
 
 **cURL Example** (update name and price):
@@ -557,7 +573,9 @@ curl -X PATCH "http://localhost:8001/api/v1/products/8" \
 - `stock` (integer): Stock quantity (must be >= 0)
 
 #### 5. Delete Product
+
 **Use Case**: Admin removing products (soft delete by default)
+
 **API**: `DELETE /api/v1/products/{product_id}`
 
 **cURL Example** (soft delete - default):
@@ -578,7 +596,9 @@ curl -X DELETE "http://localhost:8001/api/v1/products/8?permanent=true" \
 **Response**: HTTP 204 No Content (successful deletion)
 
 #### 6. Upload Product Image
+
 **Use Case**: Admin adding product images after creation
+
 **API**: `POST /api/v1/products/{product_id}/images`
 
 **cURL Example**:
@@ -610,7 +630,9 @@ curl -X POST "http://localhost:8001/api/v1/products/8/images" \
 - `position` (integer, optional): Image position (0=primary, if not specified will be added at the end)
 
 #### 7. Get Product Images
+
 **Use Case**: Display product image gallery
+
 **API**: `GET /api/v1/products/{product_id}/images`
 
 **cURL Example**:
@@ -638,7 +660,9 @@ curl -X GET "http://localhost:8001/api/v1/products/8/images" \
 ```
 
 #### 8. Get Specific Product Image
+
 **Use Case**: Display specific product image
+
 **API**: `GET /api/v1/products/{product_id}/images/{image_id}`
 
 **cURL Example**:
@@ -664,7 +688,9 @@ curl -X GET "http://localhost:8001/api/v1/products/8/images/4" \
 ```
 
 #### 9. Update Image Position
+
 **Use Case**: Admin reordering product images
+
 **API**: `PUT /api/v1/products/{product_id}/images/{image_id}/position`
 
 **cURL Example**:
@@ -694,7 +720,9 @@ curl -X PUT "http://localhost:8001/api/v1/products/8/images/4/position" \
 - `position` (integer, required): New position for the image (0=primary)
 
 #### 10. Set Image as Primary
+
 **Use Case**: Admin setting a product image as primary
+
 **API**: `PUT /api/v1/products/{product_id}/images/{image_id}/primary`
 
 **cURL Example**:
@@ -720,7 +748,9 @@ curl -X PUT "http://localhost:8001/api/v1/products/8/images/4/primary" \
 ```
 
 #### 11. Delete Product Image
+
 **Use Case**: Admin removing product images
+
 **API**: `DELETE /api/v1/products/{product_id}/images/{image_id}`
 
 **cURL Example**:
@@ -732,7 +762,9 @@ curl -X DELETE "http://localhost:8001/api/v1/products/8/images/4" \
 **Response**: HTTP 204 No Content (successful deletion)
 
 #### 12. Reorder Product Images
+
 **Use Case**: Admin reordering multiple product images at once
+
 **API**: `PUT /api/v1/products/{product_id}/images/reorder`
 
 **cURL Example**:

@@ -89,7 +89,31 @@ def update_delivery_type_endpoint(
     delivery_type: DeliveryTypeUpdate = ...,
     db: Session = Depends(get_db)
 ):
-    """Update a delivery type"""
+    """Update a delivery type (PUT - full replacement)"""
+    try:
+        return update_delivery_type(db=db, delivery_type_id=delivery_type_id, delivery_type=delivery_type)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+
+@router.patch("/{delivery_type_id}", response_model=DeliveryType, responses={
+    200: {"description": "Delivery type updated successfully"},
+    400: {"description": "Bad request, e.g., no valid fields to update"},
+    404: {"description": "Delivery type not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def patch_delivery_type_endpoint(
+    delivery_type_id: int = Path(..., gt=0, description="The ID of the delivery type to update"),
+    delivery_type: DeliveryTypeUpdate = ...,
+    db: Session = Depends(get_db)
+):
+    """Partially update a delivery type (PATCH - only update provided fields)"""
     try:
         return update_delivery_type(db=db, delivery_type_id=delivery_type_id, delivery_type=delivery_type)
     except HTTPException as e:

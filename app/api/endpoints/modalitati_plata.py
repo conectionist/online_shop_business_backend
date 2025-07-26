@@ -120,7 +120,49 @@ def update_modalitati_plata(
     modalitate: ModalitatePlataUpdate = ...,
     db: Session = Depends(get_db)
 ):
-    """Update an existing payment method"""
+    """Update an existing payment method (PUT - full replacement)"""
+    try:
+        db_modalitate = update_modalitate_plata(
+            db=db, 
+            modalitate_id=modalitate_id, 
+            modalitate=modalitate
+        )
+        
+        if db_modalitate is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Payment method not found"
+            )
+            
+        return db_modalitate
+        
+    except HTTPException:
+        raise
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+
+@router.patch("/{modalitate_id}", response_model=ModalitatePlata, responses={
+    200: {"description": "Payment method updated successfully"},
+    400: {"description": "Bad request, e.g., no valid fields to update"},
+    404: {"description": "Payment method not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def patch_modalitati_plata(
+    modalitate_id: int = Path(..., gt=0, description="The ID of the payment method to update"),
+    modalitate: ModalitatePlataUpdate = ...,
+    db: Session = Depends(get_db)
+):
+    """Partially update a payment method (PATCH - only update provided fields)"""
     try:
         db_modalitate = update_modalitate_plata(
             db=db, 

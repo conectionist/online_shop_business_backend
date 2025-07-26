@@ -88,7 +88,31 @@ def update_business_details_endpoint(
     business_details: BusinessDetailsUpdate = Body(..., description="Updated business details data"),
     db: Session = Depends(get_db)
 ):
-    """Update a business details record"""
+    """Update a business details record (PUT - full replacement)"""
+    try:
+        return update_business_details(db=db, business_details_id=business_details_id, business_details=business_details)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+
+@router.patch("/{business_details_id}", response_model=BusinessDetails, responses={
+    200: {"description": "Business details updated successfully"},
+    400: {"description": "Bad request, e.g. no valid fields to update"},
+    404: {"description": "Business details not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def patch_business_details_endpoint(
+    business_details_id: int = Path(..., gt=0, description="The ID of the business details to update"),
+    business_details: BusinessDetailsUpdate = Body(..., description="Partial business details data"),
+    db: Session = Depends(get_db)
+):
+    """Partially update a business details record (PATCH - only update provided fields)"""
     try:
         return update_business_details(db=db, business_details_id=business_details_id, business_details=business_details)
     except HTTPException as e:

@@ -177,3 +177,226 @@ def test_business_details_validation():
     Tests validation for business details endpoints.
     """
     business_details_utils.test_validation()
+
+
+def test_patch_with_valid_data():
+    """
+    Test PATCH with valid data.
+    """
+    # Create a business details record for testing
+    created_entity, entity_id = business_details_utils.create_entity()
+    
+    try:
+        # PATCH with new address
+        new_adresa = "Patched Address"
+        patch_response = requests.patch(
+            f"{business_details_utils.base_url}/{entity_id}",
+            json={"adresa": new_adresa}
+        )
+        assert patch_response.status_code == 200, (
+            f"PATCH should return 200, got {patch_response.status_code}: {patch_response.text}"
+        )
+        
+        patched_entity = patch_response.json()
+        assert patched_entity["adresa"] == new_adresa
+        assert patched_entity["id"] == entity_id
+        
+        # Verify the change persisted
+        retrieved_entity = business_details_utils.get_entity(entity_id)
+        assert retrieved_entity["adresa"] == new_adresa
+        
+    finally:
+        # Clean up
+        business_details_utils.delete_entity(entity_id)
+
+
+def test_patch_with_empty_json():
+    """
+    Test PATCH with empty JSON (should return error).
+    """
+    # Create a business details record for testing
+    created_entity, entity_id = business_details_utils.create_entity()
+    
+    try:
+        # PATCH with empty JSON should return error
+        empty_patch_response = requests.patch(
+            f"{business_details_utils.base_url}/{entity_id}",
+            json={}
+        )
+        assert empty_patch_response.status_code == 400, (
+            f"PATCH with empty JSON should return 400, got {empty_patch_response.status_code}"
+        )
+        
+        # Verify the error message
+        error_data = empty_patch_response.json()
+        assert "detail" in error_data
+        assert "No valid fields to update" in error_data["detail"]
+        
+    finally:
+        # Clean up
+        business_details_utils.delete_entity(entity_id)
+
+
+def test_patch_with_non_existent_business_details():
+    """
+    Test PATCH with non-existent business details ID.
+    """
+    non_existent_response = requests.patch(
+        f"{business_details_utils.base_url}/99999",
+        json={"adresa": "test"}
+    )
+    assert non_existent_response.status_code == 404, (
+        f"PATCH with non-existent ID should return 404, got {non_existent_response.status_code}"
+    )
+
+
+def test_patch_with_invalid_data():
+    """
+    Test PATCH with invalid data (should return 422).
+    """
+    # Create a business details record for testing
+    created_entity, entity_id = business_details_utils.create_entity()
+    
+    try:
+        # PATCH with empty string (should work - schema allows empty strings)
+        invalid_patch_response = requests.patch(
+            f"{business_details_utils.base_url}/{entity_id}",
+            json={"adresa": ""}
+        )
+        assert invalid_patch_response.status_code == 200, (
+            f"PATCH with empty string should return 200, got {invalid_patch_response.status_code}"
+        )
+        
+        # Verify the empty string was set
+        patched_entity = invalid_patch_response.json()
+        assert patched_entity["adresa"] == ""
+        
+    finally:
+        # Clean up
+        business_details_utils.delete_entity(entity_id)
+
+
+def test_patch_multiple_fields():
+    """
+    Test PATCH with multiple fields.
+    """
+    # Create a business details record for testing
+    created_entity, entity_id = business_details_utils.create_entity()
+    
+    try:
+        # PATCH with multiple fields
+        patch_data = {
+            "adresa": "Multi Patched Address",
+            "telefon": "987654321",
+            "motto": "Patched Motto"
+        }
+        patch_response = requests.patch(
+            f"{business_details_utils.base_url}/{entity_id}",
+            json=patch_data
+        )
+        assert patch_response.status_code == 200, (
+            f"PATCH should return 200, got {patch_response.status_code}: {patch_response.text}"
+        )
+        
+        patched_entity = patch_response.json()
+        assert patched_entity["adresa"] == patch_data["adresa"]
+        assert patched_entity["telefon"] == patch_data["telefon"]
+        assert patched_entity["motto"] == patch_data["motto"]
+        assert patched_entity["id"] == entity_id
+        
+        # Verify the changes persisted
+        retrieved_entity = business_details_utils.get_entity(entity_id)
+        assert retrieved_entity["adresa"] == patch_data["adresa"]
+        assert retrieved_entity["telefon"] == patch_data["telefon"]
+        assert retrieved_entity["motto"] == patch_data["motto"]
+        
+    finally:
+        # Clean up
+        business_details_utils.delete_entity(entity_id)
+
+
+def test_patch_with_partial_data_works():
+    """
+    Test that PATCH accepts partial data.
+    """
+    # Create a business details record for testing
+    created_entity, entity_id = business_details_utils.create_entity()
+    
+    try:
+        # PATCH with partial data (should work)
+        patch_data = {"adresa": "Partial Patch Address"}
+        patch_response = requests.patch(
+            f"{business_details_utils.base_url}/{entity_id}",
+            json=patch_data
+        )
+        assert patch_response.status_code == 200
+        
+        # Verify the change
+        patched_entity = patch_response.json()
+        assert patched_entity["adresa"] == "Partial Patch Address"
+        
+        # Verify other fields remain unchanged
+        assert patched_entity["telefon"] == created_entity["telefon"]
+        assert patched_entity["motto"] == created_entity["motto"]
+        
+    finally:
+        # Clean up
+        business_details_utils.delete_entity(entity_id)
+
+
+def test_put_with_empty_json_fails():
+    """
+    Test that PUT with empty JSON fails.
+    """
+    # Create a business details record for testing
+    created_entity, entity_id = business_details_utils.create_entity()
+    
+    try:
+        # PUT with empty JSON should fail
+        put_response = requests.put(
+            f"{business_details_utils.base_url}/{entity_id}",
+            json={}
+        )
+        assert put_response.status_code == 400, (
+            f"PUT with empty JSON should return 400, got {put_response.status_code}"
+        )
+        
+        # Verify the error message
+        error_data = put_response.json()
+        assert "detail" in error_data
+        assert "No valid fields to update" in error_data["detail"]
+        
+    finally:
+        # Clean up
+        business_details_utils.delete_entity(entity_id)
+
+
+def test_put_with_complete_data_works():
+    """
+    Test that PUT accepts complete data.
+    """
+    # Create a business details record for testing
+    created_entity, entity_id = business_details_utils.create_entity()
+    
+    try:
+        # PUT with complete data (should work)
+        put_data = {
+            "adresa": "PUT Updated Address",
+            "telefon": "111222333",
+            "motto": "PUT Updated Motto"
+        }
+        put_response = requests.put(
+            f"{business_details_utils.base_url}/{entity_id}",
+            json=put_data
+        )
+        assert put_response.status_code == 200
+        
+        # Verify the changes
+        final_entity = business_details_utils.get_entity(entity_id)
+        assert final_entity["adresa"] == put_data["adresa"]
+        assert final_entity["telefon"] == put_data["telefon"]
+        assert final_entity["motto"] == put_data["motto"]
+        
+    finally:
+        # Clean up
+        business_details_utils.delete_entity(entity_id)

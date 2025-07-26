@@ -1,9 +1,5 @@
 # Frontend development guide
 
-WARNING!
-Not up-to-date yet!
-DO NOT USE!
-
 ## Introducere
 
 Frontend-ul are nevoie de urmatoarele:

@@ -561,46 +561,79 @@ def test_category_optional_image_path():
     category_utils.test_optional_image_path()
 
 
-def test_category_put_vs_patch():
+def test_put_without_image_resets_to_placeholder():
     """
-    Test the different behaviors of PUT and PATCH endpoints for categories.
+    Test that PUT with only name resets image to null/placeholder.
     """
     # Create a test category with an image
-    initial_name = "Test PUT vs PATCH"
-    created_category, category_id = category_utils.create_entity(name=initial_name, with_image=True)
-    initial_image_path = created_category["image_path"]
+    created_category, category_id = category_utils.create_entity(name="Test PUT Reset", with_image=True)
+    assert created_category["image_path"] is not None
     
     try:
-        # Test 1: PUT with only name (should reset image to null/placeholder)
+        # PUT with only name (should reset image to null/placeholder)
         new_name = "Updated with PUT"
         put_result = category_utils.update_entity(category_id, name=new_name)
         assert put_result["name"] == new_name
         assert put_result["image_path"] is None, "PUT without image should reset image to null"
         
-        # Test 2: PATCH with only name (should preserve existing image state)
-        # First, upload an image again
-        with_image_result = category_utils.update_entity(category_id, name=new_name, with_image=True)
-        image_path = with_image_result["image_path"]
-        assert image_path is not None
-        
-        # Now patch with just a name change
+    finally:
+        # Clean up
+        category_utils.hard_delete_entity(category_id)
+
+
+def test_patch_without_image_preserves_existing_image():
+    """
+    Test that PATCH with only name preserves existing image state.
+    """
+    # Create a test category with an image
+    created_category, category_id = category_utils.create_entity(name="Test PATCH Preserve", with_image=True)
+    initial_image_path = created_category["image_path"]
+    assert initial_image_path is not None
+    
+    try:
+        # PATCH with only name (should preserve existing image)
         patched_name = "Updated with PATCH"
         patch_result = category_utils.patch_entity(category_id, name=patched_name)
         assert patch_result["name"] == patched_name
-        assert patch_result["image_path"] == image_path, "PATCH without image should preserve existing image"
+        assert patch_result["image_path"] == initial_image_path, "PATCH without image should preserve existing image"
         
-        # Test 3: PUT with clear_image=True (should clear image)
+    finally:
+        # Clean up
+        category_utils.hard_delete_entity(category_id)
+
+
+def test_put_with_clear_image_clears_image():
+    """
+    Test that PUT with clear_image=True clears the image.
+    """
+    # Create a test category with an image
+    created_category, category_id = category_utils.create_entity(name="Test PUT Clear", with_image=True)
+    assert created_category["image_path"] is not None
+    
+    try:
+        # PUT with clear_image=True (should clear image)
         put_clear_result = category_utils.update_entity(category_id, name="PUT with clear", clear_image=True)
         assert put_clear_result["image_path"] is None
         
-        # Test 4: PATCH with clear_image=True (should clear image)
-        # First, upload an image again
-        with_image_result = category_utils.update_entity(category_id, name="Before PATCH clear", with_image=True)
-        assert with_image_result["image_path"] is not None
-        
+    finally:
+        # Clean up
+        category_utils.hard_delete_entity(category_id)
+
+
+def test_patch_with_clear_image_clears_image():
+    """
+    Test that PATCH with clear_image=True clears the image while preserving other fields.
+    """
+    # Create a test category with an image
+    created_category, category_id = category_utils.create_entity(name="Test PATCH Clear", with_image=True)
+    assert created_category["image_path"] is not None
+    
+    try:
+        # PATCH with clear_image=True (should clear image but preserve name)
+        original_name = created_category["name"]
         patch_clear_result = category_utils.patch_entity(category_id, clear_image=True)
         assert patch_clear_result["image_path"] is None
-        assert patch_clear_result["name"] == "Before PATCH clear", "PATCH should preserve name when not specified"
+        assert patch_clear_result["name"] == original_name, "PATCH should preserve name when not specified"
         
     finally:
         # Clean up

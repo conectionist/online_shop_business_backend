@@ -405,3 +405,13 @@ INSERT INTO `online_shop`.`tipuri_livrare` (`id`, `denumire`) VALUES (DEFAULT, '
 
 COMMIT;
 
+
+-- -----------------------------------------------------
+-- Data for table `online_shop`.`category`
+-- -----------------------------------------------------
+START TRANSACTION;
+USE `online_shop`;
+INSERT INTO `online_shop`.`category` (`name`, `is_deleted`) VALUES ('Uncategorized', 0);
+
+COMMIT;
+

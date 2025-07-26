@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+
 from app.core.database import get_db
+from app.core.constants import UNCATEGORIZED_CATEGORY_ID
 from app.core.file_upload import (
     delete_file, save_upload_file, is_valid_image, get_upload_dir
 )
@@ -155,7 +157,7 @@ def create_product_endpoint(
     cantitate: str = Form(...),  # Changed to str to handle validation manually
     pret: str = Form(...),       # Changed to str to handle validation manually
     description: Optional[str] = Form(None),
-    category_id: str = Form(...), # Changed to str to handle validation manually
+    category_id: Optional[str] = Form(None), # Made optional, defaults to "Uncategorized"
     unitati_id: str = Form(...),  # Changed to str to handle validation manually
     stock: str = Form(...),       # Changed to str to handle validation manually
     db: Session = Depends(get_db)
@@ -248,32 +250,36 @@ def create_product_endpoint(
                 ]
             )
         
-        # Convert and validate category_id
-        try:
-            category_id_val = int(category_id)
-            if category_id_val <= 0:
+        # Convert and validate category_id (defaults to "Uncategorized" category if not provided)
+        if category_id is None or (isinstance(category_id, str) and category_id.strip() == ""):
+            category_id_val = UNCATEGORIZED_CATEGORY_ID  # Default to "Uncategorized" category
+        else:
+            try:
+                category_id_val = int(category_id)
+                if category_id_val <= 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=[
+                            {
+                                "loc": ["body", "category_id"],
+                                "msg": "ensure this value is greater than 0",
+                                "type": "value_error.number.not_gt",
+                                "ctx": {"limit_value": 0}
+                            }
+                        ]
+                    )
+            except (ValueError, TypeError):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=[
                         {
                             "loc": ["body", "category_id"],
-                            "msg": "ensure this value is greater than 0",
-                            "type": "value_error.number.not_gt",
-                            "ctx": {"limit_value": 0}
+                            "msg": "value is not a valid integer",
+                            "type": "type_error.integer"
                         }
                     ]
                 )
-        except (ValueError, TypeError):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=[
-                    {
-                        "loc": ["body", "category_id"],
-                        "msg": "value is not a valid integer",
-                        "type": "type_error.integer"
-                    }
-                ]
-            )
+
         
         # Convert and validate unitati_id
         try:

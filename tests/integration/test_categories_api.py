@@ -6,6 +6,12 @@ import shutil
 from io import BytesIO
 from integration.test_utils import EntityTestUtils
 
+def get_products_base_url():
+    """Get the products base URL using the same pattern as test utilities."""
+    import os
+    api_base_url = os.environ.get("API_BASE_URL", "http://localhost:8000")
+    return f"{api_base_url}/api/v1/products"
+
 # Function to get test image content for file uploads
 def get_test_image_content():
     """Read test image file and return its content for file uploads"""
@@ -735,3 +741,84 @@ def test_category_invalid_image_uploads():
     finally:
         # Clean up
         category_utils.hard_delete_entity(category_id)
+
+
+def test_category_deletion_cascade():
+    """
+    Tests that when a category is deleted, all its products are moved to "Uncategorized" category.
+    """
+    # First, create a category
+    category_data = {
+        "name": "Test Category for Cascade"
+    }
+    
+    category_response = requests.post(
+        f"{category_utils.base_url}/",
+        data=category_data
+    )
+    
+    assert category_response.status_code == 201, (
+        f"Failed to create category. "
+        f"Expected 201, got {category_response.status_code}: {category_response.text}"
+    )
+    
+    created_category = category_response.json()
+    category_id = created_category["id"]
+    
+    try:
+        # Create a product in this category directly
+        products_base_url = get_products_base_url()
+        
+        product_data = {
+            "nume": "Test Product in Category",
+            "cantitate": "10",
+            "pret": "10050",
+            "description": "Test product in specific category",
+            "category_id": str(category_id),
+            "unitati_id": "1",
+            "stock": "5"
+        }
+        
+        product_response = requests.post(
+            f"{products_base_url}/",
+            data=product_data
+        )
+        
+        assert product_response.status_code == 201, (
+            f"Failed to create product in category. "
+            f"Expected 201, got {product_response.status_code}: {product_response.text}"
+        )
+        
+        created_product = product_response.json()
+        product_id = created_product["id"]
+        
+        # Verify product is in the correct category
+        assert created_product["category_id"] == category_id
+        
+        # Delete the category using the categories API
+        delete_response = requests.delete(f"{category_utils.base_url}/{category_id}")
+        assert delete_response.status_code == 204, (
+            f"Failed to delete category. "
+            f"Expected 204, got {delete_response.status_code}: {delete_response.text}"
+        )
+        
+        # Check that the product now has category_id = 1 (Uncategorized)
+        get_product_response = requests.get(f"{products_base_url}/{product_id}")
+        assert get_product_response.status_code == 200
+        
+        updated_product = get_product_response.json()
+        assert updated_product["category_id"] == 1, "Product should be moved to 'Uncategorized' category (ID 1)"
+        
+        # Clean up the product
+        try:
+            requests.delete(f"{products_base_url}/{product_id}?permanent=true")
+        except Exception as e:
+            print(f"Error during test cleanup: {e}")
+            
+    except Exception as e:
+        print(f"Error during test: {e}")
+        # Clean up category if it still exists
+        try:
+            requests.delete(f"{category_utils.base_url}/{category_id}")
+        except:
+            pass

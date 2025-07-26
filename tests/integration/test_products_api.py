@@ -12,6 +12,12 @@ def get_test_image_content():
 
 from integration.test_utils import EntityTestUtils
 
+def get_categories_base_url():
+    """Get the categories base URL using the same pattern as test utilities."""
+    import os
+    api_base_url = os.environ.get("API_BASE_URL", "http://localhost:8000")
+    return f"{api_base_url}/api/v1/categories"
+
 # Create a custom test utils class for products
 class ProductTestUtils(EntityTestUtils):
     """Test utilities for the Products API."""
@@ -635,3 +641,158 @@ def test_multiple_product_images():
     Tests adding multiple images to a product and managing their positions.
     """
     product_utils.test_multiple_product_images()
+
+
+def test_create_product_without_category():
+    """
+    Tests creating a product without specifying a category_id.
+    Should default to "Uncategorized" category (ID 1).
+    """
+    # Create product without category_id
+    form_data = {
+        "nume": "Test Product No Category",
+        "cantitate": "10",
+        "pret": "10050",
+        "description": "Test product without category",
+        "unitati_id": "1",
+        "stock": "5"
+        # Note: category_id is intentionally omitted
+    }
+    
+    create_response = requests.post(
+        f"{product_utils.base_url}/",
+        data=form_data
+    )
+    
+    assert create_response.status_code == 201, (
+        f"Failed to create product without category. "
+        f"Expected 201, got {create_response.status_code}: {create_response.text}"
+    )
+    
+    created_product = create_response.json()
+    assert created_product["category_id"] == 1, "Product should default to 'Uncategorized' category (ID 1)"
+    assert created_product["nume"] == "Test Product No Category"
+    
+    # Clean up
+    try:
+        product_utils.hard_delete_entity(created_product["id"])
+    except Exception as e:
+        print(f"Error during test cleanup: {e}")
+
+
+def test_create_product_with_empty_category():
+    """
+    Tests creating a product with empty category_id string.
+    Should default to "Uncategorized" category (ID 1).
+    """
+    # Create product with empty category_id
+    form_data = {
+        "nume": "Test Product Empty Category",
+        "cantitate": "10",
+        "pret": "10050",
+        "description": "Test product with empty category",
+        "category_id": "",  # Empty string
+        "unitati_id": "1",
+        "stock": "5"
+    }
+    
+    create_response = requests.post(
+        f"{product_utils.base_url}/",
+        data=form_data
+    )
+    
+    assert create_response.status_code == 201, (
+        f"Failed to create product with empty category. "
+        f"Expected 201, got {create_response.status_code}: {create_response.text}"
+    )
+    
+    created_product = create_response.json()
+    assert created_product["category_id"] == 1, "Product should default to 'Uncategorized' category (ID 1)"
+    assert created_product["nume"] == "Test Product Empty Category"
+    
+    # Clean up
+    try:
+        product_utils.hard_delete_entity(created_product["id"])
+    except Exception as e:
+        print(f"Error during test cleanup: {e}")
+
+
+def test_category_deletion_cascade():
+    """
+    Tests that when a category is deleted, all its products are moved to "Uncategorized" category.
+    """
+    # First, create a category directly
+    categories_base_url = get_categories_base_url()
+    
+    category_data = {
+        "name": "Test Category for Cascade"
+    }
+    
+    category_response = requests.post(
+        f"{categories_base_url}/",
+        data=category_data
+    )
+    
+    assert category_response.status_code == 201, (
+        f"Failed to create category. "
+        f"Expected 201, got {category_response.status_code}: {category_response.text}"
+    )
+    
+    created_category = category_response.json()
+    category_id = created_category["id"]
+    
+    try:
+        # Create a product in this category
+        product_data = {
+            "nume": "Test Product in Category",
+            "cantitate": "10",
+            "pret": "10050",
+            "description": "Test product in specific category",
+            "category_id": str(category_id),
+            "unitati_id": "1",
+            "stock": "5"
+        }
+        
+        product_response = requests.post(
+            f"{product_utils.base_url}/",
+            data=product_data
+        )
+        
+        assert product_response.status_code == 201, (
+            f"Failed to create product in category. "
+            f"Expected 201, got {product_response.status_code}: {product_response.text}"
+        )
+        
+        created_product = product_response.json()
+        product_id = created_product["id"]
+        
+        # Verify product is in the correct category
+        assert created_product["category_id"] == category_id
+        
+        # Delete the category
+        delete_response = requests.delete(f"{categories_base_url}/{category_id}")
+        assert delete_response.status_code == 204, (
+            f"Failed to delete category. "
+            f"Expected 204, got {delete_response.status_code}: {delete_response.text}"
+        )
+        
+        # Check that the product now has category_id = 1 (Uncategorized)
+        get_product_response = requests.get(f"{product_utils.base_url}/{product_id}")
+        assert get_product_response.status_code == 200
+        
+        updated_product = get_product_response.json()
+        assert updated_product["category_id"] == 1, "Product should be moved to 'Uncategorized' category (ID 1)"
+        
+        # Clean up the product
+        try:
+            product_utils.hard_delete_entity(product_id)
+        except Exception as e:
+            print(f"Error during test cleanup: {e}")
+            
+    except Exception as e:
+        print(f"Error during test: {e}")
+        # Clean up category if it still exists
+        try:
+            requests.delete(f"{categories_base_url}/{category_id}")
+        except:
+            pass

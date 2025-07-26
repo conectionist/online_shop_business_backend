@@ -291,8 +291,12 @@ curl -X PATCH "http://localhost:8000/api/v1/categories/1/" \
 ```
 
 #### 6. Delete Category
+
 **Use Case**: Admin removing categories (soft delete)
+
 **API**: `DELETE /api/v1/categories/{category_id}`
+
+**Note**: When a category is deleted (soft or hard), all products that belonged to that category are automatically moved to the "Uncategorized" category (ID 1). This ensures data integrity and prevents orphaned references.
 
 **cURL Example** (soft delete - default):
 ```bash
@@ -395,6 +399,31 @@ curl -X GET "http://localhost:8001/api/v1/products/?category_id=1" \
   -H "accept: application/json"
 ```
 
+**Response Example** (products filtered by category):
+```json
+[
+  {
+    "nume": "Test Product",
+    "cantitate": 50,
+    "pret": 25,
+    "description": "Test description",
+    "category_id": 1,
+    "unitati_id": 1,
+    "stock": 50,
+    "id": 9,
+    "created_at": "2025-07-26T15:23:05.000000Z",
+    "updated_at": "2025-07-26T15:23:05.000000Z",
+    "is_deleted": false,
+    "images": [],
+    "image_versions": {
+      "original": "/api/v1/static/placeholders/product_placeholder.jpg",
+      "medium": "/api/v1/static/placeholders/product_placeholder.jpg",
+      "thumbnail": "/api/v1/static/placeholders/product_placeholder.jpg"
+    }
+  }
+]
+```
+
 **Response Example**:
 ```json
 [
@@ -425,6 +454,12 @@ curl -X GET "http://localhost:8001/api/v1/products/?category_id=1" \
 - `limit` (integer, optional): Maximum number of products to return (default: 100, max: 1000)
 - `include_deleted` (boolean, optional): Whether to include soft-deleted products (default: false)
 - `category_id` (integer, optional): Filter products by category ID
+
+**Common Use Cases**:
+- **Get all products**: `GET /api/v1/products/`
+- **Get products by category**: `GET /api/v1/products/?category_id=1`
+- **Get products with pagination**: `GET /api/v1/products/?skip=0&limit=10`
+- **Get products by category with pagination**: `GET /api/v1/products/?category_id=1&skip=0&limit=10`
 
 #### 2. Get Specific Product
 
@@ -513,12 +548,12 @@ curl -X POST "http://localhost:8001/api/v1/products/" \
 - `nume` (string): Product name
 - `cantitate` (integer): Product quantity (must be >= 0)
 - `pret` (float): Product price (must be > 0)
-- `category_id` (integer): ID of the associated category (must be > 0)
 - `unitati_id` (integer): ID of the associated unit (must be > 0)
 - `stock` (integer): Stock quantity (must be >= 0)
 
 **Optional Fields**:
 - `description` (string): Product description
+- `category_id` (integer): ID of the associated category (must be >= 0, defaults to 1 "Uncategorized" if not provided)
 
 #### 4. Partially Update Product
 

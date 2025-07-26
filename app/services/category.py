@@ -289,6 +289,7 @@ def update_category(db: Session, category_id: int, category: CategoryUpdate) -> 
 def soft_delete_category(db: Session, category_id: int) -> bool:
     """
     Soft delete a category by setting is_deleted to True.
+    Also updates all products in this category to use the default "Uncategorized" category (ID 0).
     
     Args:
         db: Database session
@@ -316,6 +317,15 @@ def soft_delete_category(db: Session, category_id: int) -> bool:
         if db_category is None:
             return False
         
+        # Import Product model here to avoid circular imports
+        from app.models.product import Product
+        
+        # Update all products in this category to use the default "Uncategorized" category
+        from app.core.constants import UNCATEGORIZED_CATEGORY_ID
+        products_to_update = db.query(Product).filter(Product.category_id == category_id).all()
+        for product in products_to_update:
+            product.category_id = UNCATEGORIZED_CATEGORY_ID  # Default to "Uncategorized"
+        
         # Soft delete by setting is_deleted to True
         db_category.is_deleted = True
         db.commit()
@@ -334,6 +344,7 @@ def soft_delete_category(db: Session, category_id: int) -> bool:
 def hard_delete_category(db: Session, category_id: int) -> bool:
     """
     Hard delete a category from the database.
+    Also updates all products in this category to use the default "Uncategorized" category (ID 0).
     
     Args:
         db: Database session
@@ -343,7 +354,7 @@ def hard_delete_category(db: Session, category_id: int) -> bool:
         True if deleted, False if not found
         
     Raises:
-        HTTPException: If the ID is invalid, the category is in use, or a database error occurs
+        HTTPException: If the ID is invalid or a database error occurs
     """
     # Validate ID
     if category_id <= 0:
@@ -357,6 +368,15 @@ def hard_delete_category(db: Session, category_id: int) -> bool:
         db_category = db.query(Category).filter(Category.id == category_id).first()
         if db_category is None:
             return False
+        
+        # Import Product model here to avoid circular imports
+        from app.models.product import Product
+        
+        # Update all products in this category to use the default "Uncategorized" category
+        from app.core.constants import UNCATEGORIZED_CATEGORY_ID
+        products_to_update = db.query(Product).filter(Product.category_id == category_id).all()
+        for product in products_to_update:
+            product.category_id = UNCATEGORIZED_CATEGORY_ID  # Default to "Uncategorized"
         
         # Store the image directory path before deletion for cleanup
         image_dir_path = db_category.image_path
@@ -378,12 +398,6 @@ def hard_delete_category(db: Session, category_id: int) -> bool:
                 delete_file(image_dir_path)
             
         return True
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot delete category because it is in use by at least one product"
-        )
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(

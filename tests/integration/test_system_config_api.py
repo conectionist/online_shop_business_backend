@@ -73,10 +73,18 @@ class SystemConfigTestUtils:
         # Verify the structure of the response
         assert "category_placeholder" in config, "Response should contain category_placeholder"
         assert "product_placeholder" in config, "Response should contain product_placeholder"
+        assert "default_category_id" in config, "Response should contain default_category_id"
+        assert "default_category_name" in config, "Response should contain default_category_name"
         
         # Verify that the paths are strings and have the expected format
         assert isinstance(config["category_placeholder"], str), "category_placeholder should be a string"
         assert isinstance(config["product_placeholder"], str), "product_placeholder should be a string"
+        
+        # Verify that the default category fields have the expected types and values
+        assert isinstance(config["default_category_id"], int), "default_category_id should be an integer"
+        assert config["default_category_id"] == 1, "default_category_id should be 1"
+        assert isinstance(config["default_category_name"], str), "default_category_name should be a string"
+        assert config["default_category_name"] == "Uncategorized", "default_category_name should be 'Uncategorized'"
         
         # Check that the paths start with the expected prefix
         assert config["category_placeholder"].startswith("/api/v1/static/placeholders/"), (

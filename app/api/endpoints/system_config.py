@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Dict
 import os
 from pathlib import Path
+from app.core.constants import UNCATEGORIZED_CATEGORY_ID, UNCATEGORIZED_CATEGORY_NAME
 
 router = APIRouter()
 
@@ -15,17 +16,21 @@ PLACEHOLDER_URL_BASE = "/api/v1/static/placeholders"
 class SystemConfigResponse(BaseModel):
     category_placeholder: str
     product_placeholder: str
+    default_category_id: int
+    default_category_name: str
 
 @router.get("/config", response_model=SystemConfigResponse)
 async def get_system_config():
     """
-    Get system configuration including paths to placeholder images.
+    Get system configuration including paths to placeholder images and default category information.
     
-    Returns a JSON object with paths to various system resources.
+    Returns a JSON object with paths to various system resources and default category details.
     """
     return {
         "category_placeholder": f"{PLACEHOLDER_URL_BASE}/category_placeholder.jpg",
-        "product_placeholder": f"{PLACEHOLDER_URL_BASE}/product_placeholder.jpg"
+        "product_placeholder": f"{PLACEHOLDER_URL_BASE}/product_placeholder.jpg",
+        "default_category_id": UNCATEGORIZED_CATEGORY_ID,
+        "default_category_name": UNCATEGORIZED_CATEGORY_NAME
     }
 
 # Add a static file serving endpoint for the placeholders

@@ -364,17 +364,29 @@ curl -X POST "http://localhost:8000/api/v1/categories" \
 #### 1. Get All Products
 **Use Case**: Display product catalog or listings
 **API**: `GET /api/v1/products/`
-**Description**: Retrieves all products with pagination support
+**Description**: Retrieves all products with pagination support and optional filtering
 
 **cURL Example**:
 ```bash
-curl -X GET "http://localhost:8000/api/v1/products/" \
+curl -X GET "http://localhost:8001/api/v1/products/" \
   -H "accept: application/json"
 ```
 
 **cURL Example** (with pagination):
 ```bash
-curl -X GET "http://localhost:8000/api/v1/products/?skip=0&limit=10" \
+curl -X GET "http://localhost:8001/api/v1/products/?skip=0&limit=10" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (include deleted):
+```bash
+curl -X GET "http://localhost:8001/api/v1/products/?include_deleted=true" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (filter by category):
+```bash
+curl -X GET "http://localhost:8001/api/v1/products/?category_id=1" \
   -H "accept: application/json"
 ```
 
@@ -389,9 +401,9 @@ curl -X GET "http://localhost:8000/api/v1/products/?skip=0&limit=10" \
     "category_id": 1,
     "unitati_id": 1,
     "stock": 50,
-    "id": 9,
-    "created_at": "2024-01-15T10:30:45.000000Z",
-    "updated_at": "2024-01-15T10:30:45.000000Z",
+    "id": 8,
+    "created_at": "2025-07-26T14:47:12.000000Z",
+    "updated_at": "2025-07-26T14:47:12.000000Z",
     "is_deleted": false,
     "images": [],
     "image_versions": {
@@ -403,13 +415,25 @@ curl -X GET "http://localhost:8000/api/v1/products/?skip=0&limit=10" \
 ]
 ```
 
+**Parameters**:
+- `skip` (integer, optional): Number of products to skip for pagination (default: 0)
+- `limit` (integer, optional): Maximum number of products to return (default: 100, max: 1000)
+- `include_deleted` (boolean, optional): Whether to include soft-deleted products (default: false)
+- `category_id` (integer, optional): Filter products by category ID
+
 #### 2. Get Specific Product
 **Use Case**: Display product details page
-**API**: `GET /api/v1/products/{product_id}/`
+**API**: `GET /api/v1/products/{product_id}`
 
 **cURL Example**:
 ```bash
-curl -X GET "http://localhost:8000/api/v1/products/9/" \
+curl -X GET "http://localhost:8001/api/v1/products/8" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (include deleted):
+```bash
+curl -X GET "http://localhost:8001/api/v1/products/8?include_deleted=true" \
   -H "accept: application/json"
 ```
 
@@ -423,9 +447,9 @@ curl -X GET "http://localhost:8000/api/v1/products/9/" \
   "category_id": 1,
   "unitati_id": 1,
   "stock": 50,
-  "id": 9,
-  "created_at": "2024-01-15T10:30:45.000000Z",
-  "updated_at": "2024-01-15T10:30:45.000000Z",
+  "id": 8,
+  "created_at": "2025-07-26T14:47:12.000000Z",
+  "updated_at": "2025-07-26T14:47:12.000000Z",
   "is_deleted": false,
   "images": [],
   "image_versions": {
@@ -442,7 +466,7 @@ curl -X GET "http://localhost:8000/api/v1/products/9/" \
 
 **cURL Example** (basic product):
 ```bash
-curl -X POST "http://localhost:8000/api/v1/products/" \
+curl -X POST "http://localhost:8001/api/v1/products/" \
   -H "accept: application/json" \
   -F "nume=Fresh Apples" \
   -F "cantitate=50" \
@@ -451,20 +475,6 @@ curl -X POST "http://localhost:8000/api/v1/products/" \
   -F "category_id=1" \
   -F "unitati_id=1" \
   -F "stock=50"
-```
-
-**cURL Example** (with images):
-```bash
-curl -X POST "http://localhost:8000/api/v1/products/" \
-  -H "accept: application/json" \
-  -F "nume=Fresh Apples" \
-  -F "cantitate=50" \
-  -F "pret=25" \
-  -F "description=Fresh organic apples from local farm" \
-  -F "category_id=1" \
-  -F "unitati_id=1" \
-  -F "stock=50" \
-  -F "primary_image=@apples.jpg"
 ```
 
 **Response Example**:
@@ -477,9 +487,9 @@ curl -X POST "http://localhost:8000/api/v1/products/" \
   "category_id": 1,
   "unitati_id": 1,
   "stock": 50,
-  "id": 9,
-  "created_at": "2024-01-15T10:30:45.000000Z",
-  "updated_at": "2024-01-15T10:30:45.000000Z",
+  "id": 8,
+  "created_at": "2025-07-26T14:47:12.000000Z",
+  "updated_at": "2025-07-26T14:47:12.000000Z",
   "is_deleted": false,
   "images": [],
   "image_versions": {
@@ -490,90 +500,28 @@ curl -X POST "http://localhost:8000/api/v1/products/" \
 }
 ```
 
-#### 4. Update Product
-**Use Case**: Admin updating product information
-**API**: `PUT /api/v1/products/{product_id}/`
+**Required Fields**:
+- `nume` (string): Product name
+- `cantitate` (integer): Product quantity (must be >= 0)
+- `pret` (float): Product price (must be > 0)
+- `category_id` (integer): ID of the associated category (must be > 0)
+- `unitati_id` (integer): ID of the associated unit (must be > 0)
+- `stock` (integer): Stock quantity (must be >= 0)
 
-**cURL Example** (update basic fields):
+**Optional Fields**:
+- `description` (string): Product description
+
+#### 4. Partially Update Product
+**Use Case**: Admin updating specific product fields
+**API**: `PATCH /api/v1/products/{product_id}`
+**Description**: Partially updates a product resource. Only updates fields explicitly provided.
+
+**cURL Example** (update name and price):
 ```bash
-curl -X PUT "http://localhost:8000/api/v1/products/9/" \
+curl -X PATCH "http://localhost:8001/api/v1/products/8" \
   -H "accept: application/json" \
   -F "nume=Premium Fresh Apples" \
-  -F "pret=30" \
-  -F "stock=45"
-```
-
-**cURL Example** (update with new image):
-```bash
-curl -X PUT "http://localhost:8000/api/v1/products/9/" \
-  -H "accept: application/json" \
-  -F "nume=Premium Fresh Apples" \
-  -F "pret=30" \
-  -F "primary_image=@premium_apples.jpg"
-```
-
-**cURL Example** (clear image and use placeholder):
-```bash
-curl -X PUT "http://localhost:8000/api/v1/products/9/" \
-  -H "accept: application/json" \
-  -F "clear_image=true"
-```
-
-#### 6. Upload Category Image (Separate Endpoint)
-**Use Case**: Admin adding/updating category image after creation
-**API**: `POST /api/v1/categories/{category_id}/image`
-
-**cURL Example**:
-```bash
-curl -X POST "http://localhost:8000/api/v1/categories/1/image" \
-  -H "accept: application/json" \
-  -F "file=@vegetables.jpg"
-```
-
-**Response Example**:
-```json
-{
-  "name": "Vegetables",
-  "image_path": "categories/5ca42f29580e43edaecca182e7680fe2",
-  "id": 2,
-  "created_at": "2024-01-15T10:30:45.000000Z",
-  "updated_at": "2024-01-15T15:45:00.000000Z",
-  "is_deleted": false,
-  "image_versions": {
-    "original": "categories/5ca42f29580e43edaecca182e7680fe2/5ca42f29580e43edaecca182e7680fe2.jpg",
-    "medium": "categories/5ca42f29580e43edaecca182e7680fe2/5ca42f29580e43edaecca182e7680fe2-medium.jpg",
-    "thumbnail": "categories/5ca42f29580e43edaecca182e7680fe2/5ca42f29580e43edaecca182e7680fe2-thumbnail.jpg"
-  }
-}
-```
-
-#### 7. Upload Product Images (Separate Endpoint)
-**Use Case**: Admin adding product images after creation
-**API**: `POST /api/v1/products/{product_id}/images/`
-
-**cURL Example**:
-```bash
-curl -X POST "http://localhost:8000/api/v1/products/9/images/" \
-  -H "accept: application/json" \
-  -F "file=@apples.jpg" \
-  -F "position=0"
-```
-
-**Response Example**:
-```json
-{
-  "id": 1,
-  "product_id": 9,
-  "filename": "apples.jpg",
-  "position": 0,
-  "file_path": "products/8f47ac10b58cc4372a5670e02b2c3d479/apples.jpg",
-  "file_versions": {
-    "original": "products/8f47ac10b58cc4372a5670e02b2c3d479/apples.jpg",
-    "medium": "products/8f47ac10b58cc4372a5670e02b2c3d479/apples-medium.jpg",
-    "thumbnail": "products/8f47ac10b58cc4372a5670e02b2c3d479/apples-thumbnail.jpg"
-  },
-  "created_at": "2024-01-15T15:45:00.000000Z"
-}
+  -F "pret=30"
 ```
 
 **Response Example**:
@@ -585,10 +533,10 @@ curl -X POST "http://localhost:8000/api/v1/products/9/images/" \
   "description": "Fresh organic apples from local farm",
   "category_id": 1,
   "unitati_id": 1,
-  "stock": 45,
-  "id": 9,
-  "created_at": "2024-01-15T10:30:45.000000Z",
-  "updated_at": "2024-01-15T15:45:00.000000Z",
+  "stock": 50,
+  "id": 8,
+  "created_at": "2025-07-26T14:47:12.000000Z",
+  "updated_at": "2025-07-26T14:48:20.000000Z",
   "is_deleted": false,
   "images": [],
   "image_versions": {
@@ -599,50 +547,253 @@ curl -X POST "http://localhost:8000/api/v1/products/9/images/" \
 }
 ```
 
+**Optional Fields** (all fields are optional for PATCH):
+- `nume` (string): Product name
+- `cantitate` (integer): Product quantity (must be >= 0)
+- `pret` (float): Product price (must be > 0)
+- `description` (string): Product description
+- `category_id` (integer): ID of the associated category (must be > 0)
+- `unitati_id` (integer): ID of the associated unit (must be > 0)
+- `stock` (integer): Stock quantity (must be >= 0)
+
 #### 5. Delete Product
 **Use Case**: Admin removing products (soft delete by default)
-**API**: `DELETE /api/v1/products/{product_id}/`
+**API**: `DELETE /api/v1/products/{product_id}`
 
 **cURL Example** (soft delete - default):
 ```bash
-curl -X DELETE "http://localhost:8000/api/v1/products/9/" \
+curl -X DELETE "http://localhost:8001/api/v1/products/8" \
   -H "accept: application/json"
 ```
 
 **cURL Example** (permanent delete):
 ```bash
-curl -X DELETE "http://localhost:8000/api/v1/products/9/?permanent=true" \
+curl -X DELETE "http://localhost:8001/api/v1/products/8?permanent=true" \
+  -H "accept: application/json"
+```
+
+**Parameter:**
+- `permanent` (boolean, optional): If true, performs a hard delete instead of a soft deletion (default: false)
+
+**Response**: HTTP 204 No Content (successful deletion)
+
+#### 6. Upload Product Image
+**Use Case**: Admin adding product images after creation
+**API**: `POST /api/v1/products/{product_id}/images`
+
+**cURL Example**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/products/8/images" \
+  -H "accept: application/json" \
+  -F "file=@apples.jpg" \
+  -F "position=0"
+```
+
+**Response Example**:
+```json
+{
+  "path": "products/66197beeaf4b425382d2e450aa603aad",
+  "position": 0,
+  "id": 4,
+  "produse_id": 8,
+  "is_primary": true,
+  "image_versions": {
+    "original": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad.jpg",
+    "medium": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-medium.jpg",
+    "thumbnail": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-thumbnail.jpg"
+  }
+}
+```
+
+**Parameters**:
+- `file` (file, required): Image file to upload (JPEG, PNG, or GIF, max 5MB)
+- `position` (integer, optional): Image position (0=primary, if not specified will be added at the end)
+
+#### 7. Get Product Images
+**Use Case**: Display product image gallery
+**API**: `GET /api/v1/products/{product_id}/images`
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/products/8/images" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+[
+  {
+    "path": "products/66197beeaf4b425382d2e450aa603aad",
+    "position": 0,
+    "id": 4,
+    "produse_id": 8,
+    "is_primary": true,
+    "image_versions": {
+      "original": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad.jpg",
+      "medium": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-medium.jpg",
+      "thumbnail": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-thumbnail.jpg"
+    }
+  }
+]
+```
+
+#### 8. Get Specific Product Image
+**Use Case**: Display specific product image
+**API**: `GET /api/v1/products/{product_id}/images/{image_id}`
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/products/8/images/4" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "path": "products/66197beeaf4b425382d2e450aa603aad",
+  "position": 0,
+  "id": 4,
+  "produse_id": 8,
+  "is_primary": true,
+  "image_versions": {
+    "original": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad.jpg",
+    "medium": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-medium.jpg",
+    "thumbnail": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-thumbnail.jpg"
+  }
+}
+```
+
+#### 9. Update Image Position
+**Use Case**: Admin reordering product images
+**API**: `PUT /api/v1/products/{product_id}/images/{image_id}/position`
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8001/api/v1/products/8/images/4/position" \
+  -H "accept: application/json" \
+  -F "position=1"
+```
+
+**Response Example**:
+```json
+{
+  "path": "products/66197beeaf4b425382d2e450aa603aad",
+  "position": 1,
+  "id": 4,
+  "produse_id": 8,
+  "is_primary": false,
+  "image_versions": {
+    "original": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad.jpg",
+    "medium": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-medium.jpg",
+    "thumbnail": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-thumbnail.jpg"
+  }
+}
+```
+
+**Parameters**:
+- `position` (integer, required): New position for the image (0=primary)
+
+#### 10. Set Image as Primary
+**Use Case**: Admin setting a product image as primary
+**API**: `PUT /api/v1/products/{product_id}/images/{image_id}/primary`
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8001/api/v1/products/8/images/4/primary" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "path": "products/66197beeaf4b425382d2e450aa603aad",
+  "position": 0,
+  "id": 4,
+  "produse_id": 8,
+  "is_primary": true,
+  "image_versions": {
+    "original": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad.jpg",
+    "medium": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-medium.jpg",
+    "thumbnail": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-thumbnail.jpg"
+  }
+}
+```
+
+#### 11. Delete Product Image
+**Use Case**: Admin removing product images
+**API**: `DELETE /api/v1/products/{product_id}/images/{image_id}`
+
+**cURL Example**:
+```bash
+curl -X DELETE "http://localhost:8001/api/v1/products/8/images/4" \
   -H "accept: application/json"
 ```
 
 **Response**: HTTP 204 No Content (successful deletion)
 
+#### 12. Reorder Product Images
+**Use Case**: Admin reordering multiple product images at once
+**API**: `PUT /api/v1/products/{product_id}/images/reorder`
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8001/api/v1/products/8/images/reorder" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '[
+    {"id": 4, "position": 0},
+    {"id": 5, "position": 1},
+    {"id": 6, "position": 2}
+  ]'
+```
+
+**Response Example**:
+```json
+[
+  {
+    "path": "products/66197beeaf4b425382d2e450aa603aad",
+    "position": 0,
+    "id": 4,
+    "produse_id": 8,
+    "is_primary": true,
+    "image_versions": {
+      "original": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad.jpg",
+      "medium": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-medium.jpg",
+      "thumbnail": "products/66197beeaf4b425382d2e450aa603aad/66197beeaf4b425382d2e450aa603aad-thumbnail.jpg"
+    }
+  }
+]
+```
+
+**Request Body**: Array of objects with `id` and `position` fields
+
 #### Error Handling Examples
 
 **404 Not Found**:
 ```bash
-curl -X GET "http://localhost:8000/api/v1/products/999/"
+curl -X GET "http://localhost:8001/api/v1/products/999"
 # Response: 404 {"detail":"Product with ID 999 not found"}
 ```
 
-**422 Validation Error** (missing required field):
+**422 Validation Error** (missing required fields):
 ```bash
-curl -X POST "http://localhost:8000/api/v1/products/" \
+curl -X POST "http://localhost:8001/api/v1/products/" \
   -H "accept: application/json" \
   -F "description=Fresh apples"
-# Response: 422 {"detail":[{"loc":["body","nume"],"msg":"field required","type":"value_error.missing"}]}
+# Response: 422 {"detail":[{"type":"missing","loc":["body","nume"],"msg":"Field required","input":null},{"type":"missing","loc":["body","cantitate"],"msg":"Field required","input":null},{"type":"missing","loc":["body","pret"],"msg":"Field required","input":null},{"type":"missing","loc":["body","category_id"],"msg":"Field required","input":null},{"type":"missing","loc":["body","unitati_id"],"msg":"Field required","input":null},{"type":"missing","loc":["body","stock"],"msg":"Field required","input":null}]}
 ```
 
-**409 Conflict** (duplicate product name):
+**400 Bad Request** (invalid foreign key):
 ```bash
-curl -X POST "http://localhost:8000/api/v1/products/" \
+curl -X POST "http://localhost:8001/api/v1/products/" \
   -H "accept: application/json" \
   -F "nume=Fresh Apples" \
   -F "cantitate=50" \
   -F "pret=25" \
-  -F "category_id=1" \
-  -F "unitati_id=1"
-# Response: 409 {"detail":"Product with name 'Fresh Apples' already exists"}
+  -F "category_id=999" \
+  -F "unitati_id=1" \
+  -F "stock=50"
+# Response: 400 {"detail":[{"loc":["body","category_id"],"msg":"Invalid category ID","type":"value_error.foreign_key"}]}
 ```
 
 ### Lista 

@@ -1,6 +1,7 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Path, status, Body
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
 
 from app.core.database import get_db
 from app.schemas.product import Product as ProductSchema
@@ -11,10 +12,13 @@ from app.services.list_product import (
     replace_list_products,
 )
 
+class AddProductRequest(BaseModel):
+    stoc_produs: Optional[int] = Field(None, ge=0, description="Available stock for this product in this list")
+
 router = APIRouter()
 
 
-@router.get("/{list_id}/products", response_model=List[ProductSchema], responses={
+@router.get("/{list_id}/products", responses={
     200: {"description": "List of products in the list"},
     404: {"description": "List not found"},
     422: {"description": "Validation error"},
@@ -50,6 +54,7 @@ def get_list_products_endpoint(
 def add_product_to_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to add to the list"),
+    request: AddProductRequest = Body(...),
     db: Session = Depends(get_db)
 ):
     """
@@ -59,11 +64,12 @@ def add_product_to_list_endpoint(
     returns a 400 error.
     """
     try:
-        relationship = add_product_to_list(db=db, list_id=list_id, product_id=product_id)
+        relationship = add_product_to_list(db=db, list_id=list_id, product_id=product_id, stoc_produs=request.stoc_produs)
         return {
             "message": f"Product {product_id} added to list {list_id} successfully",
             "list_id": list_id,
-            "product_id": product_id
+            "product_id": product_id,
+            "stoc_produs": request.stoc_produs
         }
     except HTTPException:
         raise

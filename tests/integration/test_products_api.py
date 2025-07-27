@@ -32,7 +32,7 @@ class ProductTestUtils(EntityTestUtils):
         return f"{prefix}-{short_uuid}"
     
     def create_entity(self, name=None, category_id=1, unitati_id=1, cantitate=10, pret=100, 
-                     description=None, stock=5):
+                     description=None):
         """
         Create a new product with the given parameters.
         
@@ -43,7 +43,6 @@ class ProductTestUtils(EntityTestUtils):
             cantitate: Quantity value
             pret: Price value
             description: Product description
-            stock: Stock amount
             
         Returns:
             Tuple of (entity_data, entity_id)
@@ -61,8 +60,7 @@ class ProductTestUtils(EntityTestUtils):
             "pret": str(pret),
             "description": description,
             "category_id": str(category_id),
-            "unitati_id": str(unitati_id),
-            "stock": str(stock)
+            "unitati_id": str(unitati_id)
         }
         
         # Note: primary_image has been removed, we now use the dedicated product_images endpoints
@@ -85,7 +83,7 @@ class ProductTestUtils(EntityTestUtils):
         return created_entity, created_entity["id"]
     
     def update_entity(self, entity_id, name=None, category_id=None, unitati_id=None, 
-                     cantitate=None, pret=None, description=None, stock=None):
+                     cantitate=None, pret=None, description=None):
         """
         Update a product by ID.
         
@@ -97,7 +95,6 @@ class ProductTestUtils(EntityTestUtils):
             cantitate: New quantity value (optional)
             pret: New price value (optional)
             description: New description (optional)
-            stock: New stock amount (optional)
         
         Returns:
             Updated entity data
@@ -116,8 +113,6 @@ class ProductTestUtils(EntityTestUtils):
             form_data["pret"] = str(pret)
         if description is not None:
             form_data["description"] = description
-        if stock is not None:
-            form_data["stock"] = str(stock)
         
         # Note: Images are now handled through the dedicated product_images endpoints
         
@@ -273,8 +268,7 @@ class ProductTestUtils(EntityTestUtils):
                 "pret": "100",
                 "description": "Test description",
                 "category_id": "1",
-                "unitati_id": "1",
-                "stock": "5"
+                "unitati_id": "1"
             }
         )
         assert invalid_name_response.status_code == 400  # API now returns 400 for empty name
@@ -288,8 +282,7 @@ class ProductTestUtils(EntityTestUtils):
                 "pret": "100",
                 "description": "Test description",
                 "category_id": "1",
-                "unitati_id": "1",
-                "stock": "5"
+                "unitati_id": "1"
             }
         )
         assert invalid_numeric_response.status_code == 400  # API returns 400 for invalid numeric values
@@ -308,8 +301,7 @@ class ProductTestUtils(EntityTestUtils):
                     "pret": "100",
                     "description": "Test description",
                     "category_id": "1",
-                    "unitati_id": "1",
-                    "stock": "5"
+                    "unitati_id": "1"
                 }
             )
             assert duplicate_response.status_code == 400, "API returns 400 for duplicate names"
@@ -403,8 +395,7 @@ class ProductTestUtils(EntityTestUtils):
                 "pret": "100",
                 "description": "Test description",
                 "category_id": "99999",  # Non-existent category ID
-                "unitati_id": "1",
-                "stock": "5"
+                "unitati_id": "1"
             }
         )
         assert invalid_fk_response.status_code == 400
@@ -433,8 +424,7 @@ class ProductTestUtils(EntityTestUtils):
                 "pret": "100",
                 "description": f"Description for {prod_name}",
                 "category_id": "1",
-                "unitati_id": "1",
-                "stock": "5"
+                "unitati_id": "1"
             }
 
             create_response = requests.post(
@@ -508,8 +498,7 @@ class ProductTestUtils(EntityTestUtils):
                 "pret": "100",
                 "description": f"Description for {unique_name}",
                 "category_id": "1",
-                "unitati_id": "1",
-                "stock": "5"
+                "unitati_id": "1"
             }
 
             # Create a product without images
@@ -655,7 +644,7 @@ def test_create_product_without_category():
         "pret": "10050",
         "description": "Test product without category",
         "unitati_id": "1",
-        "stock": "5"
+        
         # Note: category_id is intentionally omitted
     }
     
@@ -693,7 +682,7 @@ def test_create_product_with_empty_category():
         "description": "Test product with empty category",
         "category_id": "",  # Empty string
         "unitati_id": "1",
-        "stock": "5"
+        
     }
     
     create_response = requests.post(
@@ -750,7 +739,7 @@ def test_category_deletion_cascade():
             "description": "Test product in specific category",
             "category_id": str(category_id),
             "unitati_id": "1",
-            "stock": "5"
+            
         }
         
         product_response = requests.post(

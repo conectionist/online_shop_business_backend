@@ -28,8 +28,7 @@ class ProductOverrideTestUtils:
             "pret": product["pret"],
             "description": product["description"],
             "category_id": product["category_id"],
-            "unitati_id": product["unitati_id"],
-            "stock": product["stock"]
+            "unitati_id": product["unitati_id"]
         }
         return product_data, product_id
     
@@ -73,7 +72,6 @@ class ProductOverrideTestUtils:
         fields = response.json()
         assert "price" in fields
         assert "description" in fields
-        assert "stock" in fields
         assert "availability" in fields
     
     def test_create_override_success(self):

@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS `online_shop`.`produse` (
   `description` VARCHAR(1500) NULL DEFAULT NULL,
   `category_id` INT NOT NULL,
   `unitati_id` INT NOT NULL,
-  `stock` INT NULL DEFAULT NULL,
+  -- `stock` field removed - stock is now managed at list-product level
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `is_deleted` TINYINT NOT NULL DEFAULT 0,
@@ -197,7 +197,7 @@ DEFAULT CHARACTER SET = utf8mb4;
 CREATE TABLE IF NOT EXISTS `online_shop`.`product_overrides` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `produse_id` INT NOT NULL,
-  `field_name` ENUM('price', 'description', 'stock', 'availability') NOT NULL,
+  `field_name` ENUM('price', 'description', 'availability') NOT NULL,
   `old_value` TEXT NULL,
   `new_value` TEXT NOT NULL,
   `notes` VARCHAR(500) NULL,
@@ -353,6 +353,7 @@ DEFAULT CHARACTER SET = utf8mb4;
 CREATE TABLE IF NOT EXISTS `online_shop`.`liste_au_produse` (
   `liste_id` INT NOT NULL,
   `produse_id` INT NOT NULL,
+  `stoc_produs` INT NULL DEFAULT NULL,
   PRIMARY KEY (`liste_id`, `produse_id`),
   INDEX `fk_liste_has_produse_produse1_idx` (`produse_id` ASC),
   INDEX `fk_liste_has_produse_liste1_idx` (`liste_id` ASC),

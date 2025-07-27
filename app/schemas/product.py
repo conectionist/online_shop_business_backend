@@ -51,13 +51,6 @@ class ProductBase(BaseModel):
         examples=[1, 2, 3]
     )]
     
-    stock: Optional[int] = Field(
-        None,
-        description="Available stock quantity",
-        ge=0,
-        examples=[10, 50, 100]
-    )
-    
     @field_validator('nume', 'description')
     @classmethod
     def validate_not_empty(cls, v):
@@ -112,12 +105,6 @@ class ProductUpdate(BaseModel):
         None,
         description="ID of the unit of measurement",
         gt=0
-    )
-    
-    stock: Optional[int] = Field(
-        None,
-        description="Available stock quantity",
-        ge=0
     )
     
     is_deleted: Optional[bool] = Field(

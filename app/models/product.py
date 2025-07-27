@@ -17,7 +17,6 @@ class Product(Base):
     description = Column(String(1500), nullable=True)
     category_id = Column(Integer, ForeignKey("category.id"), nullable=False)
     unitati_id = Column(Integer, ForeignKey("unitati.id"), nullable=False)
-    stock = Column(Integer, nullable=True)
     created_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     updated_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
     is_deleted = Column(Boolean, nullable=False, default=False, server_default=text("0"))

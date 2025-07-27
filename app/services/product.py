@@ -181,7 +181,6 @@ def create_product(db: Session, product: ProductCreate) -> Product:
                     # primary_image_path removed - images are now managed through product_images relationship
                     existing_product.category_id = product.category_id
                     existing_product.unitati_id = product.unitati_id
-                    existing_product.stock = product.stock
                     existing_product.updated_at = datetime.now()
                     
                     db.commit()
@@ -217,7 +216,6 @@ def create_product(db: Session, product: ProductCreate) -> Product:
             # primary_image_path removed - images are now managed through product_images relationship
             category_id=product.category_id,
             unitati_id=product.unitati_id,
-            stock=product.stock,
             created_at=datetime.now(),
             updated_at=datetime.now(),
             is_deleted=False

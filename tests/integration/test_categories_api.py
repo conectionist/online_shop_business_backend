@@ -775,8 +775,7 @@ def test_category_deletion_cascade():
             "pret": "10050",
             "description": "Test product in specific category",
             "category_id": str(category_id),
-            "unitati_id": "1",
-            "stock": "5"
+            "unitati_id": "1"
         }
         
         product_response = requests.post(

@@ -8,7 +8,6 @@ class FieldNameEnum(str, Enum):
     """Enum for field names that can be overridden"""
     PRICE = "price"
     DESCRIPTION = "description"
-    STOCK = "stock"
     AVAILABILITY = "availability"
 
 

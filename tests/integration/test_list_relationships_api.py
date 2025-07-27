@@ -51,9 +51,10 @@ class ListRelationshipTestUtils:
         )
         return response.json() if expected_status == 200 else None
     
-    def add_product_to_list(self, list_id, product_id, expected_status=201):
+    def add_product_to_list(self, list_id, product_id, stoc_produs=None, expected_status=201):
         """Add a product to a list."""
-        response = requests.post(f"{self.base_url}/{list_id}/products/{product_id}")
+        data = {"stoc_produs": stoc_produs} if stoc_produs is not None else {}
+        response = requests.post(f"{self.base_url}/{list_id}/products/{product_id}", json=data)
         assert response.status_code == expected_status, (
             f"Failed to add product {product_id} to list {list_id}. "
             f"Expected {expected_status}, got {response.status_code}: {response.text}"
@@ -358,4 +359,86 @@ def test_list_relationships_edge_cases():
 
 
 # Initialize test utilities
-list_relationship_utils = ListRelationshipTestUtils() 
+list_relationship_utils = ListRelationshipTestUtils()
+
+
+def test_list_products_stoc_produs_functionality():
+    """Test stoc_produs (stock) functionality in list-product relationships."""
+    
+    # 1. Create test entities
+    list_data, list_id = list_relationship_utils.create_test_list()
+    product_data, product_id = list_relationship_utils.create_test_product()
+    
+    # 2. Test adding product with stoc_produs
+    add_response = list_relationship_utils.add_product_to_list(list_id, product_id, stoc_produs=50)
+    assert add_response["list_id"] == list_id
+    assert add_response["product_id"] == product_id
+    assert add_response["stoc_produs"] == 50
+    
+    # 3. Verify stoc_produs is returned in list products
+    products = list_relationship_utils.get_list_products(list_id)
+    assert len(products) == 1, "List should have one product"
+    assert products[0]["id"] == product_id
+    assert "stoc_produs" in products[0], "Product should have stoc_produs field"
+    assert products[0]["stoc_produs"] == 50, "stoc_produs should be 50"
+    
+    # 4. Test adding product without stoc_produs (should default to None)
+    product2_data, product2_id = list_relationship_utils.create_test_product()
+    add_response2 = list_relationship_utils.add_product_to_list(list_id, product2_id)
+    assert add_response2["stoc_produs"] is None
+    
+    # 5. Verify second product has no stoc_produs
+    products = list_relationship_utils.get_list_products(list_id)
+    assert len(products) == 2, "List should have two products"
+    product2 = next(p for p in products if p["id"] == product2_id)
+    assert product2["stoc_produs"] is None, "Second product should have no stoc_produs"
+
+
+def test_list_products_stoc_produs_validation():
+    """Test stoc_produs validation in list-product relationships."""
+    
+    # 1. Create test entities
+    list_data, list_id = list_relationship_utils.create_test_list()
+    product_data, product_id = list_relationship_utils.create_test_product()
+    
+    # 2. Test negative stoc_produs (should fail validation)
+    response = requests.post(
+        f"{list_relationship_utils.base_url}/{list_id}/products/{product_id}",
+        json={"stoc_produs": -5}
+    )
+    assert response.status_code == 422, "Negative stoc_produs should fail validation"
+    
+    # 3. Test zero stoc_produs (should be valid)
+    add_response = list_relationship_utils.add_product_to_list(list_id, product_id, stoc_produs=0)
+    assert add_response["stoc_produs"] == 0, "Zero stoc_produs should be valid"
+    
+    # 4. Test large positive stoc_produs (should be valid)
+    product2_data, product2_id = list_relationship_utils.create_test_product()
+    add_response2 = list_relationship_utils.add_product_to_list(list_id, product2_id, stoc_produs=999999)
+    assert add_response2["stoc_produs"] == 999999, "Large positive stoc_produs should be valid"
+
+
+def test_list_products_stoc_produs_edge_cases():
+    """Test edge cases for stoc_produs functionality."""
+    
+    # 1. Create test entities
+    list_data, list_id = list_relationship_utils.create_test_list()
+    product_data, product_id = list_relationship_utils.create_test_product()
+    
+    # 2. Test adding product with None stoc_produs explicitly
+    add_response = list_relationship_utils.add_product_to_list(list_id, product_id, stoc_produs=None)
+    assert add_response["stoc_produs"] is None, "Explicit None stoc_produs should be None"
+    
+    # 3. Test adding product with empty request body (should work)
+    product2_data, product2_id = list_relationship_utils.create_test_product()
+    response = requests.post(
+        f"{list_relationship_utils.base_url}/{list_id}/products/{product2_id}",
+        json={}
+    )
+    assert response.status_code == 201, "Empty request body should work"
+    assert response.json()["stoc_produs"] is None, "Empty body should result in None stoc_produs"
+    
+    # 4. Test that stoc_produs is included in all list product responses
+    products = list_relationship_utils.get_list_products(list_id)
+    for product in products:
+        assert "stoc_produs" in product, "All products should have stoc_produs field" 

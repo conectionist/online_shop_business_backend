@@ -216,7 +216,6 @@ def get_product_with_overrides(db: Session, product_id: int) -> dict:
         "description": product.description,
         "category_id": product.category_id,
         "unitati_id": product.unitati_id,
-        "stock": product.stock,
         "created_at": product.created_at,
         "updated_at": product.updated_at,
         "is_deleted": product.is_deleted,

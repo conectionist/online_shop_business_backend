@@ -11,6 +11,7 @@ class ListProduct(Base):
     
     liste_id = Column(Integer, ForeignKey("liste.id"), primary_key=True)
     produse_id = Column(Integer, ForeignKey("produse.id"), primary_key=True)
+    stoc_produs = Column(Integer, nullable=True)
     
     # Relationships
     list = relationship("List", foreign_keys=[liste_id], back_populates="products")

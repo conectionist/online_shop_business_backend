@@ -136,8 +136,7 @@ def read_product(
                                 "pret": "100",
                                 "description": "Test description",
                                 "category_id": "1", 
-                                "unitati_id": "1",
-                                "stock": "5"
+                                "unitati_id": "1"
                             }
                         }
                     }
@@ -159,7 +158,6 @@ def create_product_endpoint(
     description: Optional[str] = Form(None),
     category_id: Optional[str] = Form(None), # Made optional, defaults to "Uncategorized"
     unitati_id: str = Form(...),  # Changed to str to handle validation manually
-    stock: str = Form(...),       # Changed to str to handle validation manually
     db: Session = Depends(get_db)
 ):
     """
@@ -172,7 +170,6 @@ def create_product_endpoint(
     - **description**: Optional product description
     - **category_id**: ID of the associated category
     - **unitati_id**: ID of the associated unit
-    - **stock**: Stock quantity
     
     Note: To add images to this product, use the /products/{product_id}/images endpoint 
     after creating the product. Multiple images can be associated with a product,
@@ -308,33 +305,6 @@ def create_product_endpoint(
                 ]
             )
         
-        # Convert and validate stock
-        try:
-            stock_val = int(stock)
-            if stock_val < 0:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=[
-                        {
-                            "loc": ["body", "stock"],
-                            "msg": "ensure this value is greater than or equal to 0",
-                            "type": "value_error.number.not_ge",
-                            "ctx": {"limit_value": 0}
-                        }
-                    ]
-                )
-        except (ValueError, TypeError):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=[
-                    {
-                        "loc": ["body", "stock"],
-                        "msg": "value is not a valid integer",
-                        "type": "type_error.integer"
-                    }
-                ]
-            )
-        
         # Create product data using validated values
         product_data = ProductCreate(
             nume=nume_str,
@@ -342,8 +312,7 @@ def create_product_endpoint(
             pret=pret_val,
             description=description or "",
             category_id=category_id_val,
-            unitati_id=unitati_id_val,
-            stock=stock_val
+            unitati_id=unitati_id_val
         )
         
         # Create the product
@@ -428,7 +397,6 @@ def update_product_endpoint(
     description: Optional[str] = Form(None),
     category_id: Optional[int] = Form(None),
     unitati_id: Optional[int] = Form(None),
-    stock: Optional[int] = Form(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -443,7 +411,6 @@ def update_product_endpoint(
     - **description**: Product description
     - **category_id**: ID of the associated category
     - **unitati_id**: ID of the associated unit
-    - **stock**: Stock quantity
     
     Note: To manage product images, use the /products/{product_id}/images endpoint.
     Images can be added, updated, reordered, or deleted using the dedicated endpoints.
@@ -492,18 +459,6 @@ def update_product_endpoint(
                 ]
             )
             
-        if stock is not None and stock < 0:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=[
-                    {
-                        "loc": ["body", "stock"],
-                        "msg": "must be greater than or equal to zero",
-                        "type": "value_error.number.not_ge",
-                        "ctx": {"limit_value": 0}
-                    }
-                ]
-            )
     except ValueError:
         # Handle any value conversion errors
         raise HTTPException(
@@ -540,8 +495,6 @@ def update_product_endpoint(
             update_dict["category_id"] = category_id
         if unitati_id is not None:
             update_dict["unitati_id"] = unitati_id
-        if stock is not None:
-            update_dict["stock"] = stock
             
         # If no fields were provided, return existing product
         if not update_dict:

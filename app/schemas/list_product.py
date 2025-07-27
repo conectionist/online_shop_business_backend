@@ -6,6 +6,7 @@ class ListProductBase(BaseModel):
     """Base schema for list-product relationship"""
     liste_id: int = Field(..., gt=0, description="ID of the list")
     produse_id: int = Field(..., gt=0, description="ID of the product")
+    stoc_produs: Optional[int] = Field(None, ge=0, description="Available stock for this product in this list")
 
 
 class ListProductCreate(ListProductBase):
@@ -28,6 +29,6 @@ class ListProductResponse(BaseModel):
     description: Optional[str] = Field(None, description="Product description")
     category_id: int = Field(..., gt=0, description="Category ID")
     unitati_id: int = Field(..., gt=0, description="Unit ID")
-    stock: Optional[int] = Field(None, ge=0, description="Available stock")
+    stoc_produs: Optional[int] = Field(None, ge=0, description="Available stock for this product in this list")
     
     model_config = ConfigDict(from_attributes=True) 

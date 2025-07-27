@@ -69,7 +69,7 @@ def create_override(
     Create a new product override.
     
     - **produse_id**: ID of the product to override
-    - **field_name**: Field to override (price, description, stock, availability)
+    - **field_name**: Field to override (price, description, availability)
     - **new_value**: New value for the field
     - **old_value**: Original value (optional, for reference)
     - **notes**: Optional notes about the override

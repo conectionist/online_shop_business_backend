@@ -12,7 +12,7 @@ class ProductOverride(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     produse_id = Column(Integer, ForeignKey("produse.id"), nullable=False)
-    field_name = Column(ENUM('price', 'description', 'stock', 'availability'), nullable=False)
+    field_name = Column(ENUM('price', 'description', 'availability'), nullable=False)
     old_value = Column(Text, nullable=True)
     new_value = Column(Text, nullable=False)
     notes = Column(String(500), nullable=True)

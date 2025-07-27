@@ -9,7 +9,7 @@ from app.models.list_product import ListProduct
 from app.schemas.list_product import ListProductCreate, ListProductResponse
 
 
-def get_list_products(db: Session, list_id: int) -> TypeList[Product]:
+def get_list_products(db: Session, list_id: int) -> TypeList[dict]:
     """
     Get all products in a list.
     
@@ -32,9 +32,27 @@ def get_list_products(db: Session, list_id: int) -> TypeList[Product]:
         )
     
     try:
-        # Get products through the many-to-many relationship
-        products = db.query(Product).join(ListProduct).filter(ListProduct.liste_id == list_id).all()
-        return products
+        # Get products with their stock information through the many-to-many relationship
+        list_products = db.query(ListProduct).filter(ListProduct.liste_id == list_id).all()
+        result = []
+        for list_product in list_products:
+            product = list_product.product
+            product_dict = {
+                "id": product.id,
+                "nume": product.nume,
+                "cantitate": product.cantitate,
+                "pret": product.pret,
+                "description": product.description,
+                "category_id": product.category_id,
+                "unitati_id": product.unitati_id,
+                "created_at": product.created_at,
+                "updated_at": product.updated_at,
+                "is_deleted": product.is_deleted,
+                "images": product.images,
+                "stoc_produs": list_product.stoc_produs
+            }
+            result.append(product_dict)
+        return result
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(
@@ -43,7 +61,7 @@ def get_list_products(db: Session, list_id: int) -> TypeList[Product]:
         )
 
 
-def add_product_to_list(db: Session, list_id: int, product_id: int) -> ListProduct:
+def add_product_to_list(db: Session, list_id: int, product_id: int, stoc_produs: int = None) -> ListProduct:
     """
     Add a product to a list.
     
@@ -88,7 +106,7 @@ def add_product_to_list(db: Session, list_id: int, product_id: int) -> ListProdu
     
     try:
         # Create the relationship
-        list_product = ListProduct(liste_id=list_id, produse_id=product_id)
+        list_product = ListProduct(liste_id=list_id, produse_id=product_id, stoc_produs=stoc_produs)
         db.add(list_product)
         db.commit()
         db.refresh(list_product)

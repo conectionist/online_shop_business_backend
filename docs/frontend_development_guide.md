@@ -387,21 +387,21 @@ curl -X POST "http://localhost:8000/api/v1/categories" \
 
 **What is this?** Products are the core items in your online shop - the actual goods that customers can browse, view, and purchase.
 
-**What is it for?** Products represent everything you sell, from fresh produce to packaged goods. Each product has details like name, price, description, stock level, and images.
+**What is it for?** Products represent everything you sell, from fresh produce to packaged goods. Each product has details like name, price, description, and images. Stock levels are managed at the list-product relationship level, not at the product level.
 
-**Why do you need it?** Products are what customers come to your shop for. They need to see what's available, compare prices, check stock levels, and make informed purchasing decisions.
+**Why do you need it?** Products are what customers come to your shop for. They need to see what's available, compare prices, and make informed purchasing decisions. Stock availability is managed when products are added to specific lists.
 
 **What's its purpose?** Products serve as the foundation of your e-commerce system:
 - **Customer Discovery**: What items are available for purchase
-- **Product Information**: Detailed descriptions, pricing, and availability
-- **Inventory Management**: Track stock levels and availability
+- **Product Information**: Detailed descriptions, pricing, and images
+- **Inventory Management**: Stock levels are managed at the list-product level
 - **Order Processing**: What customers actually order and receive
 
 **Why would you care about it?** As a frontend developer, you'll use products to:
 - Build product catalogs and listings
 - Create detailed product pages with images and descriptions
 - Implement search and filtering functionality
-- Display pricing, stock levels, and availability
+- Display pricing and availability (stock is managed at list level)
 - Handle product images and multiple image versions
 - Manage product categories and units of measurement
 
@@ -447,7 +447,6 @@ curl -X GET "http://localhost:8001/api/v1/products/?category_id=1" \
     "description": "Test description",
     "category_id": 1,
     "unitati_id": 1,
-    "stock": 50,
     "id": 9,
     "created_at": "2025-07-26T15:23:05.000000Z",
     "updated_at": "2025-07-26T15:23:05.000000Z",
@@ -472,7 +471,6 @@ curl -X GET "http://localhost:8001/api/v1/products/?category_id=1" \
     "description": "Fresh organic apples from local farm",
     "category_id": 1,
     "unitati_id": 1,
-    "stock": 50,
     "id": 8,
     "created_at": "2025-07-26T14:47:12.000000Z",
     "updated_at": "2025-07-26T14:47:12.000000Z",
@@ -526,7 +524,6 @@ curl -X GET "http://localhost:8001/api/v1/products/8?include_deleted=true" \
   "description": "Fresh organic apples from local farm",
   "category_id": 1,
   "unitati_id": 1,
-  "stock": 50,
   "id": 8,
   "created_at": "2025-07-26T14:47:12.000000Z",
   "updated_at": "2025-07-26T14:47:12.000000Z",
@@ -555,8 +552,7 @@ curl -X POST "http://localhost:8001/api/v1/products/" \
   -F "pret=25" \
   -F "description=Fresh organic apples from local farm" \
   -F "category_id=1" \
-  -F "unitati_id=1" \
-  -F "stock=50"
+  -F "unitati_id=1"
 ```
 
 **Response Example**:
@@ -568,7 +564,6 @@ curl -X POST "http://localhost:8001/api/v1/products/" \
   "description": "Fresh organic apples from local farm",
   "category_id": 1,
   "unitati_id": 1,
-  "stock": 50,
   "id": 8,
   "created_at": "2025-07-26T14:47:12.000000Z",
   "updated_at": "2025-07-26T14:47:12.000000Z",
@@ -587,7 +582,6 @@ curl -X POST "http://localhost:8001/api/v1/products/" \
 - `cantitate` (integer): Product quantity (must be >= 0)
 - `pret` (float): Product price (must be > 0)
 - `unitati_id` (integer): ID of the associated unit (must be > 0)
-- `stock` (integer): Stock quantity (must be >= 0)
 
 **Optional Fields**:
 - `description` (string): Product description
@@ -618,7 +612,6 @@ curl -X PATCH "http://localhost:8001/api/v1/products/8" \
   "description": "Fresh organic apples from local farm",
   "category_id": 1,
   "unitati_id": 1,
-  "stock": 50,
   "id": 8,
   "created_at": "2025-07-26T14:47:12.000000Z",
   "updated_at": "2025-07-26T14:48:20.000000Z",
@@ -639,7 +632,6 @@ curl -X PATCH "http://localhost:8001/api/v1/products/8" \
 - `description` (string): Product description
 - `category_id` (integer): ID of the associated category (must be > 0)
 - `unitati_id` (integer): ID of the associated unit (must be > 0)
-- `stock` (integer): Stock quantity (must be >= 0)
 
 #### 5. Delete Product
 
@@ -881,7 +873,7 @@ curl -X GET "http://localhost:8001/api/v1/products/999"
 curl -X POST "http://localhost:8001/api/v1/products/" \
   -H "accept: application/json" \
   -F "description=Fresh apples"
-# Response: 422 {"detail":[{"type":"missing","loc":["body","nume"],"msg":"Field required","input":null},{"type":"missing","loc":["body","cantitate"],"msg":"Field required","input":null},{"type":"missing","loc":["body","pret"],"msg":"Field required","input":null},{"type":"missing","loc":["body","category_id"],"msg":"Field required","input":null},{"type":"missing","loc":["body","unitati_id"],"msg":"Field required","input":null},{"type":"missing","loc":["body","stock"],"msg":"Field required","input":null}]}
+# Response: 422 {"detail":[{"type":"missing","loc":["body","nume"],"msg":"Field required","input":null},{"type":"missing","loc":["body","cantitate"],"msg":"Field required","input":null},{"type":"missing","loc":["body","pret"],"msg":"Field required","input":null},{"type":"missing","loc":["body","unitati_id"],"msg":"Field required","input":null}]}
 ```
 
 **400 Bad Request** (invalid foreign key):
@@ -892,8 +884,7 @@ curl -X POST "http://localhost:8001/api/v1/products/" \
   -F "cantitate=50" \
   -F "pret=25" \
   -F "category_id=999" \
-  -F "unitati_id=1" \
-  -F "stock=50"
+  -F "unitati_id=1"
 # Response: 400 {"detail":[{"loc":["body","category_id"],"msg":"Invalid category ID","type":"value_error.foreign_key"}]}
 ```
 
@@ -1211,7 +1202,7 @@ curl -X POST "http://localhost:8001/api/v1/liste/" \
 
 **API**: `GET /api/v1/liste/{list_id}/products`
 
-**Description**: Retrieves all products associated with a specific list
+**Description**: Retrieves all products associated with a specific list, including their stock levels (`stoc_produs`) for that specific list
 
 **cURL Example**:
 ```bash
@@ -1230,7 +1221,7 @@ curl -X GET "http://localhost:8001/api/v1/liste/19/products" \
     "description": "Fresh apples",
     "category_id": 2,
     "unitati_id": 1,
-    "stock": 50,
+    "stoc_produs": 50,
     "created_at": "2025-07-26T15:10:57",
     "updated_at": "2025-07-26T15:10:57",
     "is_deleted": false,
@@ -1241,12 +1232,20 @@ curl -X GET "http://localhost:8001/api/v1/liste/19/products" \
 
 **API**: `POST /api/v1/liste/{list_id}/products/{product_id}`
 
-**Description**: Adds a product to a specific list
+**Description**: Adds a product to a specific list with optional stock level (`stoc_produs`)
 
-**cURL Example**:
+**cURL Example** (without stock):
 ```bash
 curl -X POST "http://localhost:8001/api/v1/liste/19/products/1" \
   -H "accept: application/json"
+```
+
+**cURL Example** (with stock):
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/19/products/1" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"stoc_produs": 25}'
 ```
 
 **Response Example**:
@@ -1257,6 +1256,9 @@ curl -X POST "http://localhost:8001/api/v1/liste/19/products/1" \
   "product_id": 1
 }
 ```
+
+**Request Body** (optional):
+- `stoc_produs` (integer, optional): Available stock for this product in this list (must be >= 0)
 
 **API**: `DELETE /api/v1/liste/{list_id}/products/{product_id}`
 
@@ -1293,7 +1295,7 @@ curl -X PUT "http://localhost:8001/api/v1/liste/19/products" \
     "description": "Fresh apples",
     "category_id": 2,
     "unitati_id": 1,
-    "stock": 50,
+    "stoc_produs": 50,
     "created_at": "2025-07-26T15:10:57",
     "updated_at": "2025-07-26T15:10:57",
     "is_deleted": false,
@@ -1307,7 +1309,7 @@ curl -X PUT "http://localhost:8001/api/v1/liste/19/products" \
     "description": "Fresh bananas",
     "category_id": 2,
     "unitati_id": 1,
-    "stock": 30,
+    "stoc_produs": 30,
     "created_at": "2025-07-26T15:10:57",
     "updated_at": "2025-07-26T15:10:57",
     "is_deleted": false,
@@ -1321,7 +1323,7 @@ curl -X PUT "http://localhost:8001/api/v1/liste/19/products" \
     "description": "Fresh milk",
     "category_id": 4,
     "unitati_id": 4,
-    "stock": 20,
+    "stoc_produs": 20,
     "created_at": "2025-07-26T15:10:57",
     "updated_at": "2025-07-26T15:10:57",
     "is_deleted": false,
@@ -1348,6 +1350,15 @@ curl -X POST "http://localhost:8001/api/v1/liste/19/products/999"
 ```bash
 curl -X POST "http://localhost:8001/api/v1/liste/19/products/1"
 # Response: 400 {"detail":"Product 1 is already in list 19"}
+```
+
+**422 Validation Error** (negative stock):
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/19/products/1" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"stoc_produs": -5}'
+# Response: 422 {"detail":[{"type":"greater_than_equal","loc":["body","stoc_produs"],"msg":"Input should be greater than or equal to 0","input":-5}]}
 ```
 
 #### 8. List Delivery Types Management
@@ -2529,21 +2540,19 @@ curl -X POST "http://localhost:8001/api/v1/detalii-business/" \
 
 ### Product Overrides
 
-**What is this?** Product Overrides allow you to temporarily modify product information like prices, descriptions, stock levels, or availability without changing the original product data.
+**What is this?** Product Overrides allow you to temporarily modify product information like prices, descriptions, or availability without changing the original product data.
 
-**What is it for?** Product Overrides are perfect for sales, promotions, stock warnings, or temporary changes. They let you highlight special offers or update product information for specific periods.
+**What is it for?** Product Overrides are perfect for sales, promotions, or temporary changes. They let you highlight special offers or update product information for specific periods.
 
-**Why do you need it?** Sometimes you need to change product information temporarily - like lowering prices for a sale or adding "Only 5 left!" to descriptions. Overrides let you do this without permanently changing the original product data.
+**Why do you need it?** Sometimes you need to change product information temporarily - like lowering prices for a sale or adding promotional messages to descriptions. Overrides let you do this without permanently changing the original product data.
 
 **What's its purpose?** Product Overrides serve multiple business purposes:
 - **Sales & Promotions**: Temporarily lower prices for special offers
-- **Stock Management**: Add warnings when stock is low
 - **Marketing**: Highlight specific products or features
 - **Flexibility**: Make temporary changes without affecting original data
 
 **Why would you care about it?** As a frontend developer, you'll use product overrides to:
 - Display sale prices alongside original prices
-- Show stock warnings and availability messages
 - Handle temporary product modifications
 - Display override information to customers
 - Manage active/inactive override states
@@ -2607,7 +2616,7 @@ curl -X GET "http://localhost:8000/api/v1/product-overrides/fields" \
 
 **Response Example**:
 ```json
-["price", "description", "stock", "availability"]
+["price", "description", "availability"]
 ```
 
 #### 3. Get Specific Product Override
@@ -2679,7 +2688,7 @@ curl -X POST "http://localhost:8000/api/v1/product-overrides" \
 
 **Required Fields**:
 - `produse_id` (integer): ID of the product to override
-- `field_name` (string): Field to override ("price", "description", "stock", "availability")
+- `field_name` (string): Field to override ("price", "description", "availability")
 - `new_value` (string): New override value
 
 **Optional Fields**:
@@ -2766,7 +2775,6 @@ curl -X GET "http://localhost:8000/api/v1/product-overrides/product/1/with-overr
   "description": "Original description",
   "category_id": 1,
   "unitati_id": 1,
-  "stock": 5,
   "overrides": {
     "price": "80",
     "description": "Only 5 left!"
@@ -2810,3 +2818,63 @@ curl -X POST "http://localhost:8000/api/v1/product-overrides" \
 ```
 
 ### Comenzi
+
+**Note**: Stock management has been refactored to work at the list-product relationship level. Products no longer have a direct `stock` field. Instead, stock levels (`stoc_produs`) are managed when products are added to specific lists. This allows for more flexible inventory management where the same product can have different stock levels in different lists.
+
+### Stock Management (New Architecture)
+
+**What is this?** Stock management has been moved from the product level to the list-product relationship level. This means stock levels are managed per list, not per product.
+
+**What is it for?** This new approach allows the same product to have different stock levels in different lists. For example, "Fresh Apples" can have 50 units available in "Monday's List" but only 20 units in "Wednesday's List".
+
+**Why do you need it?** This provides more flexible inventory management for small businesses that may have limited stock for specific time periods or want to control availability per list.
+
+**How does it work?** 
+- Products are created without stock information
+- When adding a product to a list, you can specify `stoc_produs` (stock for this product in this list)
+- Stock levels are managed at the list-product relationship level
+- The same product can have different stock levels in different lists
+
+**API Usage Examples**:
+
+**Adding a product to a list without stock**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/19/products/1" \
+  -H "accept: application/json"
+```
+
+**Adding a product to a list with stock**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/19/products/1" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"stoc_produs": 25}'
+```
+
+**Getting products from a list (includes stock)**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/liste/19/products" \
+  -H "accept: application/json"
+```
+
+**Response includes stock per product**:
+```json
+[
+  {
+    "id": 1,
+    "nume": "Apple",
+    "cantitate": 1,
+    "pret": 500,
+    "description": "Fresh apples",
+    "category_id": 2,
+    "unitati_id": 1,
+    "stoc_produs": 25,
+    "created_at": "2025-07-26T15:10:57",
+    "updated_at": "2025-07-26T15:10:57",
+    "is_deleted": false,
+    "images": []
+  }
+]
+```
+
+### Lista

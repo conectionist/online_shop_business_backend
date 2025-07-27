@@ -2907,7 +2907,7 @@ When displaying a published list, combine data from multiple endpoints:
 1. **Get List Details**: `/api/v1/liste/{list_id}`
 2. **Get List Products**: `/api/v1/liste/{list_id}/products`
 3. **Get Business Details**: `/api/v1/detalii-business`
-4. **Get Payment Methods**: `/api/v1/modalitati-plata`
+4. **Get Payment Methods**: `/api/v1/modalitati-plata` (see Modalitati Plata section for detailed API)
 5. **Get Delivery Types**: `/api/v1/liste/{list_id}/delivery-types`
 
 **Example Customer View:**
@@ -2944,33 +2944,4 @@ When displaying a published list, combine data from multiple endpoints:
 }
 ```
 
-**API Usage Examples:**
-
-**Get all payment methods:**
-```bash
-curl -X GET "http://localhost:8001/api/v1/modalitati-plata" \
-  -H "accept: application/json"
-```
-
-**Get business details:**
-```bash
-curl -X GET "http://localhost:8001/api/v1/detalii-business" \
-  -H "accept: application/json"
-```
-
-**Get list with all related data:**
-```bash
-# Get list details
-curl -X GET "http://localhost:8001/api/v1/liste/19" \
-  -H "accept: application/json"
-
-# Get list products with stock
-curl -X GET "http://localhost:8001/api/v1/liste/19/products" \
-  -H "accept: application/json"
-
-# Get list delivery types
-curl -X GET "http://localhost:8001/api/v1/liste/19/delivery-types" \
-  -H "accept: application/json"
-```
-
-### Lista
+**Note**: For detailed payment methods API documentation, see the "Modalitati Plata" section above.

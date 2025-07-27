@@ -2374,4 +2374,267 @@ curl -X POST "http://localhost:8001/api/v1/detalii-business/" \
 # Response: 200 (creates business details with all null fields)
 ```
 
+### Product Overrides
+
+#### 1. Get All Product Overrides
+
+**Use Case**: Admin viewing all product overrides
+
+**API**: `GET /api/v1/product-overrides`
+
+**Description**: Retrieves all product overrides with optional filtering by product_id and active status
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8000/api/v1/product-overrides" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (filter by product):
+```bash
+curl -X GET "http://localhost:8000/api/v1/product-overrides?product_id=1" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (filter by active status):
+```bash
+curl -X GET "http://localhost:8000/api/v1/product-overrides?is_active=true" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+[
+  {
+    "id": 1,
+    "produse_id": 1,
+    "field_name": "price",
+    "old_value": "100",
+    "new_value": "80",
+    "notes": "Sale price",
+    "is_active": true,
+    "created_at": "2025-07-27T14:05:37",
+    "updated_at": "2025-07-27T14:05:37"
+  }
+]
+```
+
+#### 2. Get Available Override Fields
+
+**Use Case**: Frontend needs to know which fields can be overridden
+
+**API**: `GET /api/v1/product-overrides/fields`
+
+**Description**: Returns list of available fields that can be overridden
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8000/api/v1/product-overrides/fields" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+["price", "description", "stock", "availability"]
+```
+
+#### 3. Get Specific Product Override
+
+**Use Case**: Admin viewing details of a specific override
+
+**API**: `GET /api/v1/product-overrides/{override_id}`
+
+**Description**: Retrieves a specific product override by ID
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8000/api/v1/product-overrides/1" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "id": 1,
+  "produse_id": 1,
+  "field_name": "price",
+  "old_value": "100",
+  "new_value": "80",
+  "notes": "Sale price",
+  "is_active": true,
+  "created_at": "2025-07-27T14:05:37",
+  "updated_at": "2025-07-27T14:05:37"
+}
+```
+
+#### 4. Create Product Override
+
+**Use Case**: Admin creating a temporary override for a product
+
+**API**: `POST /api/v1/product-overrides`
+
+**Description**: Creates a new product override. Only one active override per product and field is allowed.
+
+**cURL Example**:
+```bash
+curl -X POST "http://localhost:8000/api/v1/product-overrides" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "produse_id": 1,
+    "field_name": "price",
+    "old_value": "100",
+    "new_value": "80",
+    "notes": "Sale price",
+    "is_active": true
+  }'
+```
+
+**Response Example**:
+```json
+{
+  "id": 1,
+  "produse_id": 1,
+  "field_name": "price",
+  "old_value": "100",
+  "new_value": "80",
+  "notes": "Sale price",
+  "is_active": true,
+  "created_at": "2025-07-27T14:05:37",
+  "updated_at": "2025-07-27T14:05:37"
+}
+```
+
+**Required Fields**:
+- `produse_id` (integer): ID of the product to override
+- `field_name` (string): Field to override ("price", "description", "stock", "availability")
+- `new_value` (string): New override value
+
+**Optional Fields**:
+- `old_value` (string): Original value for reference
+- `notes` (string): Optional notes about the override
+- `is_active` (boolean): Whether override is active (default: true)
+
+#### 5. Update Product Override
+
+**Use Case**: Admin modifying an existing override
+
+**API**: `PUT /api/v1/product-overrides/{override_id}`
+
+**Description**: Updates a product override. Only provided fields are updated.
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8000/api/v1/product-overrides/1" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "new_value": "75",
+    "notes": "Updated sale price"
+  }'
+```
+
+**Response Example**:
+```json
+{
+  "id": 1,
+  "produse_id": 1,
+  "field_name": "price",
+  "old_value": "100",
+  "new_value": "75",
+  "notes": "Updated sale price",
+  "is_active": true,
+  "created_at": "2025-07-27T14:05:37",
+  "updated_at": "2025-07-27T14:06:08"
+}
+```
+
+**Optional Fields** (all fields are optional for PUT):
+- `new_value` (string): New override value
+- `notes` (string): Optional notes about the override
+- `is_active` (boolean): Whether override is active
+
+#### 6. Delete Product Override
+
+**Use Case**: Admin removing an override
+
+**API**: `DELETE /api/v1/product-overrides/{override_id}`
+
+**Description**: Permanently deletes a product override
+
+**cURL Example**:
+```bash
+curl -X DELETE "http://localhost:8000/api/v1/product-overrides/1" \
+  -H "accept: application/json"
+```
+
+**Response**: HTTP 204 No Content (successful deletion)
+
+#### 7. Get Product with Overrides
+
+**Use Case**: Frontend displaying product with active overrides applied
+
+**API**: `GET /api/v1/product-overrides/product/{product_id}/with-overrides`
+
+**Description**: Returns product data with active overrides applied
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8000/api/v1/product-overrides/product/1/with-overrides" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "id": 1,
+  "nume": "Test Product",
+  "cantitate": 10,
+  "pret": 100,
+  "description": "Original description",
+  "category_id": 1,
+  "unitati_id": 1,
+  "stock": 5,
+  "overrides": {
+    "price": "80",
+    "description": "Only 5 left!"
+  }
+}
+```
+
+#### Error Handling Examples
+
+**404 Not Found**:
+```bash
+curl -X GET "http://localhost:8000/api/v1/product-overrides/999"
+# Response: 404 {"detail":"Product override with ID 999 not found"}
+```
+
+**Duplicate Active Override**:
+```bash
+curl -X POST "http://localhost:8000/api/v1/product-overrides" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "produse_id": 1,
+    "field_name": "price",
+    "new_value": "90",
+    "is_active": true
+  }'
+# Response: 400 {"detail":"Active override already exists for this product and field"}
+```
+
+**Invalid Field Name**:
+```bash
+curl -X POST "http://localhost:8000/api/v1/product-overrides" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "produse_id": 1,
+    "field_name": "invalid_field",
+    "new_value": "80"
+  }'
+# Response: 422 Validation error
+```
+
 ### Comenzi

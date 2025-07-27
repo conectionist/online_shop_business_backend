@@ -25,7 +25,7 @@ The following entities need to be implemented in order of dependency. Check them
 
 #### Level 2: Second-Level Dependencies
 - [ ] **Secondary Images** - (depends on `Products`)
-- [ ] **Temporary Products (Produse Temporare)** - (depends on `Products`)
+- [x] **Product Overrides (Product Overrides)** - (depends on `Products`) - Replaces "Temporary Products"
 - [ ] **Orders (Comenzi)** - (depends on `Lists`)
 
 ### Junction (Many-to-Many) Tables
@@ -64,6 +64,31 @@ The Lists entity has been fully implemented with many-to-many relationships to b
 **Implementation Details:**
 - Uses subpath endpoints following REST conventions
 - Comprehensive error handling (404, 400, 422)
+- Full integration test coverage
+- Complete documentation in frontend development guide
+- Follows existing project patterns and conventions
+
+#### Product Overrides (Product Overrides)
+
+The Product Overrides entity has been fully implemented, replacing the original "Temporary Products" concept with a more flexible and generic approach. This implementation includes:
+
+**Core CRUD Operations:**
+- ✅ GET `/api/v1/product-overrides/` - Get all overrides with filtering
+- ✅ GET `/api/v1/product-overrides/{id}` - Get specific override
+- ✅ POST `/api/v1/product-overrides/` - Create new override
+- ✅ PUT `/api/v1/product-overrides/{id}` - Update override
+- ✅ DELETE `/api/v1/product-overrides/{id}` - Delete override
+
+**Special Endpoints:**
+- ✅ GET `/api/v1/product-overrides/fields` - Get available override fields
+- ✅ GET `/api/v1/product-overrides/product/{id}/with-overrides` - Get product with active overrides applied
+
+**Implementation Details:**
+- Generic approach supporting multiple field types (price, description, stock, availability)
+- Prevents duplicate active overrides for same product and field
+- Includes optional notes field for documentation
+- Supports multiple simultaneous overrides per product
+- Comprehensive validation and error handling
 - Full integration test coverage
 - Complete documentation in frontend development guide
 - Follows existing project patterns and conventions

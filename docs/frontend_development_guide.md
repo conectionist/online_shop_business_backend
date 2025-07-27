@@ -1147,6 +1147,256 @@ curl -X POST "http://localhost:8001/api/v1/liste/" \
 # Response: 400 {"detail":"Invalid delivery schedule ID: 999"}
 ```
 
+#### 7. List Products Management
+
+**Use Case**: Manage products associated with a specific list
+
+**API**: `GET /api/v1/liste/{list_id}/products`
+
+**Description**: Retrieves all products associated with a specific list
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/liste/19/products" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+[
+  {
+    "id": 1,
+    "nume": "Apple",
+    "cantitate": 1,
+    "pret": 500,
+    "description": "Fresh apples",
+    "category_id": 2,
+    "unitati_id": 1,
+    "stock": 50,
+    "created_at": "2025-07-26T15:10:57",
+    "updated_at": "2025-07-26T15:10:57",
+    "is_deleted": false,
+    "images": []
+  }
+]
+```
+
+**API**: `POST /api/v1/liste/{list_id}/products/{product_id}`
+
+**Description**: Adds a product to a specific list
+
+**cURL Example**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/19/products/1" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "message": "Product 1 added to list 19 successfully",
+  "list_id": 19,
+  "product_id": 1
+}
+```
+
+**API**: `DELETE /api/v1/liste/{list_id}/products/{product_id}`
+
+**Description**: Removes a product from a specific list
+
+**cURL Example**:
+```bash
+curl -X DELETE "http://localhost:8001/api/v1/liste/19/products/1" \
+  -H "accept: application/json"
+```
+
+**Response**: 204 No Content
+
+**API**: `PUT /api/v1/liste/{list_id}/products`
+
+**Description**: Replaces all products in a list with the provided product IDs
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8001/api/v1/liste/19/products" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '[1, 2, 3]'
+```
+
+**Response Example**:
+```json
+[
+  {
+    "id": 1,
+    "nume": "Apple",
+    "cantitate": 1,
+    "pret": 500,
+    "description": "Fresh apples",
+    "category_id": 2,
+    "unitati_id": 1,
+    "stock": 50,
+    "created_at": "2025-07-26T15:10:57",
+    "updated_at": "2025-07-26T15:10:57",
+    "is_deleted": false,
+    "images": []
+  },
+  {
+    "id": 2,
+    "nume": "Banana",
+    "cantitate": 1,
+    "pret": 300,
+    "description": "Fresh bananas",
+    "category_id": 2,
+    "unitati_id": 1,
+    "stock": 30,
+    "created_at": "2025-07-26T15:10:57",
+    "updated_at": "2025-07-26T15:10:57",
+    "is_deleted": false,
+    "images": []
+  },
+  {
+    "id": 3,
+    "nume": "Milk",
+    "cantitate": 1,
+    "pret": 800,
+    "description": "Fresh milk",
+    "category_id": 4,
+    "unitati_id": 4,
+    "stock": 20,
+    "created_at": "2025-07-26T15:10:57",
+    "updated_at": "2025-07-26T15:10:57",
+    "is_deleted": false,
+    "images": []
+  }
+]
+```
+
+**Error Handling Examples**:
+
+**404 Not Found** (list doesn't exist):
+```bash
+curl -X GET "http://localhost:8001/api/v1/liste/999/products"
+# Response: 404 {"detail":"List with ID 999 not found"}
+```
+
+**404 Not Found** (product doesn't exist):
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/19/products/999"
+# Response: 404 {"detail":"Product with ID 999 not found"}
+```
+
+**400 Bad Request** (product already in list):
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/19/products/1"
+# Response: 400 {"detail":"Product 1 is already in list 19"}
+```
+
+#### 8. List Delivery Types Management
+
+**Use Case**: Manage delivery types associated with a specific list
+
+**API**: `GET /api/v1/liste/{list_id}/delivery-types`
+
+**Description**: Retrieves all delivery types associated with a specific list
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/liste/19/delivery-types" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+[
+  {
+    "id": 2,
+    "denumire": "Ridicare de la punct fix"
+  },
+  {
+    "id": 3,
+    "denumire": "Livrare la domiciliu"
+  }
+]
+```
+
+**API**: `POST /api/v1/liste/{list_id}/delivery-types/{delivery_type_id}`
+
+**Description**: Adds a delivery type to a specific list
+
+**cURL Example**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/19/delivery-types/2" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "message": "Delivery type 2 added to list 19 successfully",
+  "list_id": 19,
+  "delivery_type_id": 2
+}
+```
+
+**API**: `DELETE /api/v1/liste/{list_id}/delivery-types/{delivery_type_id}`
+
+**Description**: Removes a delivery type from a specific list
+
+**cURL Example**:
+```bash
+curl -X DELETE "http://localhost:8001/api/v1/liste/19/delivery-types/2" \
+  -H "accept: application/json"
+```
+
+**Response**: 204 No Content
+
+**API**: `PUT /api/v1/liste/{list_id}/delivery-types`
+
+**Description**: Replaces all delivery types in a list with the provided delivery type IDs
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8001/api/v1/liste/19/delivery-types" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '[2, 3]'
+```
+
+**Response Example**:
+```json
+[
+  {
+    "id": 2,
+    "denumire": "Ridicare de la punct fix"
+  },
+  {
+    "id": 3,
+    "denumire": "Livrare la domiciliu"
+  }
+]
+```
+
+**Error Handling Examples**:
+
+**404 Not Found** (list doesn't exist):
+```bash
+curl -X GET "http://localhost:8001/api/v1/liste/999/delivery-types"
+# Response: 404 {"detail":"List with ID 999 not found"}
+```
+
+**404 Not Found** (delivery type doesn't exist):
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/19/delivery-types/999"
+# Response: 404 {"detail":"Delivery type with ID 999 not found"}
+```
+
+**400 Bad Request** (delivery type already in list):
+```bash
+curl -X POST "http://localhost:8001/api/v1/liste/19/delivery-types/2"
+# Response: 400 {"detail":"Delivery type 2 is already in list 19"}
+```
+
 ### Unitati
 
 #### 1. Get All Units

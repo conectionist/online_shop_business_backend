@@ -33,9 +33,40 @@ The following entities need to be implemented in order of dependency. Check them
 These tables connect core entities and should be implemented after their dependencies are in place.
 
 - [ ] **Business Details <> Payment Methods** - (depends on `Business Details`, `Payment Methods`)
-- [ ] **Lists <> Delivery Types** - (depends on `Lists`, `Delivery Types`)
-- [ ] **Lists <> Products** - (depends on `Lists`, `Products`)
+- [x] **Lists <> Delivery Types** - (depends on `Lists`, `Delivery Types`)
+- [x] **Lists <> Products** - (depends on `Lists`, `Products`)
 - [ ] **Orders <> Products (Comenzi au Produse)** - (depends on `Orders`, `Products`, `Units`)
+
+### Special Implementation Notes
+
+#### Lists (Liste) with Many-to-Many Relationships
+
+The Lists entity has been fully implemented with many-to-many relationships to both Products and Delivery Types. This implementation includes:
+
+**Core CRUD Operations:**
+- ✅ GET `/api/v1/liste/` - Get all lists with pagination
+- ✅ GET `/api/v1/liste/{id}` - Get specific list
+- ✅ POST `/api/v1/liste/` - Create new list
+- ✅ PUT `/api/v1/liste/{id}` - Full update
+- ✅ PATCH `/api/v1/liste/{id}` - Partial update
+- ✅ DELETE `/api/v1/liste/{id}` - Soft/hard delete
+
+**Many-to-Many Relationship Endpoints:**
+- ✅ GET `/api/v1/liste/{id}/products` - Get all products in a list
+- ✅ POST `/api/v1/liste/{id}/products/{product_id}` - Add product to list
+- ✅ DELETE `/api/v1/liste/{id}/products/{product_id}` - Remove product from list
+- ✅ PUT `/api/v1/liste/{id}/products` - Replace all products in list
+- ✅ GET `/api/v1/liste/{id}/delivery-types` - Get all delivery types for a list
+- ✅ POST `/api/v1/liste/{id}/delivery-types/{delivery_type_id}` - Add delivery type to list
+- ✅ DELETE `/api/v1/liste/{id}/delivery-types/{delivery_type_id}` - Remove delivery type from list
+- ✅ PUT `/api/v1/liste/{id}/delivery-types` - Replace all delivery types in list
+
+**Implementation Details:**
+- Uses subpath endpoints following REST conventions
+- Comprehensive error handling (404, 400, 422)
+- Full integration test coverage
+- Complete documentation in frontend development guide
+- Follows existing project patterns and conventions
 
 ## Implementation Steps
 

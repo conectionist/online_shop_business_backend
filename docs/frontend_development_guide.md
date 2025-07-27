@@ -2877,4 +2877,100 @@ curl -X GET "http://localhost:8001/api/v1/liste/19/products" \
 ]
 ```
 
+### Payment Methods & Business Details Architecture
+
+**What is this?** The system has a simplified architecture for handling payment methods and business information. Payment methods are globally available, while business details contain contact information.
+
+**What is it for?** This architecture supports single-business setups where all payment methods are available to all customers, and business contact information is consistent across all lists.
+
+**Why do you need it?** When customers view a published list, they need to know:
+- What products are available (from the list)
+- How to contact the business (from business details)
+- What payment methods are accepted (from payment methods API)
+- What delivery options are available (from list-delivery-types)
+
+**How does it work?** 
+- **Payment Methods**: Globally available via `/api/v1/modalitati-plata`
+- **Business Details**: Contains contact info (address, phone, WhatsApp, etc.)
+- **Lists**: Contain products, delivery types, and business contact info
+- **No Direct Links**: Payment methods are not linked to specific lists or business details
+
+**Architecture Benefits:**
+- **Simplicity**: Payment methods are consistent across all lists
+- **Flexibility**: Easy to add/remove payment methods globally
+- **Single Source of Truth**: Business contact info in one place
+- **Future-Proof**: Can add business-specific filtering later if needed
+
+**Frontend Implementation:**
+When displaying a published list, combine data from multiple endpoints:
+
+1. **Get List Details**: `/api/v1/liste/{list_id}`
+2. **Get List Products**: `/api/v1/liste/{list_id}/products`
+3. **Get Business Details**: `/api/v1/detalii-business`
+4. **Get Payment Methods**: `/api/v1/modalitati-plata`
+5. **Get Delivery Types**: `/api/v1/liste/{list_id}/delivery-types`
+
+**Example Customer View:**
+```json
+{
+  "list": {
+    "id": 19,
+    "data": "2025-07-26",
+    "mesaj_introducere": "Fresh produce available today!",
+    "numar_whatsapp": "+40712345678"
+  },
+  "products": [
+    {
+      "id": 1,
+      "nume": "Fresh Apples",
+      "pret": 25,
+      "stoc_produs": 50
+    }
+  ],
+  "business_details": {
+    "adresa": "123 Main Street",
+    "telefon": "+40712345678",
+    "motto": "Fresh from our farm"
+  },
+  "payment_methods": [
+    {"id": 1, "denumire": "Cash"},
+    {"id": 2, "denumire": "Card"},
+    {"id": 3, "denumire": "Transfer Bancar"}
+  ],
+  "delivery_types": [
+    {"id": 1, "denumire": "Ridicare de la sediu"},
+    {"id": 3, "denumire": "Livrare la domiciliu"}
+  ]
+}
+```
+
+**API Usage Examples:**
+
+**Get all payment methods:**
+```bash
+curl -X GET "http://localhost:8001/api/v1/modalitati-plata" \
+  -H "accept: application/json"
+```
+
+**Get business details:**
+```bash
+curl -X GET "http://localhost:8001/api/v1/detalii-business" \
+  -H "accept: application/json"
+```
+
+**Get list with all related data:**
+```bash
+# Get list details
+curl -X GET "http://localhost:8001/api/v1/liste/19" \
+  -H "accept: application/json"
+
+# Get list products with stock
+curl -X GET "http://localhost:8001/api/v1/liste/19/products" \
+  -H "accept: application/json"
+
+# Get list delivery types
+curl -X GET "http://localhost:8001/api/v1/liste/19/delivery-types" \
+  -H "accept: application/json"
+```
+
 ### Lista

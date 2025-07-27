@@ -192,22 +192,30 @@ DEFAULT CHARACTER SET = utf8mb4;
 
 
 -- -----------------------------------------------------
--- Table `online_shop`.`produse_temporare`
+-- Table `online_shop`.`product_overrides`
 -- -----------------------------------------------------
-CREATE TABLE IF NOT EXISTS `online_shop`.`produse_temporare` (
+CREATE TABLE IF NOT EXISTS `online_shop`.`product_overrides` (
   `id` INT NOT NULL AUTO_INCREMENT,
-  `pret` SMALLINT NOT NULL,
-  `descriere` VARCHAR(500) NULL,
   `produse_id` INT NOT NULL,
-  PRIMARY KEY (`id`, `produse_id`),
+  `field_name` ENUM('price', 'description', 'stock', 'availability') NOT NULL,
+  `old_value` TEXT NULL,
+  `new_value` TEXT NOT NULL,
+  `notes` VARCHAR(500) NULL,
+  `is_active` BOOLEAN DEFAULT TRUE,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
   UNIQUE INDEX `id_UNIQUE` (`id` ASC),
-  INDEX `fk_produse_temporare_produse1_idx` (`produse_id` ASC),
-  CONSTRAINT `fk_produse_temporare_produse1`
+  INDEX `idx_product_active_override` (`produse_id`, `field_name`, `is_active`),
+  INDEX `fk_product_overrides_produse1_idx` (`produse_id` ASC),
+  CONSTRAINT `fk_product_overrides_produse1`
     FOREIGN KEY (`produse_id`)
     REFERENCES `online_shop`.`produse` (`id`)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION)
-ENGINE = InnoDB;
+    ON DELETE CASCADE
+    ON UPDATE CASCADE)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_0900_ai_ci;
 
 
 -- -----------------------------------------------------

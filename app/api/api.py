@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.endpoints import unitati, modalitati_plata, delivery_types, delivery_schedules, business_details, categories, system_config, products, product_images, lists, list_products, list_delivery_types
+from app.api.endpoints import unitati, modalitati_plata, delivery_types, delivery_schedules, business_details, categories, system_config, products, product_images, lists, list_products, list_delivery_types, product_overrides
 
 api_router = APIRouter()
 
@@ -60,4 +60,9 @@ api_router.include_router(
     list_delivery_types.router,
     prefix="/liste",
     tags=["list-delivery-types"]
+)
+api_router.include_router(
+    product_overrides.router,
+    prefix="/product-overrides",
+    tags=["product-overrides"]
 )

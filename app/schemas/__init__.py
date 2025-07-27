@@ -23,3 +23,11 @@ from app.schemas.list_delivery_type import (  # noqa: F401
     ListDeliveryTypeCreate,
     ListDeliveryTypeResponse,
 )
+
+from app.schemas.product_override import (  # noqa: F401
+    ProductOverride,
+    ProductOverrideCreate,
+    ProductOverrideUpdate,
+    ProductOverrideResponse,
+    FieldNameEnum,
+)

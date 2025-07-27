@@ -1147,6 +1147,981 @@ curl -X POST "http://localhost:8001/api/v1/liste/" \
 # Response: 400 {"detail":"Invalid delivery schedule ID: 999"}
 ```
 
+### Unitati
+
+#### 1. Get All Units
+
+**Use Case**: Display unit selection dropdown for product forms
+
+**API**: `GET /api/v1/unitati/`
+
+**Description**: Retrieves all available units for product measurements
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/unitati/" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+[
+  {
+    "denumire": "buc",
+    "id": 1
+  },
+  {
+    "denumire": "g",
+    "id": 2
+  },
+  {
+    "denumire": "kg",
+    "id": 3
+  },
+  {
+    "denumire": "l",
+    "id": 4
+  },
+  {
+    "denumire": "ml",
+    "id": 5
+  },
+  {
+    "denumire": "portii",
+    "id": 6
+  }
+]
+```
+
+**Common Use Cases**:
+- **Get all units for dropdown**: `GET /api/v1/unitati/`
+- **Display unit options in product forms**: Used when creating/editing products
+
+#### 2. Get Specific Unit
+
+**Use Case**: Display unit details or validate unit existence
+
+**API**: `GET /api/v1/unitati/{unit_id}`
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/unitati/1" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "buc",
+  "id": 1
+}
+```
+
+#### 3. Create New Unit
+
+**Use Case**: Admin adding new measurement units
+
+**API**: `POST /api/v1/unitati/`
+
+**cURL Example**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/unitati/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "pachet"}'
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "pachet",
+  "id": 15
+}
+```
+
+**Required Fields**:
+- `denumire` (string): Unit name/description (e.g., "kg", "l", "buc")
+
+#### 4. Update Unit (Full Replacement)
+
+**Use Case**: Admin completely replacing unit information
+
+**API**: `PUT /api/v1/unitati/{unit_id}`
+
+**Description**: Fully replaces a unit resource. The `denumire` field is required.
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8001/api/v1/unitati/15" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "pachet mare"}'
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "pachet mare",
+  "id": 15
+}
+```
+
+**Required Fields**:
+- `denumire` (string): Unit name/description
+
+#### 5. Partially Update Unit
+
+**Use Case**: Admin updating specific unit fields
+
+**API**: `PATCH /api/v1/unitati/{unit_id}`
+
+**Description**: Partially updates a unit resource. Only updates fields explicitly provided.
+
+**cURL Example**:
+```bash
+curl -X PATCH "http://localhost:8001/api/v1/unitati/15" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "pachet mic"}'
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "pachet mic",
+  "id": 15
+}
+```
+
+**Optional Fields** (all fields are optional for PATCH):
+- `denumire` (string): Unit name/description
+
+#### 6. Delete Unit
+
+**Use Case**: Admin removing units (hard delete)
+
+**API**: `DELETE /api/v1/unitati/{unit_id}`
+
+**Note**: Units are hard deleted (not soft deleted). Ensure no products are using the unit before deletion.
+
+**cURL Example**:
+```bash
+curl -X DELETE "http://localhost:8001/api/v1/unitati/15" \
+  -H "accept: application/json"
+```
+
+**Response**: HTTP 204 No Content (successful deletion)
+
+#### Error Handling Examples
+
+**404 Not Found**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/unitati/999"
+# Response: 404 {"detail":"Unit not found"}
+```
+
+**422 Validation Error** (missing required field):
+```bash
+curl -X POST "http://localhost:8001/api/v1/unitati/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+# Response: 422 {"detail":[{"type":"missing","loc":["body","denumire"],"msg":"Field required","input":{}}]}
+```
+
+**409 Conflict** (duplicate unit name):
+```bash
+curl -X POST "http://localhost:8001/api/v1/unitati/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "kg"}'
+# Response: 409 {"detail":"A unit with the name 'kg' already exists"}
+```
+
+### Tipuri Livrare
+
+#### 1. Get All Delivery Types
+
+**Use Case**: Display delivery type selection dropdown for lists and orders
+
+**API**: `GET /api/v1/tipuri-livrare/`
+
+**Description**: Retrieves all available delivery types with pagination support
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/tipuri-livrare/" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (with pagination):
+```bash
+curl -X GET "http://localhost:8001/api/v1/tipuri-livrare/?skip=0&limit=10" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+[
+  {
+    "denumire": "Livrare la domiciliu",
+    "id": 3
+  },
+  {
+    "denumire": "Ridicare de la punct fix",
+    "id": 2
+  },
+  {
+    "denumire": "Ridicare de la sediu",
+    "id": 1
+  }
+]
+```
+
+**Parameters**:
+- `skip` (integer, optional): Number of delivery types to skip for pagination (default: 0)
+- `limit` (integer, optional): Maximum number of delivery types to return (default: 100, max: 100)
+
+**Common Use Cases**:
+- **Get all delivery types for dropdown**: `GET /api/v1/tipuri-livrare/`
+- **Display delivery options in list forms**: Used when creating/editing lists
+- **Filter delivery types with pagination**: `GET /api/v1/tipuri-livrare/?skip=0&limit=10`
+
+#### 2. Get Specific Delivery Type
+
+**Use Case**: Display delivery type details or validate delivery type existence
+
+**API**: `GET /api/v1/tipuri-livrare/{delivery_type_id}`
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/tipuri-livrare/1" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "Ridicare de la sediu",
+  "id": 1
+}
+```
+
+#### 3. Create New Delivery Type
+
+**Use Case**: Admin adding new delivery options
+
+**API**: `POST /api/v1/tipuri-livrare/`
+
+**cURL Example**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/tipuri-livrare/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "Livrare express"}'
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "Livrare express",
+  "id": 15
+}
+```
+
+**Required Fields**:
+- `denumire` (string): Delivery type name/description (e.g., "Livrare la domiciliu", "Ridicare de la sediu")
+
+#### 4. Update Delivery Type (Full Replacement)
+
+**Use Case**: Admin completely replacing delivery type information
+
+**API**: `PUT /api/v1/tipuri-livrare/{delivery_type_id}`
+
+**Description**: Fully replaces a delivery type resource. The `denumire` field is required.
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8001/api/v1/tipuri-livrare/15" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "Livrare rapida"}'
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "Livrare rapida",
+  "id": 15
+}
+```
+
+**Required Fields**:
+- `denumire` (string): Delivery type name/description
+
+#### 5. Partially Update Delivery Type
+
+**Use Case**: Admin updating specific delivery type fields
+
+**API**: `PATCH /api/v1/tipuri-livrare/{delivery_type_id}`
+
+**Description**: Partially updates a delivery type resource. Only updates fields explicitly provided.
+
+**cURL Example**:
+```bash
+curl -X PATCH "http://localhost:8001/api/v1/tipuri-livrare/15" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "Livrare super rapida"}'
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "Livrare super rapida",
+  "id": 15
+}
+```
+
+**Optional Fields** (all fields are optional for PATCH):
+- `denumire` (string): Delivery type name/description
+
+#### 6. Delete Delivery Type
+
+**Use Case**: Admin removing delivery types (hard delete)
+
+**API**: `DELETE /api/v1/tipuri-livrare/{delivery_type_id}`
+
+**Note**: Delivery types are hard deleted (not soft deleted). Ensure no lists or orders are using the delivery type before deletion.
+
+**cURL Example**:
+```bash
+curl -X DELETE "http://localhost:8001/api/v1/tipuri-livrare/15" \
+  -H "accept: application/json"
+```
+
+**Response**: HTTP 204 No Content (successful deletion)
+
+#### Error Handling Examples
+
+**404 Not Found**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/tipuri-livrare/999"
+# Response: 404 {"detail":"Delivery type with ID 999 not found"}
+```
+
+**422 Validation Error** (missing required field):
+```bash
+curl -X POST "http://localhost:8001/api/v1/tipuri-livrare/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+# Response: 422 {"detail":[{"type":"missing","loc":["body","denumire"],"msg":"Field required","input":{}}]}
+```
+
+**400 Bad Request** (duplicate delivery type name):
+```bash
+curl -X POST "http://localhost:8001/api/v1/tipuri-livrare/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "Ridicare de la sediu"}'
+# Response: 400 {"detail":"A delivery type with the name 'Ridicare de la sediu' already exists"}
+```
+
+### Modalitati Plata
+
+#### 1. Get All Payment Methods
+
+**Use Case**: Display payment method selection dropdown for lists and orders
+
+**API**: `GET /api/v1/modalitati-plata/`
+
+**Description**: Retrieves all available payment methods with pagination support
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/modalitati-plata/" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (with pagination):
+```bash
+curl -X GET "http://localhost:8001/api/v1/modalitati-plata/?skip=0&limit=2" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+[
+  {
+    "denumire": "Card",
+    "id": 6
+  },
+  {
+    "denumire": "Cash",
+    "id": 5
+  },
+  {
+    "denumire": "Transfer Bancar",
+    "id": 7
+  },
+  {
+    "denumire": "Transfer Revolut",
+    "id": 8
+  }
+]
+```
+
+**Parameters**:
+- `skip` (integer, optional): Number of payment methods to skip for pagination (default: 0)
+- `limit` (integer, optional): Maximum number of payment methods to return (default: 100, max: 100)
+
+**Common Use Cases**:
+- **Get all payment methods for dropdown**: `GET /api/v1/modalitati-plata/`
+- **Display payment options in list forms**: Used when creating/editing lists
+- **Filter payment methods with pagination**: `GET /api/v1/modalitati-plata/?skip=0&limit=2`
+
+#### 2. Get Specific Payment Method
+
+**Use Case**: Display payment method details or validate payment method existence
+
+**API**: `GET /api/v1/modalitati-plata/{payment_method_id}`
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/modalitati-plata/5" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "Cash",
+  "id": 5
+}
+```
+
+#### 3. Create New Payment Method
+
+**Use Case**: Admin adding new payment options
+
+**API**: `POST /api/v1/modalitati-plata/`
+
+**cURL Example**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/modalitati-plata/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "PayPal"}'
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "PayPal",
+  "id": 20
+}
+```
+
+**Required Fields**:
+- `denumire` (string): Payment method name/description (e.g., "Cash", "Card", "Transfer Bancar")
+
+#### 4. Update Payment Method (Full Replacement)
+
+**Use Case**: Admin completely replacing payment method information
+
+**API**: `PUT /api/v1/modalitati-plata/{payment_method_id}`
+
+**Description**: Fully replaces a payment method resource. The `denumire` field is required.
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8001/api/v1/modalitati-plata/20" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "PayPal Express"}'
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "PayPal Express",
+  "id": 20
+}
+```
+
+**Required Fields**:
+- `denumire` (string): Payment method name/description
+
+#### 5. Partially Update Payment Method
+
+**Use Case**: Admin updating specific payment method fields
+
+**API**: `PATCH /api/v1/modalitati-plata/{payment_method_id}`
+
+**Description**: Partially updates a payment method resource. Only updates fields explicitly provided.
+
+**cURL Example**:
+```bash
+curl -X PATCH "http://localhost:8001/api/v1/modalitati-plata/20" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "PayPal Standard"}'
+```
+
+**Response Example**:
+```json
+{
+  "denumire": "PayPal Standard",
+  "id": 20
+}
+```
+
+**Optional Fields** (all fields are optional for PATCH):
+- `denumire` (string): Payment method name/description
+
+#### 6. Delete Payment Method
+
+**Use Case**: Admin removing payment methods (hard delete)
+
+**API**: `DELETE /api/v1/modalitati-plata/{payment_method_id}`
+
+**Note**: Payment methods are hard deleted (not soft deleted). Ensure no lists or orders are using the payment method before deletion.
+
+**cURL Example**:
+```bash
+curl -X DELETE "http://localhost:8001/api/v1/modalitati-plata/20" \
+  -H "accept: application/json"
+```
+
+**Response**: HTTP 204 No Content (successful deletion)
+
+#### Error Handling Examples
+
+**404 Not Found**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/modalitati-plata/999"
+# Response: 404 {"detail":"Payment method not found"}
+```
+
+**422 Validation Error** (missing required field):
+```bash
+curl -X POST "http://localhost:8001/api/v1/modalitati-plata/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+# Response: 422 {"detail":[{"type":"missing","loc":["body","denumire"],"msg":"Field required","input":{}}]}
+```
+
+**400 Bad Request** (duplicate payment method name):
+```bash
+curl -X POST "http://localhost:8001/api/v1/modalitati-plata/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"denumire": "Cash"}'
+# Response: 400 {"detail":"A payment method with the name 'Cash' already exists"}
+```
+
+### Orare Livrari
+
+#### 1. Get All Delivery Schedules
+
+**Use Case**: Display delivery schedule selection dropdown for lists
+
+**API**: `GET /api/v1/orare-livrari/`
+
+**Description**: Retrieves all available delivery schedules with pagination support
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/orare-livrari/" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (with pagination):
+```bash
+curl -X GET "http://localhost:8001/api/v1/orare-livrari/?skip=0&limit=3" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+[
+  {
+    "orar_livrari": "Luni-Vineri 9:00-18:00",
+    "id": 8
+  },
+  {
+    "orar_livrari": "Marti si Vineri 9:00-18:00",
+    "id": 9
+  },
+  {
+    "orar_livrari": "Weekend 10:00-14:00",
+    "id": 10
+  }
+]
+```
+
+**Parameters**:
+- `skip` (integer, optional): Number of delivery schedules to skip for pagination (default: 0)
+- `limit` (integer, optional): Maximum number of delivery schedules to return (default: 100, max: 100)
+
+**Common Use Cases**:
+- **Get all delivery schedules for dropdown**: `GET /api/v1/orare-livrari/`
+- **Display delivery schedule options in list forms**: Used when creating/editing lists
+- **Filter delivery schedules with pagination**: `GET /api/v1/orare-livrari/?skip=0&limit=3`
+
+#### 2. Get Specific Delivery Schedule
+
+**Use Case**: Display delivery schedule details or validate delivery schedule existence
+
+**API**: `GET /api/v1/orare-livrari/{delivery_schedule_id}`
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/orare-livrari/8" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "orar_livrari": "Luni-Vineri 9:00-18:00",
+  "id": 8
+}
+```
+
+#### 3. Create New Delivery Schedule
+
+**Use Case**: Admin adding new delivery schedule options
+
+**API**: `POST /api/v1/orare-livrari/`
+
+**cURL Example**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/orare-livrari/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"orar_livrari": "Luni-Vineri 9:00-18:00"}'
+```
+
+**Response Example**:
+```json
+{
+  "orar_livrari": "Luni-Vineri 9:00-18:00",
+  "id": 22
+}
+```
+
+**Required Fields**:
+- `orar_livrari` (string): Delivery schedule description (e.g., "Luni-Vineri 9:00-18:00", "Weekend 10:00-16:00")
+
+#### 4. Update Delivery Schedule (Full Replacement)
+
+**Use Case**: Admin completely replacing delivery schedule information
+
+**API**: `PUT /api/v1/orare-livrari/{delivery_schedule_id}`
+
+**Description**: Fully replaces a delivery schedule resource. The `orar_livrari` field is required.
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8001/api/v1/orare-livrari/22" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"orar_livrari": "Luni-Vineri 8:00-17:00"}'
+```
+
+**Response Example**:
+```json
+{
+  "orar_livrari": "Luni-Vineri 8:00-17:00",
+  "id": 22
+}
+```
+
+**Required Fields**:
+- `orar_livrari` (string): Delivery schedule description
+
+#### 5. Partially Update Delivery Schedule
+
+**Use Case**: Admin updating specific delivery schedule fields
+
+**API**: `PATCH /api/v1/orare-livrari/{delivery_schedule_id}`
+
+**Description**: Partially updates a delivery schedule resource. Only updates fields explicitly provided.
+
+**cURL Example**:
+```bash
+curl -X PATCH "http://localhost:8001/api/v1/orare-livrari/22" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"orar_livrari": "Luni-Vineri 10:00-19:00"}'
+```
+
+**Response Example**:
+```json
+{
+  "orar_livrari": "Luni-Vineri 10:00-19:00",
+  "id": 22
+}
+```
+
+**Optional Fields** (all fields are optional for PATCH):
+- `orar_livrari` (string): Delivery schedule description
+
+#### 6. Delete Delivery Schedule
+
+**Use Case**: Admin removing delivery schedules (hard delete)
+
+**API**: `DELETE /api/v1/orare-livrari/{delivery_schedule_id}`
+
+**Note**: Delivery schedules are hard deleted (not soft deleted). Ensure no lists are using the delivery schedule before deletion.
+
+**cURL Example**:
+```bash
+curl -X DELETE "http://localhost:8001/api/v1/orare-livrari/22" \
+  -H "accept: application/json"
+```
+
+**Response**: HTTP 204 No Content (successful deletion)
+
+#### Error Handling Examples
+
+**404 Not Found**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/orare-livrari/999"
+# Response: 404 {"detail":"Delivery schedule with ID 999 not found"}
+```
+
+**422 Validation Error** (missing required field):
+```bash
+curl -X POST "http://localhost:8001/api/v1/orare-livrari/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+# Response: 422 {"detail":[{"type":"missing","loc":["body","orar_livrari"],"msg":"Field required","input":{}}]}
+```
+
+### Detalii Business
+
+#### 1. Get All Business Details
+
+**Use Case**: Display business information or manage business settings
+
+**API**: `GET /api/v1/detalii-business/`
+
+**Description**: Retrieves all business details entries with pagination support
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/detalii-business/" \
+  -H "accept: application/json"
+```
+
+**cURL Example** (with pagination):
+```bash
+curl -X GET "http://localhost:8001/api/v1/detalii-business/?skip=0&limit=2" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+[
+  {
+    "adresa": "Strada Test 123",
+    "telefon": "+40712345678",
+    "logo_path": null,
+    "motto": null,
+    "list_not_available_msg": null,
+    "alte_detalii": null,
+    "id": 10
+  }
+]
+```
+
+**Parameters**:
+- `skip` (integer, optional): Number of business details to skip for pagination (default: 0)
+- `limit` (integer, optional): Maximum number of business details to return (default: 100, max: 100)
+
+**Common Use Cases**:
+- **Get all business details**: `GET /api/v1/detalii-business/`
+- **Display business information**: Used for contact details, about page
+- **Filter business details with pagination**: `GET /api/v1/detalii-business/?skip=0&limit=2`
+
+#### 2. Get Specific Business Details
+
+**Use Case**: Display specific business details entry or validate existence
+
+**API**: `GET /api/v1/detalii-business/{business_details_id}`
+
+**cURL Example**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/detalii-business/10" \
+  -H "accept: application/json"
+```
+
+**Response Example**:
+```json
+{
+  "adresa": "Strada Test 123",
+  "telefon": "+40712345678",
+  "logo_path": null,
+  "motto": null,
+  "list_not_available_msg": null,
+  "alte_detalii": null,
+  "id": 10
+}
+```
+
+#### 3. Create New Business Details
+
+**Use Case**: Admin adding new business information
+
+**API**: `POST /api/v1/detalii-business/`
+
+**cURL Example**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/detalii-business/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "adresa": "Strada Test 123",
+    "telefon": "+40712345678",
+    "motto": "Calitate si pret bun",
+    "alte_detalii": "Livrare gratuita pentru comenzi peste 100 lei"
+  }'
+```
+
+**Response Example**:
+```json
+{
+  "adresa": "Strada Test 123",
+  "telefon": "+40712345678",
+  "logo_path": null,
+  "motto": "Calitate si pret bun",
+  "alte_detalii": "Livrare gratuita pentru comenzi peste 100 lei",
+  "id": 10
+}
+```
+
+**Optional Fields** (all fields are optional):
+- `adresa` (string): Business address
+- `telefon` (string): Business phone number
+- `logo_path` (string): Path to business logo image
+- `motto` (string): Business motto or tagline
+- `list_not_available_msg` (string): Message to display when lists are not available
+- `alte_detalii` (string): Additional business details
+
+#### 4. Update Business Details (Full Replacement)
+
+**Use Case**: Admin completely replacing business information
+
+**API**: `PUT /api/v1/detalii-business/{business_details_id}`
+
+**Description**: Fully replaces a business details resource. All fields are optional for PUT operations.
+
+**cURL Example**:
+```bash
+curl -X PUT "http://localhost:8001/api/v1/detalii-business/10" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "adresa": "Strada Noua 456",
+    "telefon": "+40787654321",
+    "motto": "Calitate si pret bun"
+  }'
+```
+
+**Response Example**:
+```json
+{
+  "adresa": "Strada Noua 456",
+  "telefon": "+40787654321",
+  "logo_path": null,
+  "motto": "Calitate si pret bun",
+  "list_not_available_msg": null,
+  "alte_detalii": null,
+  "id": 10
+}
+```
+
+**Optional Fields** (all fields are optional for PUT):
+- `adresa` (string): Business address
+- `telefon` (string): Business phone number
+- `logo_path` (string): Path to business logo image
+- `motto` (string): Business motto or tagline
+- `list_not_available_msg` (string): Message to display when lists are not available
+- `alte_detalii` (string): Additional business details
+
+#### 5. Partially Update Business Details
+
+**Use Case**: Admin updating specific business fields
+
+**API**: `PATCH /api/v1/detalii-business/{business_details_id}`
+
+**Description**: Partially updates a business details resource. Only updates fields explicitly provided.
+
+**cURL Example**:
+```bash
+curl -X PATCH "http://localhost:8001/api/v1/detalii-business/10" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"alte_detalii": "Livrare gratuita pentru comenzi peste 100 lei"}'
+```
+
+**Response Example**:
+```json
+{
+  "adresa": "Strada Noua 456",
+  "telefon": "+40787654321",
+  "logo_path": null,
+  "motto": "Calitate si pret bun",
+  "list_not_available_msg": null,
+  "alte_detalii": "Livrare gratuita pentru comenzi peste 100 lei",
+  "id": 10
+}
+```
+
+**Optional Fields** (all fields are optional for PATCH):
+- `adresa` (string): Business address
+- `telefon` (string): Business phone number
+- `logo_path` (string): Path to business logo image
+- `motto` (string): Business motto or tagline
+- `list_not_available_msg` (string): Message to display when lists are not available
+- `alte_detalii` (string): Additional business details
+
+#### 6. Delete Business Details
+
+**Use Case**: Admin removing business details entries (hard delete)
+
+**API**: `DELETE /api/v1/detalii-business/{business_details_id}`
+
+**Note**: Business details are hard deleted (not soft deleted).
+
+**cURL Example**:
+```bash
+curl -X DELETE "http://localhost:8001/api/v1/detalii-business/10" \
+  -H "accept: application/json"
+```
+
+**Response**: HTTP 204 No Content (successful deletion)
+
+#### Error Handling Examples
+
+**404 Not Found**:
+```bash
+curl -X GET "http://localhost:8001/api/v1/detalii-business/999"
+# Response: 404 {"detail":"Business details with ID 999 not found"}
+```
+
+**Empty Business Details Creation**:
+```bash
+curl -X POST "http://localhost:8001/api/v1/detalii-business/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+# Response: 200 (creates business details with all null fields)
+```
+
 ### Comenzi
-
-

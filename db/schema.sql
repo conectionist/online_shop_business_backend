@@ -290,28 +290,6 @@ ENGINE = InnoDB;
 
 
 -- -----------------------------------------------------
--- Table `online_shop`.`business_details_has_modalitati_de_plata`
--- -----------------------------------------------------
-CREATE TABLE IF NOT EXISTS `online_shop`.`business_details_has_modalitati_de_plata` (
-  `business_details_id` TINYINT NOT NULL,
-  `modalitati_de_plata_id` INT NOT NULL,
-  PRIMARY KEY (`business_details_id`, `modalitati_de_plata_id`),
-  INDEX `fk_business_details_has_modalitati_de_plata_modalitati_de_p_idx` (`modalitati_de_plata_id` ASC),
-  INDEX `fk_business_details_has_modalitati_de_plata_business_detail_idx` (`business_details_id` ASC),
-  CONSTRAINT `fk_business_details_has_modalitati_de_plata_business_details1`
-    FOREIGN KEY (`business_details_id`)
-    REFERENCES `online_shop`.`business_details` (`id`)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION,
-  CONSTRAINT `fk_business_details_has_modalitati_de_plata_modalitati_de_pla1`
-    FOREIGN KEY (`modalitati_de_plata_id`)
-    REFERENCES `online_shop`.`modalitati_de_plata` (`id`)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION)
-ENGINE = InnoDB;
-
-
--- -----------------------------------------------------
 -- Table `online_shop`.`admins`
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `online_shop`.`admins` (

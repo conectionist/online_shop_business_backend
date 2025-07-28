@@ -1,9 +1,10 @@
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.core.config import API_VERSION, API_TITLE, API_DESCRIPTION
+from app.core.config import API_VERSION, API_TITLE, API_DESCRIPTION, settings
 from app.core.database import get_db
 from app.api.api import api_router
 from app.api.endpoints.system_config import mount_static_files
@@ -12,6 +13,15 @@ app = FastAPI(
     title=API_TITLE,
     description=API_DESCRIPTION,
     version=API_VERSION
+)
+
+# Set up CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include API router

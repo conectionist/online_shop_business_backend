@@ -38,6 +38,9 @@ services:
       - DB_NAME=${TEST_MYSQL_DATABASE}
       - ENVIRONMENT=test
       - UPLOAD_FOLDER=/app/uploads
+      # CORS Configuration
+      # Set your production domains here or override in .env file
+      - CORS_ORIGINS=${CORS_ORIGINS}
     depends_on:
       mysql_test:
         condition: service_healthy

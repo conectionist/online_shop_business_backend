@@ -40,15 +40,16 @@ from fastapi import FastAPI
 # This function should be called from main.py to mount the static files
 def mount_static_files(app: FastAPI):
     """
-    Mount the static files directory for serving placeholder images.
+    Mount the static files directory for serving placeholder images and uploads.
     This function should be called from main.py after creating the FastAPI app.
     """
-    # The physical directory where files are stored
-    directory = "/app/config/placeholders"
+    # Mount placeholders
+    placeholder_directory = "/app/config/placeholders"
+    placeholder_url_path = "/api/v1/static/placeholders"
+    app.mount(placeholder_url_path, StaticFiles(directory=placeholder_directory), name="placeholders")
     
-    # The URL path where they will be served
-    url_path = "/api/v1/static/placeholders"
-    
-    # Mount the directory to the URL path
-    app.mount(url_path, StaticFiles(directory=directory), name="placeholders")
+    # Mount uploads
+    uploads_directory = "/app/uploads"
+    uploads_url_path = "/api/v1/static/uploads"
+    app.mount(uploads_url_path, StaticFiles(directory=uploads_directory), name="uploads")
 

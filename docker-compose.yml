@@ -20,7 +20,7 @@ services:
     depends_on:
       - db
     volumes:
-      - uploads_data:/app/uploads
+      - ./uploads:/app/uploads
       - ./config/placeholders:/app/config/placeholders
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]

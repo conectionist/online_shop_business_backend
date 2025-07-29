@@ -57,7 +57,23 @@ class ProductImage(ProductImageBase):
         # Extract the image ID from the path (last part of the path)
         image_id = os.path.basename(self.path)
         
-        # Return paths for all versions
+        # Detect the actual file extension by checking what files exist
+        from app.core.file_upload import get_upload_dir
+        
+        full_path = os.path.join(get_upload_dir(), self.path)
+        if os.path.exists(full_path):
+            # Check for common extensions
+            for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+                original_file = os.path.join(full_path, f"{image_id}{ext}")
+                if os.path.exists(original_file):
+                    # Found the actual extension, use it for all versions
+                    return {
+                        "original": f"{self.path}/{image_id}{ext}",
+                        "medium": f"{self.path}/{image_id}-medium{ext}",
+                        "thumbnail": f"{self.path}/{image_id}-thumbnail{ext}"
+                    }
+        
+        # Fallback to jpg if no files found
         return {
             "original": f"{self.path}/{image_id}.jpg",
             "medium": f"{self.path}/{image_id}-medium.jpg",

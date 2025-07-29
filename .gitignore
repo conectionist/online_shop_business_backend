@@ -65,3 +65,6 @@ Thumbs.db
 
 # Test reports
 test-reports/
+
+# Uploads folder
+uploads/

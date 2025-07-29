@@ -393,7 +393,7 @@ def update_product_endpoint(
     product_id: int,
     nume: Optional[str] = Form(None),
     cantitate: Optional[int] = Form(None),
-    pret: Optional[float] = Form(None),
+    pret: Optional[int] = Form(None),
     description: Optional[str] = Form(None),
     category_id: Optional[int] = Form(None),
     unitati_id: Optional[int] = Form(None),
@@ -490,7 +490,8 @@ def update_product_endpoint(
         if pret is not None:
             update_dict["pret"] = pret
         if description is not None:
-            update_dict["description"] = description
+            # Convert empty string to None to pass validation
+            update_dict["description"] = description if description.strip() != "" else None
         if category_id is not None:
             update_dict["category_id"] = category_id
         if unitati_id is not None:

@@ -177,7 +177,7 @@ def create_product(db: Session, product: ProductCreate) -> Product:
                     existing_product.is_deleted = False
                     existing_product.cantitate = product.cantitate
                     existing_product.pret = product.pret
-                    existing_product.description = product.description or ""
+                    existing_product.description = product.description
                     # primary_image_path removed - images are now managed through product_images relationship
                     existing_product.category_id = product.category_id
                     existing_product.unitati_id = product.unitati_id
@@ -212,7 +212,7 @@ def create_product(db: Session, product: ProductCreate) -> Product:
             nume=str(product.nume),
             cantitate=product.cantitate,
             pret=product.pret,
-            description=product.description or "",
+            description=product.description,
             # primary_image_path removed - images are now managed through product_images relationship
             category_id=product.category_id,
             unitati_id=product.unitati_id,

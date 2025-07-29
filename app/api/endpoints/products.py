@@ -310,7 +310,7 @@ def create_product_endpoint(
             nume=nume_str,
             cantitate=cantitate_val,
             pret=pret_val,
-            description=description or "",
+            description=description,  # Pass None directly, don't convert to empty string
             category_id=category_id_val,
             unitati_id=unitati_id_val
         )

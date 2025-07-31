@@ -5,19 +5,26 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 class ModalitatePlataBase(BaseModel):
     """Base schema for payment method attributes"""
-    denumire: Annotated[str, Field(
-        description="The name of the payment method", 
+    name: Annotated[str, Field(
+        description="The internal name of the payment method", 
         min_length=1, 
-        max_length=45,
+        max_length=20,
+        examples=["card", "cash", "transfer"]
+    )]
+    
+    description: Annotated[str, Field(
+        description="The display description of the payment method", 
+        min_length=1, 
+        max_length=100,
         examples=["Card", "Numerar la livrare", "Transfer Bancar"]
     )]
     
-    @field_validator('denumire')
+    @field_validator('name', 'description')
     @classmethod
-    def validate_denumire(cls, v):
+    def validate_not_empty(cls, v):
         if v is not None and v.strip() == "":
-            raise ValueError("denumire cannot be empty or just whitespace")
-        return v
+            raise ValueError("Field cannot be empty or just whitespace")
+        return v.strip() if v is not None else v
 
 
 class ModalitatePlataCreate(ModalitatePlataBase):
@@ -27,12 +34,26 @@ class ModalitatePlataCreate(ModalitatePlataBase):
 
 class ModalitatePlataUpdate(BaseModel):
     """Schema for updating an existing payment method"""
-    denumire: Optional[str] = Field(
+    name: Optional[str] = Field(
         None, 
-        description="The name of the payment method", 
+        description="The internal name of the payment method", 
         min_length=1, 
-        max_length=45
+        max_length=20
     )
+    
+    description: Optional[str] = Field(
+        None, 
+        description="The display description of the payment method", 
+        min_length=1, 
+        max_length=100
+    )
+    
+    @field_validator('name', 'description')
+    @classmethod
+    def validate_not_empty(cls, v):
+        if v is not None and v.strip() == "":
+            raise ValueError("Field cannot be empty or just whitespace")
+        return v.strip() if v is not None else v
 
 
 class ModalitatePlata(ModalitatePlataBase):

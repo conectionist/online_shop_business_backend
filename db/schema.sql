@@ -169,10 +169,11 @@ DEFAULT CHARACTER SET = utf8mb4;
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `online_shop`.`modalitati_de_plata` (
   `id` INT NOT NULL AUTO_INCREMENT,
-  `denumire` VARCHAR(45) NOT NULL,
+  `name` VARCHAR(20) NOT NULL,
+  `description` VARCHAR(100) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE INDEX `id_UNIQUE` (`id` ASC),
-  UNIQUE INDEX `modalitati_UNIQUE` (`denumire` ASC))
+  UNIQUE INDEX `name_UNIQUE` (`name` ASC))
 ENGINE = InnoDB
 AUTO_INCREMENT = 5
 DEFAULT CHARACTER SET = utf8mb4;
@@ -373,10 +374,10 @@ COMMIT;
 -- -----------------------------------------------------
 START TRANSACTION;
 USE `online_shop`;
-INSERT INTO `online_shop`.`modalitati_de_plata` (`id`, `denumire`) VALUES (DEFAULT, 'Cash');
-INSERT INTO `online_shop`.`modalitati_de_plata` (`id`, `denumire`) VALUES (DEFAULT, 'Card');
-INSERT INTO `online_shop`.`modalitati_de_plata` (`id`, `denumire`) VALUES (DEFAULT, 'Transfer Bancar');
-INSERT INTO `online_shop`.`modalitati_de_plata` (`id`, `denumire`) VALUES (DEFAULT, 'Transfer Revolut');
+INSERT INTO `online_shop`.`modalitati_de_plata` (`id`, `name`, `description`) VALUES (DEFAULT, 'cash', 'Cash');
+INSERT INTO `online_shop`.`modalitati_de_plata` (`id`, `name`, `description`) VALUES (DEFAULT, 'card', 'Card');
+INSERT INTO `online_shop`.`modalitati_de_plata` (`id`, `name`, `description`) VALUES (DEFAULT, 'transfer_bancar', 'Transfer Bancar');
+INSERT INTO `online_shop`.`modalitati_de_plata` (`id`, `name`, `description`) VALUES (DEFAULT, 'transfer_revolut', 'Transfer Revolut');
 
 COMMIT;
 

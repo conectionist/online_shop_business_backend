@@ -36,16 +36,16 @@ def get_modalitate_plata_by_id(db: Session, modalitate_id: int) -> Optional[Moda
         )
 
 
-def get_modalitate_plata_by_denumire(db: Session, denumire: str) -> Optional[ModalitatiPlata]:
-    """Get a specific payment method by name"""
-    if not denumire or denumire.strip() == "":
+def get_modalitate_plata_by_name(db: Session, name: str) -> Optional[ModalitatiPlata]:
+    """Get a specific payment method by internal name"""
+    if not name or name.strip() == "":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Payment method name cannot be empty"
         )
         
     try:
-        return db.query(ModalitatiPlata).filter(ModalitatiPlata.denumire == denumire).first()
+        return db.query(ModalitatiPlata).filter(ModalitatiPlata.name == name).first()
     except SQLAlchemyError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -55,22 +55,22 @@ def get_modalitate_plata_by_denumire(db: Session, denumire: str) -> Optional[Mod
 
 def create_modalitate_plata(db: Session, modalitate: ModalitatePlataCreate) -> ModalitatiPlata:
     """Create a new payment method"""
-    if not modalitate.denumire or modalitate.denumire.strip() == "":
+    if not modalitate.name or modalitate.name.strip() == "":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Payment method name cannot be empty"
         )
         
     # Check if a payment method with this name already exists
-    existing = get_modalitate_plata_by_denumire(db, modalitate.denumire)
+    existing = get_modalitate_plata_by_name(db, modalitate.name)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"A payment method with the name '{modalitate.denumire}' already exists"
+            detail=f"A payment method with the name '{modalitate.name}' already exists"
         )
         
     try:
-        db_modalitate = ModalitatiPlata(denumire=modalitate.denumire)
+        db_modalitate = ModalitatiPlata(name=modalitate.name, description=modalitate.description)
         db.add(db_modalitate)
         db.commit()
         db.refresh(db_modalitate)
@@ -79,7 +79,7 @@ def create_modalitate_plata(db: Session, modalitate: ModalitatePlataCreate) -> M
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"A payment method with the name '{modalitate.denumire}' already exists"
+            detail=f"A payment method with the name '{modalitate.name}' already exists"
         )
     except SQLAlchemyError as e:
         db.rollback()
@@ -108,13 +108,20 @@ def update_modalitate_plata(
             
         update_data = modalitate.model_dump(exclude_unset=True)
         
-        # If denumire is being updated, check for duplicates
-        if "denumire" in update_data and update_data["denumire"]:
-            existing = get_modalitate_plata_by_denumire(db, update_data["denumire"])
+        # Check if there are any fields to update
+        if not update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid fields to update"
+            )
+        
+        # If name is being updated, check for duplicates
+        if "name" in update_data and update_data["name"]:
+            existing = get_modalitate_plata_by_name(db, update_data["name"])
             if existing and existing.id != modalitate_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"A payment method with the name '{update_data['denumire']}' already exists"
+                    detail=f"A payment method with the name '{update_data['name']}' already exists"
                 )
         
         for field, value in update_data.items():

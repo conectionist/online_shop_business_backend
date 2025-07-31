@@ -183,7 +183,7 @@ DEFAULT CHARACTER SET = utf8mb4;
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `online_shop`.`tipuri_livrare` (
   `id` TINYINT NOT NULL AUTO_INCREMENT,
-  `denumire` VARCHAR(45) NOT NULL,
+  `denumire` VARCHAR(100) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE INDEX `id_UNIQUE` (`id` ASC),
   UNIQUE INDEX `denumire_UNIQUE` (`denumire` ASC))

@@ -8,7 +8,7 @@ class DeliveryTypeBase(BaseModel):
     denumire: str = Field(
         ...,
         min_length=1,
-        max_length=45,
+        max_length=100,
         description="Delivery type name",
         examples=["Ridicare de la sediu"]
     )
@@ -31,7 +31,7 @@ class DeliveryTypeUpdate(BaseModel):
     denumire: Optional[str] = Field(
         None, 
         min_length=1, 
-        max_length=45,
+        max_length=100,
         description="Delivery type name"
     )
     

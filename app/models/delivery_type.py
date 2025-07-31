@@ -9,7 +9,7 @@ class DeliveryType(Base):
     __tablename__ = "tipuri_livrare"
     
     id = Column(TINYINT, primary_key=True, index=True, autoincrement=True)
-    denumire = Column(String(45), nullable=False, unique=True)
+    denumire = Column(String(100), nullable=False, unique=True)
     
     __table_args__ = (
         UniqueConstraint('denumire', name='denumire_UNIQUE'),

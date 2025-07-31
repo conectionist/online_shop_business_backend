@@ -89,10 +89,17 @@ class Category(CategoryBase):
         # Extract the image ID from the path
         image_id = os.path.basename(self.image_path)
         
-        # Get file extension - we'll assume .jpg for now as a default
-        # In a real-world scenario, we might want to store the extension in the DB
-        # or check which file exists in the directory
-        ext = ".jpg"
+        # Detect the actual file extension by checking what files exist
+        # This handles cases where images are uploaded in different formats
+        upload_dir = os.path.join("/app/uploads", self.image_path)
+        ext = ".jpg"  # Default fallback
+        
+        # Check for common image extensions
+        for test_ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+            test_file = os.path.join(upload_dir, f"{image_id}{test_ext}")
+            if os.path.exists(test_file):
+                ext = test_ext
+                break
         
         # Return paths for all versions
         return {

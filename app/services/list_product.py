@@ -1,4 +1,5 @@
 from typing import List as TypeList
+import os
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -7,6 +8,41 @@ from app.models.list import List
 from app.models.product import Product
 from app.models.list_product import ListProduct
 from app.schemas.list_product import ListProductCreate, ListProductResponse
+
+
+def _get_image_versions(image_path: str) -> dict:
+    """Generate image versions with dynamic extension detection"""
+    if not image_path:
+        return {
+            "original": "/api/v1/static/placeholders/product_placeholder.jpg",
+            "medium": "/api/v1/static/placeholders/product_placeholder.jpg",
+            "thumbnail": "/api/v1/static/placeholders/product_placeholder.jpg"
+        }
+    
+    # Extract the image ID from the path
+    image_id = os.path.basename(image_path)
+    
+    # Detect the actual file extension by checking what files exist
+    from app.core.file_upload import get_upload_dir
+    full_path = os.path.join(get_upload_dir(), image_path)
+    if os.path.exists(full_path):
+        # Check for common extensions
+        for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+            original_file = os.path.join(full_path, f"{image_id}{ext}")
+            if os.path.exists(original_file):
+                # Found the actual extension, use it for all versions
+                return {
+                    "original": f"{image_path}/{image_id}{ext}",
+                    "medium": f"{image_path}/{image_id}-medium{ext}",
+                    "thumbnail": f"{image_path}/{image_id}-thumbnail{ext}"
+                }
+    
+    # Fallback to jpg if no files found
+    return {
+        "original": f"{image_path}/{image_id}.jpg",
+        "medium": f"{image_path}/{image_id}-medium.jpg",
+        "thumbnail": f"{image_path}/{image_id}-thumbnail.jpg"
+    }
 
 
 def get_list_products(db: Session, list_id: int) -> TypeList[dict]:
@@ -18,7 +54,7 @@ def get_list_products(db: Session, list_id: int) -> TypeList[dict]:
         list_id: ID of the list
         
     Returns:
-        List of Product objects
+        List of Product objects with full image data and stock information
         
     Raises:
         HTTPException: If list not found
@@ -37,6 +73,8 @@ def get_list_products(db: Session, list_id: int) -> TypeList[dict]:
         result = []
         for list_product in list_products:
             product = list_product.product
+            # Convert the SQLAlchemy product to a dict with all computed fields
+            # This ensures image_versions and is_primary are included
             product_dict = {
                 "id": product.id,
                 "nume": product.nume,
@@ -48,7 +86,17 @@ def get_list_products(db: Session, list_id: int) -> TypeList[dict]:
                 "created_at": product.created_at,
                 "updated_at": product.updated_at,
                 "is_deleted": product.is_deleted,
-                "images": product.images,
+                "images": [
+                    {
+                        "id": img.id,
+                        "path": img.path,
+                        "position": img.position,
+                        "produse_id": img.produse_id,
+                        "is_primary": img.position == 0,
+                        "image_versions": _get_image_versions(img.path)
+                    }
+                    for img in product.images
+                ],
                 "stoc_produs": list_product.stoc_produs
             }
             result.append(product_dict)

@@ -41,6 +41,11 @@ services:
       # CORS Configuration
       # Set your production domains here or override in .env file
       - CORS_ORIGINS=${CORS_ORIGINS}
+      # JWT Configuration
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
+      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
     depends_on:
       mysql_test:
         condition: service_healthy

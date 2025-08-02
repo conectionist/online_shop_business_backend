@@ -49,15 +49,15 @@ This document outlines the step-by-step implementation plan for adding JWT-based
 ---
 
 ### **Step 3: Create Authentication Configuration**
-- [ ] Add JWT settings to `app/core/config.py` (SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES)
-- [ ] Create `app/core/security.py` with password hashing functions
-- [ ] Add environment variables for JWT configuration
+- [x] Add JWT settings to `app/core/config.py` (SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES)
+- [x] Create `app/core/security.py` with password hashing functions
+- [x] Add environment variables for JWT configuration
 
 **Testing Checklist**:
-- [ ] Test password hashing and verification
-- [ ] Verify JWT configuration is loaded correctly
-- [ ] Test that environment variables are properly set
-- [ ] Test configuration validation
+- [x] Test password hashing and verification
+- [x] Verify JWT configuration is loaded correctly
+- [x] Test that environment variables are properly set
+- [x] Test configuration validation
 
 **Files to create/modify**:
 - `app/core/config.py`
@@ -283,13 +283,30 @@ This document outlines the step-by-step implementation plan for adding JWT-based
 
 ## Environment Variables Required
 
+### **Add to `.env` file:**
 ```bash
 # JWT Configuration
-JWT_SECRET_KEY=your-secure-secret-key-here
+JWT_SECRET_KEY=your-secure-secret-key-change-in-production
 JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+```
 
-# Optional: Refresh Token Configuration
+### **Add to `.env.example` file:**
+```bash
+# JWT Configuration
+JWT_SECRET_KEY=your-secure-secret-key-change-in-production
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+```
+
+### **Add to `.env.test` file:**
+```bash
+# JWT Configuration
+JWT_SECRET_KEY=test-secret-key-for-testing
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
 JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
 ```
 

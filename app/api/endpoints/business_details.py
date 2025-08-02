@@ -3,6 +3,8 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dependencies import get_authenticated_admin
+from app.models.admin import Admin
 from app.schemas.business_details import BusinessDetails, BusinessDetailsCreate, BusinessDetailsUpdate
 from app.services.business_details import (
     create_business_details,
@@ -37,11 +39,16 @@ def read_business_details(
 
 @router.post("/", response_model=BusinessDetails, status_code=status.HTTP_201_CREATED, responses={
     201: {"description": "Business details created successfully"},
+    401: {"description": "Unauthorized - authentication required"},
     409: {"description": "Business details record already exists"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
-def create_business_details_endpoint(business_details: BusinessDetailsCreate = Body(..., description="Business details data"), db: Session = Depends(get_db)):
+def create_business_details_endpoint(
+    business_details: BusinessDetailsCreate = Body(..., description="Business details data"), 
+    current_admin: Admin = Depends(get_authenticated_admin),
+    db: Session = Depends(get_db)
+):
     """Create a new business details record (fails with 409 if a record already exists)"""
     try:
         return create_business_details(db=db, business_details=business_details)
@@ -78,6 +85,7 @@ def read_business_details_by_id(
 
 @router.put("/{business_details_id}", response_model=BusinessDetails, responses={
     200: {"description": "Business details updated successfully"},
+    401: {"description": "Unauthorized - authentication required"},
     400: {"description": "Bad request, e.g. no valid fields to update"},
     404: {"description": "Business details not found"},
     422: {"description": "Validation error"},
@@ -86,6 +94,7 @@ def read_business_details_by_id(
 def update_business_details_endpoint(
     business_details_id: int = Path(..., gt=0, description="The ID of the business details to update"),
     business_details: BusinessDetailsUpdate = Body(..., description="Updated business details data"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Update a business details record (PUT - full replacement)"""
@@ -102,6 +111,7 @@ def update_business_details_endpoint(
 
 @router.patch("/{business_details_id}", response_model=BusinessDetails, responses={
     200: {"description": "Business details updated successfully"},
+    401: {"description": "Unauthorized - authentication required"},
     400: {"description": "Bad request, e.g. no valid fields to update"},
     404: {"description": "Business details not found"},
     422: {"description": "Validation error"},
@@ -110,6 +120,7 @@ def update_business_details_endpoint(
 def patch_business_details_endpoint(
     business_details_id: int = Path(..., gt=0, description="The ID of the business details to update"),
     business_details: BusinessDetailsUpdate = Body(..., description="Partial business details data"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Partially update a business details record (PATCH - only update provided fields)"""
@@ -126,12 +137,14 @@ def patch_business_details_endpoint(
 
 @router.delete("/{business_details_id}", status_code=status.HTTP_204_NO_CONTENT, responses={
     204: {"description": "Business details deleted successfully"},
+    401: {"description": "Unauthorized - authentication required"},
     404: {"description": "Business details not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
 def delete_business_details_endpoint(
     business_details_id: int = Path(..., gt=0, description="The ID of the business details to delete"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a business details record"""

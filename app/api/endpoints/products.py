@@ -9,6 +9,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.core.database import get_db
 from app.core.constants import UNCATEGORIZED_CATEGORY_ID
+from app.core.dependencies import get_authenticated_admin
+from app.models.admin import Admin
 from app.core.file_upload import (
     delete_file, save_upload_file, is_valid_image, get_upload_dir
 )
@@ -146,6 +148,7 @@ def read_product(
     },
     responses={
     201: {"description": "Successful Response"},
+    401: {"description": "Unauthorized - authentication required"},
     400: {"description": "Bad Request"},
     409: {"description": "Conflict"},
     422: {"description": "Validation Error"},
@@ -158,6 +161,7 @@ def create_product_endpoint(
     description: Optional[str] = Form(None),
     category_id: Optional[str] = Form(None), # Made optional, defaults to "Uncategorized"
     unitati_id: str = Form(...),  # Changed to str to handle validation manually
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -385,6 +389,7 @@ def create_product_endpoint(
 
 @router.patch("/{product_id}", response_model=ProductSchema, responses={
     200: {"description": "Product updated successfully"},
+    401: {"description": "Unauthorized - authentication required"},
     404: {"description": "Product not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal Server Error"}
@@ -397,6 +402,7 @@ def update_product_endpoint(
     description: Optional[str] = Form(None),
     category_id: Optional[int] = Form(None),
     unitati_id: Optional[int] = Form(None),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db),
 ):
     """
@@ -528,12 +534,14 @@ def update_product_endpoint(
     },
     responses={
     204: {"description": "Successful Response"},
+    401: {"description": "Unauthorized - authentication required"},
     404: {"description": "Product not found"},
     422: {"description": "Validation Error"}
 })
 def delete_product(
     product_id: int,
     permanent: bool = Query(False, description="If true, performs a hard delete (default: False)"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db),
 ):
     """

@@ -66,7 +66,12 @@ class ProductTestUtils(EntityTestUtils):
         
         # Note: primary_image has been removed, we now use the dedicated product_images endpoints
             
-        create_response = requests.post(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        create_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             data=form_data
         )
@@ -117,7 +122,8 @@ class ProductTestUtils(EntityTestUtils):
         
         # Note: Images are now handled through the dedicated product_images endpoints
         
-        update_response = requests.patch(
+        update_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{self.base_url}/{entity_id}",
             data=form_data
         )
@@ -143,7 +149,14 @@ class ProductTestUtils(EntityTestUtils):
         Args:
             entity_id: ID of the product to delete
         """
-        delete_response = requests.delete(f"{self.base_url}/{entity_id}?permanent=true")
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        delete_response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{self.base_url}/{entity_id}?permanent=true"
+        )
         assert delete_response.status_code == 204, (
             f"Failed to hard delete {self.entity_name}. "
             f"Expected 204, got {delete_response.status_code}: {delete_response.text}"
@@ -156,7 +169,10 @@ class ProductTestUtils(EntityTestUtils):
         Args:
             entity_id: ID of the product to soft delete
         """
-        delete_response = requests.delete(f"{self.base_url}/{entity_id}")
+        delete_response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{self.base_url}/{entity_id}"
+        )
         assert delete_response.status_code == 204, (
             f"Failed to soft delete {self.entity_name}. "
             f"Expected 204, got {delete_response.status_code}: {delete_response.text}"
@@ -261,7 +277,12 @@ class ProductTestUtils(EntityTestUtils):
         assert invalid_id_response.status_code == 422
         
         # Test empty name
-        invalid_name_response = requests.post(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        invalid_name_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             data={
                 "nume": "",
@@ -275,7 +296,8 @@ class ProductTestUtils(EntityTestUtils):
         assert invalid_name_response.status_code == 400  # API now returns 400 for empty name
         
         # Test invalid numeric fields
-        invalid_numeric_response = requests.post(
+        invalid_numeric_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             data={
                 "nume": "Test Product",
@@ -294,7 +316,8 @@ class ProductTestUtils(EntityTestUtils):
         
         try:
             # Try to create another product with the same name
-            duplicate_response = requests.post(
+            duplicate_response = auth_utils.make_authenticated_request(
+                "POST",
                 f"{self.base_url}/",
                 data={
                     "nume": unique_name,
@@ -388,7 +411,12 @@ class ProductTestUtils(EntityTestUtils):
         Test error handling for various scenarios.
         """
         # Test invalid foreign keys
-        invalid_fk_response = requests.post(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        invalid_fk_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             data={
                 "nume": "Test Product",
@@ -403,7 +431,8 @@ class ProductTestUtils(EntityTestUtils):
         
         # Test invalid update (trying to update non-existent product)
         non_existent_id = 99999
-        invalid_update_response = requests.patch(
+        invalid_update_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{self.base_url}/{non_existent_id}",
             data={"nume": "Updated Name"}
         )
@@ -428,7 +457,12 @@ class ProductTestUtils(EntityTestUtils):
                 "unitati_id": "1"
             }
 
-            create_response = requests.post(
+            # Ensure we're authenticated
+            if not auth_utils.access_token:
+                auth_utils.login()
+                
+            create_response = auth_utils.make_authenticated_request(
+                "POST",
                 f"{self.base_url}/",
                 data=form_data
             )
@@ -451,7 +485,8 @@ class ProductTestUtils(EntityTestUtils):
                 'file': ('test_image.jpg', test_image_content, 'image/jpeg')
             }
 
-            upload_response = requests.post(
+            upload_response = auth_utils.make_authenticated_request(
+                "POST",
                 f"{self.base_url}/{entity_id}/images",
                 files=files
             )
@@ -503,7 +538,12 @@ class ProductTestUtils(EntityTestUtils):
             }
 
             # Create a product without images
-            create_response = requests.post(
+            # Ensure we're authenticated
+            if not auth_utils.access_token:
+                auth_utils.login()
+                
+            create_response = auth_utils.make_authenticated_request(
+                "POST",
                 f"{self.base_url}/",
                 data=form_data
             )
@@ -524,7 +564,8 @@ class ProductTestUtils(EntityTestUtils):
                 'file': ('test_image1.jpg', test_image_content, 'image/jpeg')
             }
             
-            upload_response_1 = requests.post(
+            upload_response_1 = auth_utils.make_authenticated_request(
+                "POST",
                 f"{self.base_url}/{entity_id}/images",
                 files=files_1
             )
@@ -542,7 +583,8 @@ class ProductTestUtils(EntityTestUtils):
                 'file': ('test_image2.jpg', test_image_content, 'image/jpeg')
             }
             
-            upload_response_2 = requests.post(
+            upload_response_2 = auth_utils.make_authenticated_request(
+                "POST",
                 f"{self.base_url}/{entity_id}/images",
                 files=files_2
             )
@@ -649,7 +691,12 @@ def test_create_product_without_category():
         # Note: category_id is intentionally omitted
     }
     
-    create_response = requests.post(
+    # Ensure we're authenticated
+    if not auth_utils.access_token:
+        auth_utils.login()
+        
+    create_response = auth_utils.make_authenticated_request(
+        "POST",
         f"{product_utils.base_url}/",
         data=form_data
     )
@@ -686,7 +733,12 @@ def test_create_product_with_empty_category():
         
     }
     
-    create_response = requests.post(
+    # Ensure we're authenticated
+    if not auth_utils.access_token:
+        auth_utils.login()
+        
+    create_response = auth_utils.make_authenticated_request(
+        "POST",
         f"{product_utils.base_url}/",
         data=form_data
     )
@@ -718,8 +770,10 @@ def test_category_deletion_cascade():
     # First, create a category directly
     categories_base_url = get_categories_base_url()
     
+    # Use a unique category name to avoid conflicts
+    unique_category_name = f"Test Category for Cascade {uuid.uuid4().hex[:8]}"
     category_data = {
-        "name": "Test Category for Cascade"
+        "name": unique_category_name
     }
     
     category_response = auth_utils.make_authenticated_request(
@@ -748,7 +802,8 @@ def test_category_deletion_cascade():
             
         }
         
-        product_response = requests.post(
+        product_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{product_utils.base_url}/",
             data=product_data
         )

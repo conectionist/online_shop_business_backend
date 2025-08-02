@@ -2,6 +2,7 @@ import os
 import requests
 import uuid
 from integration.test_utils import EntityTestUtils
+from integration.test_auth_utils import auth_utils
 
 
 class BusinessDetailsTestUtils(EntityTestUtils):
@@ -36,7 +37,20 @@ class BusinessDetailsTestUtils(EntityTestUtils):
             "motto": motto
         }
         
-        create_response = requests.post(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        # First, try to get existing business details
+        existing_response = auth_utils.make_authenticated_request("GET", f"{self.base_url}/")
+        if existing_response.status_code == 200 and existing_response.json():
+            # If business details already exist, delete them first
+            existing_id = existing_response.json()[0]["id"]
+            auth_utils.make_authenticated_request("DELETE", f"{self.base_url}/{existing_id}")
+            
+        # Now create new business details
+        create_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             json=create_data
         )
@@ -77,7 +91,12 @@ class BusinessDetailsTestUtils(EntityTestUtils):
         if alte_detalii is not None:
             update_data["alte_detalii"] = alte_detalii
             
-        update_response = requests.put(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        update_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{self.base_url}/{entity_id}",
             json=update_data
         )
@@ -144,7 +163,12 @@ class BusinessDetailsTestUtils(EntityTestUtils):
         long_adresa = "A" * 201  # adresa max_length=200
         long_telefon = "1" * 21  # telefon max_length=20
         
-        invalid_data_response = requests.post(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        invalid_data_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             json={
                 "adresa": long_adresa,
@@ -189,7 +213,12 @@ def test_patch_with_valid_data():
     try:
         # PATCH with new address
         new_adresa = "Patched Address"
-        patch_response = requests.patch(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{business_details_utils.base_url}/{entity_id}",
             json={"adresa": new_adresa}
         )
@@ -219,7 +248,8 @@ def test_patch_with_empty_json():
     
     try:
         # PATCH with empty JSON should return error
-        empty_patch_response = requests.patch(
+        empty_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{business_details_utils.base_url}/{entity_id}",
             json={}
         )
@@ -241,7 +271,12 @@ def test_patch_with_non_existent_business_details():
     """
     Test PATCH with non-existent business details ID.
     """
-    non_existent_response = requests.patch(
+    # Ensure we're authenticated
+    if not auth_utils.access_token:
+        auth_utils.login()
+        
+    non_existent_response = auth_utils.make_authenticated_request(
+        "PATCH",
         f"{business_details_utils.base_url}/99999",
         json={"adresa": "test"}
     )
@@ -259,7 +294,8 @@ def test_patch_with_invalid_data():
     
     try:
         # PATCH with empty string (should work - schema allows empty strings)
-        invalid_patch_response = requests.patch(
+        invalid_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{business_details_utils.base_url}/{entity_id}",
             json={"adresa": ""}
         )
@@ -290,7 +326,8 @@ def test_patch_multiple_fields():
             "telefon": "987654321",
             "motto": "Patched Motto"
         }
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{business_details_utils.base_url}/{entity_id}",
             json=patch_data
         )
@@ -325,7 +362,8 @@ def test_patch_with_partial_data_works():
     try:
         # PATCH with partial data (should work)
         patch_data = {"adresa": "Partial Patch Address"}
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{business_details_utils.base_url}/{entity_id}",
             json=patch_data
         )
@@ -353,7 +391,8 @@ def test_put_with_empty_json_fails():
     
     try:
         # PUT with empty JSON should fail
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{business_details_utils.base_url}/{entity_id}",
             json={}
         )
@@ -385,7 +424,8 @@ def test_put_with_complete_data_works():
             "telefon": "111222333",
             "motto": "PUT Updated Motto"
         }
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{business_details_utils.base_url}/{entity_id}",
             json=put_data
         )

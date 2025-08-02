@@ -1,6 +1,7 @@
 import os
 import requests
 import uuid
+from integration.test_auth_utils import auth_utils
 
 
 class EntityTestUtils:
@@ -105,7 +106,14 @@ class EntityTestUtils:
         Args:
             entity_id: ID of the entity to delete
         """
-        delete_response = requests.delete(f"{self.base_url}/{entity_id}")
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        delete_response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{self.base_url}/{entity_id}"
+        )
         assert delete_response.status_code == 204, (
             f"Failed to delete {self.entity_name}. "
             f"Expected 204, got {delete_response.status_code}: {delete_response.text}"

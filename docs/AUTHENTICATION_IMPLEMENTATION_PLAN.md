@@ -130,18 +130,26 @@ This document outlines the step-by-step implementation plan for adding JWT-based
 ## Phase 3: Integration and Protection
 
 ### **Step 7: Protect Existing Endpoints**
-- [ ] Add `get_current_admin` dependency to one endpoint (e.g., categories POST)
-- [ ] Test that the endpoint now requires authentication
-- [ ] Verify existing functionality still works with proper authentication
+- [x] Add `get_current_admin` dependency to one endpoint (e.g., categories POST)
+- [x] Test that the endpoint now requires authentication
+- [x] Verify existing functionality still works with proper authentication
 
 **Testing Checklist**:
-- [ ] Test protected endpoint with authentication
-- [ ] Test protected endpoint without authentication (should fail)
-- [ ] Ensure existing tests are updated to include authentication
-- [ ] Test that public endpoints remain accessible
+- [x] Test protected endpoint with authentication
+- [x] Test protected endpoint without authentication (should fail)
+- [x] Ensure existing tests are updated to include authentication
+- [x] Test that public endpoints remain accessible
 
 **Files to modify**:
-- `app/api/endpoints/categories.py` (example)
+- [x] `app/api/endpoints/categories.py`
+- [x] `app/api/endpoints/business_details.py`
+- [x] `app/api/endpoints/products.py`
+- [x] `app/core/dependencies.py` (new)
+- [x] `tests/integration/test_categories_api.py`
+- [x] `tests/integration/test_business_details_api.py`
+- [x] `tests/integration/test_products_api.py`
+- [x] `tests/integration/test_utils.py`
+- [x] `tests/integration/test_auth_utils.py` (new)
 
 ---
 

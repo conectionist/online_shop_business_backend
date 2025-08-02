@@ -48,6 +48,16 @@ JWT_ALGORITHM = get_optional_env_var("JWT_ALGORITHM", "HS256", "JWT algorithm to
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(get_optional_env_var("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30", "Access token expiration in minutes"))
 JWT_REFRESH_TOKEN_EXPIRE_DAYS = int(get_optional_env_var("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7", "Refresh token expiration in days"))
 
+# Admin Configuration - Critical for initial admin creation
+ADMIN_USERNAME = get_required_env_var(
+    "ADMIN_USERNAME",
+    "This is required for initial admin user creation. Set the default admin username in your environment."
+)
+ADMIN_PASSWORD = get_required_env_var(
+    "ADMIN_PASSWORD", 
+    "This is required for initial admin user creation. Set the default admin password in your environment."
+)
+
 # For compatibility with the rest of the application
 class Settings:
     def __init__(self):
@@ -62,5 +72,9 @@ class Settings:
         self.JWT_ALGORITHM = JWT_ALGORITHM
         self.JWT_ACCESS_TOKEN_EXPIRE_MINUTES = JWT_ACCESS_TOKEN_EXPIRE_MINUTES
         self.JWT_REFRESH_TOKEN_EXPIRE_DAYS = JWT_REFRESH_TOKEN_EXPIRE_DAYS
+        
+        # Admin Settings
+        self.ADMIN_USERNAME = ADMIN_USERNAME
+        self.ADMIN_PASSWORD = ADMIN_PASSWORD
 
 settings = Settings()

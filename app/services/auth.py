@@ -234,12 +234,10 @@ def create_admin_tokens(admin: Admin) -> dict:
         "refresh_token": refresh_token,
         "token_type": "bearer",
         "expires_in": settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # Convert to seconds
-        "admin": AdminResponse(
-            id=admin.id,
-            username=admin.username,
-            created_at=admin.created_at,
-            updated_at=admin.updated_at
-        )
+        "admin": {
+            "id": admin.id,
+            "username": admin.username
+        }
     }
 
 

@@ -8,6 +8,7 @@ from app.core.config import API_VERSION, API_TITLE, API_DESCRIPTION, settings
 from app.core.database import get_db
 from app.api.api import api_router
 from app.api.endpoints.system_config import mount_static_files
+from app.core.admin_init import initialize_default_admin
 
 app = FastAPI(
     title=API_TITLE,
@@ -29,6 +30,19 @@ app.include_router(api_router, prefix="/api/v1")
 
 # Mount static files for placeholders
 mount_static_files(app)
+
+# Initialize default admin user on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize application on startup"""
+    try:
+        initialize_default_admin()
+    except Exception as e:
+        # Log the error but don't prevent the app from starting
+        # This allows the app to start even if admin creation fails
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to initialize default admin: {str(e)}")
 
 
 class HealthResponse(BaseModel):

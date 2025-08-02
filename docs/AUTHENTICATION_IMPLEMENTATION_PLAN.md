@@ -112,18 +112,18 @@ This document outlines the step-by-step implementation plan for adding JWT-based
 ---
 
 ### **Step 6: Add Authentication Middleware**
-- [ ] Create `get_current_admin()` dependency function
-- [ ] Add it to `app/core/dependencies.py`
-- [ ] Test the dependency with a simple protected endpoint
+- [x] Create `get_current_admin()` dependency function
+- [x] Add it to `app/core/dependencies.py`
+- [x] Test the dependency with a simple protected endpoint
 
 **Testing Checklist**:
-- [ ] Test protected endpoint with valid token
-- [ ] Test protected endpoint without token (should return 401)
-- [ ] Test protected endpoint with invalid token (should return 401)
-- [ ] Test token expiration handling
+- [x] Test protected endpoint with valid token
+- [x] Test protected endpoint without token (should return 401)
+- [x] Test protected endpoint with invalid token (should return 401)
+- [x] Test token expiration handling
 
 **Files to create/modify**:
-- `app/core/dependencies.py` (new)
+- [x] `app/core/dependencies.py` (new)
 
 ---
 

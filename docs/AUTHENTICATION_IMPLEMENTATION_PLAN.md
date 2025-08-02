@@ -14,14 +14,14 @@ This document outlines the step-by-step implementation plan for adding JWT-based
 ## Phase 1: Foundation Setup
 
 ### **Step 1: Add Authentication Dependencies**
-- [ ] Add `PyJWT` and `passlib[bcrypt]` to `requirements.txt`
-- [ ] Update Docker containers to include new dependencies
-- [ ] Verify dependencies are properly installed
+- [x] Add `PyJWT` and `passlib[bcrypt]` to `requirements.txt`
+- [x] Update Docker containers to include new dependencies
+- [x] Verify dependencies are properly installed
 
 **Testing Checklist**:
-- [ ] Verify packages are installed correctly
-- [ ] Test that the application still starts without errors
-- [ ] Verify Docker build completes successfully
+- [x] Verify packages are installed correctly
+- [x] Test that the application still starts without errors
+- [x] Verify Docker build completes successfully
 
 **Files to modify**:
 - `requirements.txt`
@@ -29,16 +29,16 @@ This document outlines the step-by-step implementation plan for adding JWT-based
 ---
 
 ### **Step 2: Create Admin Model and Schema**
-- [ ] Create `app/models/admin.py` with SQLAlchemy model
-- [ ] Create `app/schemas/admin.py` with Pydantic schemas (Admin, AdminCreate, AdminLogin)
-- [ ] Add admin model to `app/models/__init__.py`
-- [ ] Add admin schemas to `app/schemas/__init__.py`
+- [x] Create `app/models/admin.py` with SQLAlchemy model
+- [x] Create `app/schemas/admin.py` with Pydantic schemas (Admin, AdminCreate, AdminLogin)
+- [x] Add admin model to `app/models/__init__.py`
+- [x] Add admin schemas to `app/schemas/__init__.py`
 
 **Testing Checklist**:
-- [ ] Verify model can be imported without errors
-- [ ] Test schema validation with sample data
-- [ ] Ensure database migrations work (if needed)
-- [ ] Test model relationships and constraints
+- [x] Verify model can be imported without errors
+- [x] Test schema validation with sample data
+- [x] Ensure database migrations work (if needed)
+- [x] Test model relationships and constraints
 
 **Files to create/modify**:
 - `app/models/admin.py` (new)

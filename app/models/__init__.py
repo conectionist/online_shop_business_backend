@@ -6,3 +6,4 @@ from app.models.list import List  # noqa: F401
 from app.models.list_product import ListProduct  # noqa: F401
 from app.models.list_delivery_type import ListDeliveryType  # noqa: F401
 from app.models.product_override import ProductOverride  # noqa: F401
+from app.models.admin import Admin  # noqa: F401

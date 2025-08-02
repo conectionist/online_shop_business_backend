@@ -3,6 +3,9 @@
 ## Overview
 This document outlines the step-by-step implementation plan for adding JWT-based authentication to the Online Shop Business API. Each step is designed to be a complete, testable unit that builds upon the previous one, ensuring a solid foundation before moving forward.
 
+**Related Documents:**
+- [Endpoint Protection Plan](ENDPOINT_PROTECTION_PLAN.md) - Comprehensive plan for protecting all API endpoints
+
 ## Implementation Philosophy
 - **One step at a time**: Each step is complete and testable before moving to the next
 - **Continuous testing**: Every step includes comprehensive testing
@@ -150,6 +153,8 @@ This document outlines the step-by-step implementation plan for adding JWT-based
 - [x] `tests/integration/test_products_api.py`
 - [x] `tests/integration/test_utils.py`
 - [x] `tests/integration/test_auth_utils.py` (new)
+
+**Note:** For the complete endpoint protection strategy and remaining phases, see [Endpoint Protection Plan](ENDPOINT_PROTECTION_PLAN.md).
 
 ---
 

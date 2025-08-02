@@ -1,0 +1,6 @@
+---
+alwaysApply: true
+description: Analyze whole output
+---
+After runnig a command (build, compile, run, etc.) you will read and analyze the entire output and check if it's ok.
+YOU WILL NOT SAY THAT EVERYTHING IS OK WHEN THE OUTPUT CLEARLY SHOWS IT'S NOT!!!

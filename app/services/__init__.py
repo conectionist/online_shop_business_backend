@@ -17,3 +17,14 @@ from app.services.modalitati_plata import (  # noqa: F401
     get_modalitati_plata,
     update_modalitate_plata,
 )
+
+# Authentication services
+from app.services.auth import (  # noqa: F401
+    authenticate_admin,
+    create_admin,
+    get_admin_by_id,
+    get_admin_by_username,
+    get_current_admin,
+    create_admin_tokens,
+    refresh_access_token,
+)

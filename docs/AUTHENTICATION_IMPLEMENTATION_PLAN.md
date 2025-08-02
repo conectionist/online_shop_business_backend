@@ -68,18 +68,18 @@ This document outlines the step-by-step implementation plan for adding JWT-based
 ## Phase 2: Core Authentication Logic
 
 ### **Step 4: Create Authentication Service**
-- [ ] Create `app/services/auth.py` with functions:
-  - [ ] `create_access_token()`
-  - [ ] `verify_token()`
-  - [ ] `authenticate_admin()`
-  - [ ] `get_current_admin()`
-- [ ] Add service to `app/services/__init__.py`
+- [x] Create `app/services/auth.py` with functions:
+  - [x] `create_access_token()`
+  - [x] `verify_token()`
+  - [x] `authenticate_admin()`
+  - [x] `get_current_admin()`
+- [x] Add service to `app/services/__init__.py`
 
 **Testing Checklist**:
-- [ ] Unit tests for token creation and verification
-- [ ] Test authentication with valid/invalid credentials
-- [ ] Test token expiration
-- [ ] Test concurrent token generation
+- [x] Unit tests for token creation and verification
+- [x] Test authentication with valid/invalid credentials
+- [x] Test token expiration
+- [x] Test concurrent token generation
 
 **Files to create/modify**:
 - `app/services/auth.py` (new)

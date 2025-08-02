@@ -5,6 +5,7 @@ import pytest
 import shutil
 from io import BytesIO
 from integration.test_utils import EntityTestUtils
+from integration.test_auth_utils import auth_utils
 
 def get_products_base_url():
     """Get the products base URL using the same pattern as test utilities."""
@@ -60,7 +61,12 @@ class CategoryTestUtils(EntityTestUtils):
             image_content = get_test_image_content()
             files['primary_image'] = ('test_image.jpg', image_content, 'image/jpeg')
             
-        create_response = requests.post(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        create_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             data=form_data,
             files=files
@@ -118,7 +124,12 @@ class CategoryTestUtils(EntityTestUtils):
             image_content = get_test_image_content()
             files['primary_image'] = ('test_image.jpg', image_content, 'image/jpeg')
             
-        update_response = requests.put(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        update_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{self.base_url}/{entity_id}",
             data=form_data,
             files=files
@@ -174,7 +185,12 @@ class CategoryTestUtils(EntityTestUtils):
             image_content = get_test_image_content()
             files['primary_image'] = ('test_image.jpg', image_content, 'image/jpeg')
             
-        update_response = requests.patch(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        update_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{self.base_url}/{entity_id}",
             data=form_data,
             files=files
@@ -211,7 +227,14 @@ class CategoryTestUtils(EntityTestUtils):
         Args:
             entity_id: ID of the category to delete
         """
-        delete_response = requests.delete(f"{self.base_url}/{entity_id}?permanent=true")
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        delete_response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{self.base_url}/{entity_id}?permanent=true"
+        )
         assert delete_response.status_code == 204, (
             f"Failed to hard delete {self.entity_name}. "
             f"Expected 204, got {delete_response.status_code}: {delete_response.text}"
@@ -224,7 +247,14 @@ class CategoryTestUtils(EntityTestUtils):
         Args:
             entity_id: ID of the category to soft delete
         """
-        delete_response = requests.delete(f"{self.base_url}/{entity_id}")
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        delete_response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{self.base_url}/{entity_id}"
+        )
         assert delete_response.status_code == 204, (
             f"Failed to soft delete {self.entity_name}. "
             f"Expected 204, got {delete_response.status_code}: {delete_response.text}"
@@ -318,8 +348,13 @@ class CategoryTestUtils(EntityTestUtils):
         invalid_id_response = requests.get(f"{self.base_url}/-1")
         assert invalid_id_response.status_code == 422
         
-        # Test empty name
-        invalid_name_response = requests.post(
+        # Ensure we're authenticated for protected operations
+        if not auth_utils.access_token:
+            auth_utils.login()
+        
+        # Test empty name (should fail validation, not authentication)
+        invalid_name_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             data={"name": ""}
         )
@@ -327,7 +362,8 @@ class CategoryTestUtils(EntityTestUtils):
         
         # Test invalid image format - we'll simulate this with non-image data
         files = {'primary_image': ('fake.jpg', b'not a real image', 'image/jpeg')}
-        invalid_image_response = requests.post(
+        invalid_image_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             data={"name": "Test Category"},
             files=files
@@ -340,7 +376,8 @@ class CategoryTestUtils(EntityTestUtils):
         
         try:
             # Try to create another entity with the same name
-            duplicate_response = requests.post(
+            duplicate_response = auth_utils.make_authenticated_request(
+                "POST",
                 f"{self.base_url}/",
                 data={"name": unique_name}
             )
@@ -401,7 +438,12 @@ class CategoryTestUtils(EntityTestUtils):
         assert any(c["id"] == entity_id and c["is_deleted"] is True for c in deleted_list)
         
         # 5. Try to create a new category with the same name (should restore the soft-deleted one)
-        restore_response = requests.post(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        restore_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             data={"name": name},
             files={'primary_image': ('test_image.jpg', get_test_image_content(), 'image/jpeg')}
@@ -431,7 +473,12 @@ class CategoryTestUtils(EntityTestUtils):
         try:
             # Test updating with invalid data - empty name
             # For PUT endpoint, empty name should return 422 validation error
-            invalid_update_response = requests.put(
+            # Ensure we're authenticated
+            if not auth_utils.access_token:
+                auth_utils.login()
+                
+            invalid_update_response = auth_utils.make_authenticated_request(
+                "PUT",
                 f"{self.base_url}/{entity_id}",
                 data={"name": ""}
             )
@@ -440,7 +487,8 @@ class CategoryTestUtils(EntityTestUtils):
             assert invalid_update_response.status_code in [422, 500]
             
             # Test updating non-existent category
-            non_existent_update_response = requests.put(
+            non_existent_update_response = auth_utils.make_authenticated_request(
+                "PUT",
                 f"{self.base_url}/{non_existent_id}",
                 json={"name": "Non-existent", "image_path": "/images/non-existent.jpg"}
             )
@@ -747,12 +795,17 @@ def test_category_deletion_cascade():
     """
     Tests that when a category is deleted, all its products are moved to "Uncategorized" category.
     """
+    # Ensure we're authenticated
+    if not auth_utils.access_token:
+        auth_utils.login()
+        
     # First, create a category
     category_data = {
         "name": "Test Category for Cascade"
     }
     
-    category_response = requests.post(
+    category_response = auth_utils.make_authenticated_request(
+        "POST",
         f"{category_utils.base_url}/",
         data=category_data
     )
@@ -795,7 +848,10 @@ def test_category_deletion_cascade():
         assert created_product["category_id"] == category_id
         
         # Delete the category using the categories API
-        delete_response = requests.delete(f"{category_utils.base_url}/{category_id}")
+        delete_response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{category_utils.base_url}/{category_id}"
+        )
         assert delete_response.status_code == 204, (
             f"Failed to delete category. "
             f"Expected 204, got {delete_response.status_code}: {delete_response.text}"
@@ -827,8 +883,15 @@ def test_cannot_delete_uncategorized_category():
     """
     Tests that the default "Uncategorized" category (ID 1) cannot be deleted.
     """
+    # Ensure we're authenticated
+    if not auth_utils.access_token:
+        auth_utils.login()
+        
     # Try to soft delete the Uncategorized category
-    soft_delete_response = requests.delete(f"{category_utils.base_url}/1")
+    soft_delete_response = auth_utils.make_authenticated_request(
+        "DELETE",
+        f"{category_utils.base_url}/1"
+    )
     assert soft_delete_response.status_code == 403, (
         f"Expected 403 Forbidden when trying to soft delete Uncategorized category, "
         f"got {soft_delete_response.status_code}: {soft_delete_response.text}"
@@ -839,7 +902,10 @@ def test_cannot_delete_uncategorized_category():
     assert "Cannot delete the default 'Uncategorized' category" in error_detail
     
     # Try to hard delete the Uncategorized category
-    hard_delete_response = requests.delete(f"{category_utils.base_url}/1?permanent=true")
+    hard_delete_response = auth_utils.make_authenticated_request(
+        "DELETE",
+        f"{category_utils.base_url}/1?permanent=true"
+    )
     assert hard_delete_response.status_code == 403, (
         f"Expected 403 Forbidden when trying to hard delete Uncategorized category, "
         f"got {hard_delete_response.status_code}: {hard_delete_response.text}"

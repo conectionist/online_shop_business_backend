@@ -11,6 +11,8 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from app.core.database import get_db
 from app.core.file_upload import delete_file, is_valid_image, get_upload_dir
 from app.core.image_processing import process_and_save_image_versions
+from app.core.dependencies import get_authenticated_admin
+from app.models.admin import Admin
 from app.schemas.category import Category, CategoryCreate, CategoryUpdate
 from app.services.category import (
     create_category,
@@ -132,12 +134,14 @@ def read_categories(
 @router.post("/", response_model=Category, status_code=status.HTTP_201_CREATED, responses={
     201: {"description": "Category created successfully"},
     400: {"description": "Bad request, e.g., duplicate category name or invalid image"},
+    401: {"description": "Unauthorized - authentication required"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
 def create_category_endpoint(
     name: str = Form(..., description="The name of the category"),
     primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new category
@@ -238,6 +242,7 @@ def read_category(
 @router.put("/{category_id}", response_model=Category, responses={
     200: {"description": "Category updated successfully"},
     400: {"description": "Bad request, e.g., duplicate category name or invalid image"},
+    401: {"description": "Unauthorized - authentication required"},
     404: {"description": "Category not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -247,6 +252,7 @@ def update_category_endpoint(
     name: str = Form(..., description="The name of the category"),
     primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
     clear_image: bool = Form(False, description="If true, will clear the image and use placeholder"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Update an existing category (PUT - full replacement)
@@ -489,6 +495,7 @@ def patch_category_endpoint(
 
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT, responses={
     204: {"description": "Category deleted successfully"},
+    401: {"description": "Unauthorized - authentication required"},
     404: {"description": "Category not found"},
     409: {"description": "Conflict, category is in use by at least one product"},
     422: {"description": "Validation error"},
@@ -497,6 +504,7 @@ def patch_category_endpoint(
 def delete_category(
     category_id: int = Path(..., gt=0, description="The ID of the category to delete"),
     permanent: bool = Query(False, description="Whether to permanently delete the category"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a category (soft delete by default, hard delete if permanent=True)"""

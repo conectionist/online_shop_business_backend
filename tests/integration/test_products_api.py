@@ -11,6 +11,7 @@ def get_test_image_content():
         return f.read()
 
 from integration.test_utils import EntityTestUtils
+from integration.test_auth_utils import auth_utils
 
 def get_categories_base_url():
     """Get the categories base URL using the same pattern as test utilities."""
@@ -710,6 +711,10 @@ def test_category_deletion_cascade():
     """
     Tests that when a category is deleted, all its products are moved to "Uncategorized" category.
     """
+    # Ensure we're authenticated
+    if not auth_utils.access_token:
+        auth_utils.login()
+        
     # First, create a category directly
     categories_base_url = get_categories_base_url()
     
@@ -717,7 +722,8 @@ def test_category_deletion_cascade():
         "name": "Test Category for Cascade"
     }
     
-    category_response = requests.post(
+    category_response = auth_utils.make_authenticated_request(
+        "POST",
         f"{categories_base_url}/",
         data=category_data
     )
@@ -759,7 +765,10 @@ def test_category_deletion_cascade():
         assert created_product["category_id"] == category_id
         
         # Delete the category
-        delete_response = requests.delete(f"{categories_base_url}/{category_id}")
+        delete_response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{categories_base_url}/{category_id}"
+        )
         assert delete_response.status_code == 204, (
             f"Failed to delete category. "
             f"Expected 204, got {delete_response.status_code}: {delete_response.text}"

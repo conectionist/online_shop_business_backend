@@ -605,7 +605,8 @@ class ProductTestUtils(EntityTestUtils):
                 {"id": image_1_data["id"], "position": 1}   # Move first image to position 1
             ]
             
-            reorder_response = requests.put(
+            reorder_response = auth_utils.make_authenticated_request(
+                "PUT",
                 f"{self.base_url}/{entity_id}/images/reorder",
                 json=reorder_data
             )

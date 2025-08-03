@@ -6,8 +6,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, UploadF
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dependencies import get_authenticated_admin
 from app.core.file_upload import is_valid_image, get_upload_dir
 from app.core.image_processing import process_and_save_image_versions
+from app.models.admin import Admin
 from app.models.product import Product
 from app.schemas.product_image import ProductImage as ProductImageSchema
 from app.services.product import get_product_by_id
@@ -23,6 +25,7 @@ router = APIRouter()
 @router.post("/{product_id}/images", response_model=ProductImageSchema, responses={
     201: {"description": "Image uploaded successfully"},
     400: {"description": "Bad request, e.g., invalid file format or size"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Product not found"},
     422: {"description": "Validation error"}
 })
@@ -30,6 +33,7 @@ async def upload_product_image(
     product_id: int = Path(..., gt=0, description="The ID of the product to upload an image for"),
     file: UploadFile = File(..., description="The image file to upload (JPEG, PNG, or GIF, max 5MB)"),
     position: int = Form(None, description="Image position (0=primary, if not specified will be added at the end)"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -142,6 +146,7 @@ async def get_product_image_endpoint(
 
 @router.put("/{product_id}/images/{image_id}/position", response_model=ProductImageSchema, responses={
     200: {"description": "Image position updated"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Product or image not found"},
     422: {"description": "Validation error"}
 })
@@ -149,6 +154,7 @@ async def update_product_image_position(
     product_id: int = Path(..., gt=0, description="The ID of the product"),
     image_id: int = Path(..., gt=0, description="The ID of the image to update"),
     position: int = Form(..., ge=0, description="New position for the image (0=primary)"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -182,11 +188,13 @@ async def update_product_image_position(
 
 @router.put("/{product_id}/images/{image_id}/primary", response_model=ProductImageSchema, responses={
     200: {"description": "Image set as primary"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Product or image not found"}
 })
 async def set_product_image_as_primary(
     product_id: int = Path(..., gt=0, description="The ID of the product"),
     image_id: int = Path(..., gt=0, description="The ID of the image to set as primary"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -219,11 +227,13 @@ async def set_product_image_as_primary(
 
 @router.delete("/{product_id}/images/{image_id}", status_code=status.HTTP_204_NO_CONTENT, responses={
     204: {"description": "Image deleted successfully"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Product or image not found"}
 })
 async def delete_product_image_endpoint(
     product_id: int = Path(..., gt=0, description="The ID of the product"),
     image_id: int = Path(..., gt=0, description="The ID of the image to delete"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -270,11 +280,13 @@ async def delete_product_image_endpoint(
 @router.put("/{product_id}/images/reorder", response_model=List[ProductImageSchema], responses={
     200: {"description": "Images reordered successfully"},
     400: {"description": "Invalid image IDs or positions"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Product not found"}
 })
 async def reorder_product_images_endpoint(
     product_id: int = Path(..., gt=0, description="The ID of the product"),
     image_order: List[Dict[str, int]] = None,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """

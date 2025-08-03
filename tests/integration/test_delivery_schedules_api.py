@@ -2,6 +2,7 @@ import os
 import requests
 import uuid
 from integration.test_utils import EntityTestUtils
+from integration.test_auth_utils import auth_utils
 
 
 class DeliveryScheduleTestUtils(EntityTestUtils):
@@ -22,8 +23,13 @@ class DeliveryScheduleTestUtils(EntityTestUtils):
         """
         if name is None:
             name = self.generate_unique_name()
+        
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
             
-        create_response = requests.post(
+        create_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             json={"orar_livrari": name}
         )
@@ -49,7 +55,12 @@ class DeliveryScheduleTestUtils(EntityTestUtils):
         Returns:
             Updated entity data
         """
-        update_response = requests.put(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        update_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{self.base_url}/{entity_id}",
             json={"orar_livrari": name}
         )
@@ -95,7 +106,12 @@ class DeliveryScheduleTestUtils(EntityTestUtils):
         assert invalid_id_response.status_code == 422
         
         # Test empty orar_livrari
-        invalid_data_response = requests.post(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        invalid_data_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             json={"orar_livrari": ""}
         )
@@ -138,7 +154,8 @@ def test_patch_with_valid_data():
     try:
         # PATCH with new schedule
         new_schedule = "Monday-Friday: 9:00-18:00, Saturday: 10:00-14:00"
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{delivery_schedule_utils.base_url}/{entity_id}",
             json={"orar_livrari": new_schedule}
         )
@@ -169,7 +186,8 @@ def test_patch_with_empty_json():
     
     try:
         # PATCH with empty JSON should return 400 (no valid fields to update)
-        empty_patch_response = requests.patch(
+        empty_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{delivery_schedule_utils.base_url}/{entity_id}",
             json={}
         )
@@ -191,7 +209,8 @@ def test_patch_with_non_existent_delivery_schedule():
     """
     Test PATCH with non-existent delivery schedule ID.
     """
-    non_existent_response = requests.patch(
+    non_existent_response = auth_utils.make_authenticated_request(
+        "PATCH",
         f"{delivery_schedule_utils.base_url}/99999",
         json={"orar_livrari": "test"}
     )
@@ -212,7 +231,8 @@ def test_patch_with_partial_data():
     try:
         # PATCH with partial data (should work)
         patch_schedule = "Monday-Friday: 9:00-18:00, Saturday: 10:00-14:00"
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{delivery_schedule_utils.base_url}/{entity_id}",
             json={"orar_livrari": patch_schedule}
         )
@@ -237,7 +257,8 @@ def test_put_with_empty_json():
     
     try:
         # PUT with empty JSON should fail
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{delivery_schedule_utils.base_url}/{entity_id}",
             json={}  # Empty JSON for PUT should fail
         )
@@ -266,7 +287,8 @@ def test_put_with_complete_data():
     try:
         # PUT with complete data (should work)
         put_schedule = "Monday-Sunday: 8:00-20:00"
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{delivery_schedule_utils.base_url}/{entity_id}",
             json={"orar_livrari": put_schedule}
         )

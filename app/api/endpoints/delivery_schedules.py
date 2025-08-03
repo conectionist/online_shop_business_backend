@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dependencies import get_authenticated_admin
+from app.models.admin import Admin
 from app.schemas.delivery_schedule import DeliverySchedule, DeliveryScheduleCreate, DeliveryScheduleUpdate
 from app.services.delivery_schedule import (
     create_delivery_schedule,
@@ -38,10 +40,15 @@ def read_delivery_schedules(
 
 @router.post("/", response_model=DeliverySchedule, status_code=status.HTTP_201_CREATED, responses={
     201: {"description": "Delivery schedule created successfully"},
+    401: {"description": "Unauthorized - Authentication required"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
-def create_delivery_schedule_endpoint(delivery_schedule: DeliveryScheduleCreate, db: Session = Depends(get_db)):
+def create_delivery_schedule_endpoint(
+    delivery_schedule: DeliveryScheduleCreate, 
+    current_admin: Admin = Depends(get_authenticated_admin),
+    db: Session = Depends(get_db)
+):
     """Create a new delivery schedule"""
     try:
         return create_delivery_schedule(db=db, delivery_schedule=delivery_schedule)
@@ -79,6 +86,7 @@ def read_delivery_schedule(
 @router.put("/{delivery_schedule_id}", response_model=DeliverySchedule, responses={
     200: {"description": "Delivery schedule updated successfully"},
     400: {"description": "Bad request, no valid fields to update"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Delivery schedule not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -86,6 +94,7 @@ def read_delivery_schedule(
 def update_delivery_schedule_endpoint(
     delivery_schedule_id: int = Path(..., gt=0, description="The ID of the delivery schedule to update"),
     delivery_schedule: DeliveryScheduleUpdate = ...,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Update a delivery schedule (PUT - full replacement)"""
@@ -107,6 +116,7 @@ def update_delivery_schedule_endpoint(
 @router.patch("/{delivery_schedule_id}", response_model=DeliverySchedule, responses={
     200: {"description": "Delivery schedule updated successfully"},
     400: {"description": "Bad request, e.g., no valid fields to update"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Delivery schedule not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -114,6 +124,7 @@ def update_delivery_schedule_endpoint(
 def patch_delivery_schedule(
     delivery_schedule_id: int = Path(..., gt=0, description="The ID of the delivery schedule to update"),
     delivery_schedule: DeliveryScheduleUpdate = ...,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Partially update a delivery schedule (PATCH - only update provided fields)"""
@@ -134,12 +145,14 @@ def patch_delivery_schedule(
 
 @router.delete("/{delivery_schedule_id}", status_code=status.HTTP_204_NO_CONTENT, responses={
     204: {"description": "Delivery schedule deleted successfully"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Delivery schedule not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
 def delete_delivery_schedule_endpoint(
     delivery_schedule_id: int = Path(..., gt=0, description="The ID of the delivery schedule to delete"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a delivery schedule"""

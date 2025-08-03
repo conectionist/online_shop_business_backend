@@ -50,9 +50,9 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 - [x] `DELETE /tipuri-livrare/{id}` - Delete delivery types
 
 #### Delivery Schedules:
-- [ ] `POST /orare-livrari/` - Create delivery schedules
-- [ ] `PUT /orare-livrari/{id}` - Update delivery schedules
-- [ ] `DELETE /orare-livrari/{id}` - Delete delivery schedules
+- [x] `POST /orare-livrari/` - Create delivery schedules
+- [x] `PUT /orare-livrari/{id}` - Update delivery schedules
+- [x] `DELETE /orare-livrari/{id}` - Delete delivery schedules
 
 #### Payment Methods:
 - [ ] `POST /modalitati-plata/` - Create payment methods
@@ -67,10 +67,10 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 **Files to Modify in Phase 2:**
 - [x] `app/api/endpoints/delivery_types.py`
 - [x] `tests/integration/test_delivery_types_api.py`
-- `app/api/endpoints/delivery_schedules.py`
+- [x] `app/api/endpoints/delivery_schedules.py`
+- [x] `tests/integration/test_delivery_schedules_api.py`
 - `app/api/endpoints/modalitati_plata.py`
 - `app/api/endpoints/unitati.py`
-- `tests/integration/test_delivery_schedules_api.py`
 - `tests/integration/test_payment_methods.py`
 - `tests/integration/test_units_api.py`
 
@@ -194,7 +194,7 @@ response = auth_utils.make_authenticated_request(
 
 ### **Phase 2 Status:** ⏳ IN PROGRESS
 - **Delivery Types:** ✅ All endpoints protected
-- **Delivery Schedules:** ⏳ Not started
+- **Delivery Schedules:** ✅ All endpoints protected
 - **Payment Methods:** ⏳ Not started
 - **Units:** ⏳ Not started
 
@@ -227,4 +227,4 @@ response = auth_utils.make_authenticated_request(
 
 ---
 
-**Last Updated:** Phase 1 completed - All business configuration and core data management endpoints are now protected. System configuration is read-only and doesn't require protection. 
+**Last Updated:** Phase 1 completed - All business configuration and core data management endpoints are now protected. System configuration is read-only and doesn't require protection. Phase 2 in progress - Delivery Types and Delivery Schedules completed. 

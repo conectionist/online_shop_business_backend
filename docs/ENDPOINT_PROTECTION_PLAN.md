@@ -55,9 +55,9 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 - [x] `DELETE /orare-livrari/{id}` - Delete delivery schedules
 
 #### Payment Methods:
-- [ ] `POST /modalitati-plata/` - Create payment methods
-- [ ] `PUT /modalitati-plata/{id}` - Update payment methods
-- [ ] `DELETE /modalitati-plata/{id}` - Delete payment methods
+- [x] `POST /modalitati-plata/` - Create payment methods
+- [x] `PUT /modalitati-plata/{id}` - Update payment methods
+- [x] `DELETE /modalitati-plata/{id}` - Delete payment methods
 
 #### Units Management:
 - [ ] `POST /unitati/` - Create units
@@ -69,9 +69,9 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 - [x] `tests/integration/test_delivery_types_api.py`
 - [x] `app/api/endpoints/delivery_schedules.py`
 - [x] `tests/integration/test_delivery_schedules_api.py`
-- `app/api/endpoints/modalitati_plata.py`
+- [x] `app/api/endpoints/modalitati_plata.py`
+- [x] `tests/integration/test_payment_methods.py`
 - `app/api/endpoints/unitati.py`
-- `tests/integration/test_payment_methods.py`
 - `tests/integration/test_units_api.py`
 
 ---
@@ -195,7 +195,7 @@ response = auth_utils.make_authenticated_request(
 ### **Phase 2 Status:** ⏳ IN PROGRESS
 - **Delivery Types:** ✅ All endpoints protected
 - **Delivery Schedules:** ✅ All endpoints protected
-- **Payment Methods:** ⏳ Not started
+- **Payment Methods:** ✅ All endpoints protected
 - **Units:** ⏳ Not started
 
 ### **Phase 3 Status:** ⏳ PENDING
@@ -227,4 +227,4 @@ response = auth_utils.make_authenticated_request(
 
 ---
 
-**Last Updated:** Phase 1 completed - All business configuration and core data management endpoints are now protected. System configuration is read-only and doesn't require protection. Phase 2 in progress - Delivery Types and Delivery Schedules completed. 
+**Last Updated:** Phase 1 completed - All business configuration and core data management endpoints are now protected. System configuration is read-only and doesn't require protection. Phase 2 in progress - Delivery Types, Delivery Schedules, and Payment Methods completed. 

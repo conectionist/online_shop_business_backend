@@ -5,6 +5,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dependencies import get_authenticated_admin
+from app.models.admin import Admin
 from app.schemas.modalitati_plata import (
     ModalitatePlata, 
     ModalitatePlataCreate, 
@@ -49,12 +51,14 @@ def read_modalitati_plata(
     responses={
         201: {"description": "Payment method created successfully"},
         400: {"description": "Bad request, e.g., duplicate payment method"},
+        401: {"description": "Unauthorized - Authentication required"},
         422: {"description": "Validation error"},
         500: {"description": "Internal server error"}
     }
 )
 def create_modalitati_plata(
     modalitate: ModalitatePlataCreate, 
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new payment method"""
@@ -111,6 +115,7 @@ def read_modalitate_plata(
 @router.put("/{modalitate_id}", response_model=ModalitatePlata, responses={
     200: {"description": "Payment method updated successfully"},
     400: {"description": "Bad request, e.g., duplicate name"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Payment method not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -118,6 +123,7 @@ def read_modalitate_plata(
 def update_modalitati_plata(
     modalitate_id: int = Path(..., gt=0, description="The ID of the payment method to update"),
     modalitate: ModalitatePlataUpdate = ...,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Update an existing payment method (PUT - full replacement)"""
@@ -153,6 +159,7 @@ def update_modalitati_plata(
 @router.patch("/{modalitate_id}", response_model=ModalitatePlata, responses={
     200: {"description": "Payment method updated successfully"},
     400: {"description": "Bad request, e.g., no valid fields to update"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Payment method not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -160,6 +167,7 @@ def update_modalitati_plata(
 def patch_modalitati_plata(
     modalitate_id: int = Path(..., gt=0, description="The ID of the payment method to update"),
     modalitate: ModalitatePlataUpdate = ...,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Partially update a payment method (PATCH - only update provided fields)"""
@@ -195,12 +203,14 @@ def patch_modalitati_plata(
 @router.delete("/{modalitate_id}", status_code=status.HTTP_204_NO_CONTENT, responses={
     204: {"description": "Payment method deleted successfully"},
     400: {"description": "Bad request, e.g., payment method is in use"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Payment method not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
 def delete_modalitati_plata(
     modalitate_id: int = Path(..., gt=0, description="The ID of the payment method to delete"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a payment method by ID"""

@@ -1,6 +1,7 @@
 import os
 import requests
 from integration.test_utils import EntityTestUtils
+from integration.test_auth_utils import auth_utils
 
 # Create a custom test utils class for payment methods
 class PaymentMethodTestUtils:
@@ -35,8 +36,13 @@ class PaymentMethodTestUtils:
             name = self.generate_unique_name("pm")
         if description is None:
             description = f"Test Payment Method: {name}"
+        
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
             
-        create_response = requests.post(
+        create_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             json={"name": name, "description": description}
         )
@@ -90,14 +96,19 @@ class PaymentMethodTestUtils:
             update_data["name"] = name
         if description is not None:
             update_data["description"] = description
+        
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
             
-        update_response = requests.put(
+        update_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{self.base_url}/{entity_id}",
             json=update_data
         )
         assert update_response.status_code == 200, (
             f"Failed to update {self.entity_name}. "
-            f"Expected 200, got {update_response.status_code}: {get_response.text}"
+            f"Expected 200, got {update_response.status_code}: {update_response.text}"
         )
         
         updated_entity = update_response.json()
@@ -115,7 +126,14 @@ class PaymentMethodTestUtils:
         Args:
             entity_id: ID of the payment method to delete
         """
-        delete_response = requests.delete(f"{self.base_url}/{entity_id}")
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        delete_response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{self.base_url}/{entity_id}"
+        )
         assert delete_response.status_code == 204, (
             f"Failed to delete {self.entity_name}. "
             f"Expected 204, got {delete_response.status_code}: {delete_response.text}"
@@ -136,7 +154,8 @@ def test_patch_with_valid_data():
         # PATCH with new name and description
         new_name = "patched_pm"
         new_description = "Patched Payment Method"
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{payment_method_utils.base_url}/{entity_id}",
             json={"name": new_name, "description": new_description}
         )
@@ -168,7 +187,8 @@ def test_patch_with_empty_json():
     
     try:
         # PATCH with empty JSON should return 400 (no valid fields to update)
-        empty_patch_response = requests.patch(
+        empty_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{payment_method_utils.base_url}/{entity_id}",
             json={}
         )
@@ -190,7 +210,8 @@ def test_patch_with_non_existent_payment_method():
     """
     Test PATCH with non-existent payment method ID.
     """
-    non_existent_response = requests.patch(
+    non_existent_response = auth_utils.make_authenticated_request(
+        "PATCH",
         f"{payment_method_utils.base_url}/99999",
         json={"name": "test"}
     )
@@ -208,7 +229,8 @@ def test_patch_with_invalid_data():
     
     try:
         # PATCH with empty string (should fail validation)
-        invalid_patch_response = requests.patch(
+        invalid_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{payment_method_utils.base_url}/{entity_id}",
             json={"name": ""}
         )
@@ -240,7 +262,8 @@ def test_patch_with_duplicate_name():
 
     try:
         # Try to PATCH first payment method to use the same name as second payment method
-        duplicate_patch_response = requests.patch(
+        duplicate_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{payment_method_utils.base_url}/{first_id}",
             json={"name": second_name}
         )
@@ -269,7 +292,8 @@ def test_patch_with_partial_data_works():
     try:
         # PATCH with partial data (should work)
         patch_data = {"name": "patched_pm"}
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{payment_method_utils.base_url}/{entity_id}",
             json=patch_data
         )
@@ -293,7 +317,8 @@ def test_put_with_empty_json_fails():
     
     try:
         # PUT with empty JSON (should fail)
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{payment_method_utils.base_url}/{entity_id}",
             json={}  # Empty JSON for PUT should fail
         )
@@ -321,7 +346,8 @@ def test_put_with_complete_data_works():
     try:
         # PUT with complete data (should work)
         put_data = {"name": "put_updated_pm", "description": "PUT Updated Payment Method"}
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{payment_method_utils.base_url}/{entity_id}",
             json=put_data
         )
@@ -400,7 +426,12 @@ def test_payment_method_validation():
     assert invalid_id_response.status_code == 422
     
     # Test empty name
-    invalid_name_response = requests.post(
+    # Ensure we're authenticated
+    if not auth_utils.access_token:
+        auth_utils.login()
+        
+    invalid_name_response = auth_utils.make_authenticated_request(
+        "POST",
         f"{payment_method_utils.base_url}/",
         json={"name": "", "description": "Test"}
     )
@@ -412,7 +443,8 @@ def test_payment_method_validation():
     
     try:
         # Try to create another payment method with the same name
-        duplicate_response = requests.post(
+        duplicate_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{payment_method_utils.base_url}/",
             json={"name": unique_name, "description": "Duplicate Payment Method"}
         )

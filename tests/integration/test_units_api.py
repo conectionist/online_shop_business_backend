@@ -1,5 +1,6 @@
 import requests
 from integration.test_utils import EntityTestUtils
+from integration.test_auth_utils import auth_utils
 
 # Create a test utils instance for units
 unit_utils = EntityTestUtils(entity_name="Unit", endpoint_path="unitati")
@@ -33,7 +34,8 @@ def test_patch_with_valid_data():
     try:
         # PATCH with new name
         new_name = "PatchedUnit"  # Short name for Units (max 45 chars)
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{unit_utils.base_url}/{entity_id}",
             json={"denumire": new_name}
         )
@@ -64,7 +66,8 @@ def test_patch_with_empty_json():
     
     try:
         # PATCH with empty JSON should return 422 (no update data provided)
-        empty_patch_response = requests.patch(
+        empty_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{unit_utils.base_url}/{entity_id}",
             json={}
         )
@@ -86,7 +89,8 @@ def test_patch_with_non_existent_unit():
     """
     Test PATCH with non-existent unit ID.
     """
-    non_existent_response = requests.patch(
+    non_existent_response = auth_utils.make_authenticated_request(
+        "PATCH",
         f"{unit_utils.base_url}/99999",
         json={"denumire": "test"}
     )
@@ -108,7 +112,8 @@ def test_patch_with_duplicate_name():
     
     try:
         # Try to PATCH first unit to use the same name as second unit
-        duplicate_patch_response = requests.patch(
+        duplicate_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{unit_utils.base_url}/{first_id}",
             json={"denumire": second_name}
         )
@@ -132,14 +137,16 @@ def test_unit_put_vs_patch_differences():
     try:
         # 2. PATCH with partial data (should work)
         patch_name = "PatchedUnit"  # Short name for Units (max 45 chars)
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{unit_utils.base_url}/{entity_id}",
             json={"denumire": patch_name}
         )
         assert patch_response.status_code == 200
         
         # 3. PUT with partial data (should fail - PUT requires all fields)
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{unit_utils.base_url}/{entity_id}",
             json={}  # Empty JSON for PUT should fail
         )
@@ -149,7 +156,8 @@ def test_unit_put_vs_patch_differences():
         
         # 4. PUT with complete data (should work)
         put_name = "PutUpdated"  # Short name for Units (max 45 chars)
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{unit_utils.base_url}/{entity_id}",
             json={"denumire": put_name}
         )

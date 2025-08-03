@@ -60,9 +60,9 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 - [x] `DELETE /modalitati-plata/{id}` - Delete payment methods
 
 #### Units Management:
-- [ ] `POST /unitati/` - Create units
-- [ ] `PUT /unitati/{id}` - Update units
-- [ ] `DELETE /unitati/{id}` - Delete units
+- [x] `POST /unitati/` - Create units
+- [x] `PUT /unitati/{id}` - Update units
+- [x] `DELETE /unitati/{id}` - Delete units
 
 **Files to Modify in Phase 2:**
 - [x] `app/api/endpoints/delivery_types.py`
@@ -71,8 +71,8 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 - [x] `tests/integration/test_delivery_schedules_api.py`
 - [x] `app/api/endpoints/modalitati_plata.py`
 - [x] `tests/integration/test_payment_methods.py`
-- `app/api/endpoints/unitati.py`
-- `tests/integration/test_units_api.py`
+- [x] `app/api/endpoints/unitati.py`
+- [x] `tests/integration/test_units_api.py`
 
 ---
 
@@ -192,11 +192,11 @@ response = auth_utils.make_authenticated_request(
 - **Categories:** ✅ All endpoints protected
 - **System Config:** ✅ Read-only (no protection needed)
 
-### **Phase 2 Status:** ⏳ IN PROGRESS
+### **Phase 2 Status:** ✅ COMPLETED
 - **Delivery Types:** ✅ All endpoints protected
 - **Delivery Schedules:** ✅ All endpoints protected
 - **Payment Methods:** ✅ All endpoints protected
-- **Units:** ⏳ Not started
+- **Units:** ✅ All endpoints protected
 
 ### **Phase 3 Status:** ⏳ PENDING
 - **Product Images:** ⏳ Not started
@@ -209,10 +209,9 @@ response = auth_utils.make_authenticated_request(
 ## Next Steps
 
 1. **Phase 1 Complete:** All critical business operations are now protected
-2. **Begin Phase 2:** Protect Delivery Management endpoints
-3. **Continue Phase 2:** Protect Payment Methods and Units
-4. **Begin Phase 3:** Protect Content Management endpoints
-5. **Final Review:** Ensure all mutable endpoints are protected
+2. **Phase 2 Complete:** All business operations are now protected
+3. **Begin Phase 3:** Protect Content Management endpoints
+4. **Final Review:** Ensure all mutable endpoints are protected
 
 ---
 
@@ -227,4 +226,4 @@ response = auth_utils.make_authenticated_request(
 
 ---
 
-**Last Updated:** Phase 1 completed - All business configuration and core data management endpoints are now protected. System configuration is read-only and doesn't require protection. Phase 2 in progress - Delivery Types, Delivery Schedules, and Payment Methods completed. 
+**Last Updated:** Phase 1 and Phase 2 completed - All business configuration, core data management, and business operations endpoints are now protected. System configuration is read-only and doesn't require protection. Ready to begin Phase 3 (Content Management). 

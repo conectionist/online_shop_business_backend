@@ -5,6 +5,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dependencies import get_authenticated_admin
+from app.models.admin import Admin
 from app.schemas.unitati import Unit, UnitCreate, UnitUpdate
 from app.services.unitati import (
     create_unit,
@@ -41,10 +43,15 @@ def read_units(
 @router.post("/", response_model=Unit, status_code=status.HTTP_201_CREATED, responses={
     201: {"description": "Unit created successfully"},
     400: {"description": "Bad request, e.g., duplicate unit"},
+    401: {"description": "Unauthorized - Authentication required"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
-def create_units(unit: UnitCreate, db: Session = Depends(get_db)):
+def create_units(
+    unit: UnitCreate, 
+    current_admin: Admin = Depends(get_authenticated_admin),
+    db: Session = Depends(get_db)
+):
     """Create a new unit"""
     try:
         return create_unit(db=db, unit=unit)
@@ -99,6 +106,7 @@ def read_unit(
 @router.put("/{unit_id}", response_model=Unit, responses={
     200: {"description": "Unit updated successfully"},
     400: {"description": "Bad request, e.g., duplicate unit name"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Unit not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -106,6 +114,7 @@ def read_unit(
 def update_units(
     unit_id: int = Path(..., gt=0, description="The ID of the unit to update"),
     unit: UnitUpdate = ...,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Update an existing unit (PUT - full replacement)"""
@@ -134,6 +143,7 @@ def update_units(
 @router.patch("/{unit_id}", response_model=Unit, responses={
     200: {"description": "Unit updated successfully"},
     400: {"description": "Bad request, e.g., duplicate unit name"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Unit not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -141,6 +151,7 @@ def update_units(
 def patch_units(
     unit_id: int = Path(..., gt=0, description="The ID of the unit to update"),
     unit: UnitUpdate = ...,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Partially update an existing unit (PATCH - only update provided fields)"""
@@ -168,6 +179,7 @@ def patch_units(
 
 @router.delete("/{unit_id}", status_code=status.HTTP_204_NO_CONTENT, responses={
     204: {"description": "Unit deleted successfully"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "Unit not found"},
     409: {"description": "Conflict, unit is in use"},
     422: {"description": "Validation error"},
@@ -175,6 +187,7 @@ def patch_units(
 })
 def delete_units(
     unit_id: int = Path(..., gt=0, description="The ID of the unit to delete"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a unit"""

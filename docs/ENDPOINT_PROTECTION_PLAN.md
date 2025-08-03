@@ -45,9 +45,9 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 *Business operations and reference data that should be protected.*
 
 #### Delivery Management:
-- [ ] `POST /tipuri-livrare/` - Create delivery types
-- [ ] `PUT /tipuri-livrare/{id}` - Update delivery types
-- [ ] `DELETE /tipuri-livrare/{id}` - Delete delivery types
+- [x] `POST /tipuri-livrare/` - Create delivery types
+- [x] `PUT /tipuri-livrare/{id}` - Update delivery types
+- [x] `DELETE /tipuri-livrare/{id}` - Delete delivery types
 
 #### Delivery Schedules:
 - [ ] `POST /orare-livrari/` - Create delivery schedules
@@ -65,11 +65,11 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 - [ ] `DELETE /unitati/{id}` - Delete units
 
 **Files to Modify in Phase 2:**
-- `app/api/endpoints/delivery_types.py`
+- [x] `app/api/endpoints/delivery_types.py`
+- [x] `tests/integration/test_delivery_types_api.py`
 - `app/api/endpoints/delivery_schedules.py`
 - `app/api/endpoints/modalitati_plata.py`
 - `app/api/endpoints/unitati.py`
-- `tests/integration/test_delivery_types_api.py`
 - `tests/integration/test_delivery_schedules_api.py`
 - `tests/integration/test_payment_methods.py`
 - `tests/integration/test_units_api.py`
@@ -192,8 +192,8 @@ response = auth_utils.make_authenticated_request(
 - **Categories:** ✅ All endpoints protected
 - **System Config:** ✅ Read-only (no protection needed)
 
-### **Phase 2 Status:** ⏳ PENDING
-- **Delivery Types:** ⏳ Not started
+### **Phase 2 Status:** ⏳ IN PROGRESS
+- **Delivery Types:** ✅ All endpoints protected
 - **Delivery Schedules:** ⏳ Not started
 - **Payment Methods:** ⏳ Not started
 - **Units:** ⏳ Not started

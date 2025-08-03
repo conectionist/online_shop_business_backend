@@ -37,8 +37,13 @@ class EntityTestUtils:
         """
         if name is None:
             name = self.generate_unique_name()
+        
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
             
-        create_response = requests.post(
+        create_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             json={"denumire": name}
         )
@@ -85,7 +90,12 @@ class EntityTestUtils:
         Returns:
             Updated entity data
         """
-        update_response = requests.put(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        update_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{self.base_url}/{entity_id}",
             json={"denumire": name}
         )
@@ -151,7 +161,12 @@ class EntityTestUtils:
         assert invalid_id_response.status_code == 422
         
         # Test empty name
-        invalid_name_response = requests.post(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        invalid_name_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             json={"denumire": ""}
         )
@@ -163,7 +178,8 @@ class EntityTestUtils:
         
         try:
             # Try to create another entity with the same name
-            duplicate_response = requests.post(
+            duplicate_response = auth_utils.make_authenticated_request(
+                "POST",
                 f"{self.base_url}/",
                 json={"denumire": unique_name}
             )

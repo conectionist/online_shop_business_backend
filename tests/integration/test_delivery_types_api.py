@@ -1,5 +1,6 @@
 import requests
 from integration.test_utils import EntityTestUtils
+from integration.test_auth_utils import auth_utils
 
 # Create a test utils instance for delivery types
 delivery_type_utils = EntityTestUtils(entity_name="Delivery Type", endpoint_path="tipuri-livrare")
@@ -15,7 +16,8 @@ def test_patch_with_valid_data():
     try:
         # PATCH with new name
         new_name = "Patched Delivery Type"
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{delivery_type_utils.base_url}/{entity_id}",
             json={"denumire": new_name}
         )
@@ -45,7 +47,8 @@ def test_patch_with_empty_json():
     
     try:
         # PATCH with empty JSON should return 400 (no valid fields to update)
-        empty_patch_response = requests.patch(
+        empty_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{delivery_type_utils.base_url}/{entity_id}",
             json={}
         )
@@ -67,7 +70,8 @@ def test_patch_with_non_existent_delivery_type():
     """
     Test PATCH with non-existent delivery type ID.
     """
-    non_existent_response = requests.patch(
+    non_existent_response = auth_utils.make_authenticated_request(
+        "PATCH",
         f"{delivery_type_utils.base_url}/99999",
         json={"denumire": "test"}
     )
@@ -85,7 +89,8 @@ def test_patch_with_invalid_data():
     
     try:
         # PATCH with empty string (should fail validation)
-        invalid_patch_response = requests.patch(
+        invalid_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{delivery_type_utils.base_url}/{entity_id}",
             json={"denumire": ""}
         )
@@ -115,7 +120,8 @@ def test_patch_with_duplicate_name():
 
     try:
         # Try to PATCH first delivery type to use the same name as second delivery type
-        duplicate_patch_response = requests.patch(
+        duplicate_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{delivery_type_utils.base_url}/{first_id}",
             json={"denumire": second_name}
         )
@@ -144,7 +150,8 @@ def test_patch_with_partial_data_works():
     try:
         # PATCH with partial data (should work)
         patch_data = {"denumire": "Patched Delivery Type"}
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{delivery_type_utils.base_url}/{entity_id}",
             json=patch_data
         )
@@ -168,7 +175,8 @@ def test_put_with_empty_json_fails():
     
     try:
         # PUT with empty JSON (should fail)
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{delivery_type_utils.base_url}/{entity_id}",
             json={}  # Empty JSON for PUT should fail
         )
@@ -196,7 +204,8 @@ def test_put_with_complete_data_works():
     try:
         # PUT with complete data (should work)
         put_data = {"denumire": "PUT Updated Delivery Type"}
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{delivery_type_utils.base_url}/{entity_id}",
             json=put_data
         )

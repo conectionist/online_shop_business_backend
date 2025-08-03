@@ -91,9 +91,10 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 - [ ] `DELETE /product-overrides/{id}` - Delete product overrides
 
 #### Lists Management:
-- [ ] `POST /liste/` - Create lists
-- [ ] `PUT /liste/{id}` - Update lists
-- [ ] `DELETE /liste/{id}` - Delete lists
+- [x] `POST /liste/` - Create lists
+- [x] `PUT /liste/{id}` - Update lists
+- [x] `PATCH /liste/{id}` - Partially update lists
+- [x] `DELETE /liste/{id}` - Delete lists
 
 #### List Relationships:
 - [ ] `POST /liste/{list_id}/products/{product_id}` - Add product to list
@@ -104,11 +105,11 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 **Files to Modify in Phase 3:**
 - [x] `app/api/endpoints/product_images.py`
 - [x] `tests/integration/test_products_api.py` (product images tests)
+- [x] `app/api/endpoints/lists.py`
+- [x] `tests/integration/test_lists_api.py`
 - `app/api/endpoints/product_overrides.py`
-- `app/api/endpoints/lists.py`
 - `app/api/endpoints/list_relationships.py`
 - `tests/integration/test_product_overrides_api.py`
-- `tests/integration/test_lists_api.py`
 - `tests/integration/test_list_relationships_api.py`
 
 ---
@@ -200,8 +201,8 @@ response = auth_utils.make_authenticated_request(
 
 ### **Phase 3 Status:** ⏳ IN PROGRESS
 - **Product Images:** ✅ All endpoints protected
+- **Lists:** ✅ All endpoints protected
 - **Product Overrides:** ⏳ Not started
-- **Lists:** ⏳ Not started
 - **List Relationships:** ⏳ Not started
 
 ---
@@ -210,7 +211,7 @@ response = auth_utils.make_authenticated_request(
 
 1. **Phase 1 Complete:** All critical business operations are now protected
 2. **Phase 2 Complete:** All business operations are now protected
-3. **Phase 3 In Progress:** Product Images completed, continue with Product Overrides, Lists, and List Relationships
+3. **Phase 3 In Progress:** Product Images and Lists completed, continue with Product Overrides and List Relationships
 4. **Final Review:** Ensure all mutable endpoints are protected
 
 ---
@@ -226,4 +227,4 @@ response = auth_utils.make_authenticated_request(
 
 ---
 
-**Last Updated:** Phase 1 and Phase 2 completed - All business configuration, core data management, and business operations endpoints are now protected. Phase 3 in progress - Product Images completed. System configuration is read-only and doesn't require protection. 
+**Last Updated:** Phase 1 and Phase 2 completed - All business configuration, core data management, and business operations endpoints are now protected. Phase 3 in progress - Product Images and Lists completed. System configuration is read-only and doesn't require protection. 

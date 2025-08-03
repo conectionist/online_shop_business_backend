@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 
 from app.core.database import get_db
+from app.core.dependencies import get_authenticated_admin
+from app.models.admin import Admin
 from app.schemas.list import List as ListSchema, ListCreate, ListUpdate
 from app.services.list import (
     create_list,
@@ -48,11 +50,13 @@ def read_list(
 @router.post("/", response_model=ListSchema, status_code=status.HTTP_201_CREATED, responses={
     201: {"description": "List created successfully"},
     400: {"description": "Bad request, e.g., constraint violation"},
+    401: {"description": "Unauthorized - Authentication required"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
 def create_list_endpoint(
     list_data: ListCreate,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new list"""
@@ -63,12 +67,14 @@ def create_list_endpoint(
     200: {"description": "List updated successfully"},
     404: {"description": "List not found"},
     400: {"description": "Bad request, e.g., constraint violation or no valid fields"},
+    401: {"description": "Unauthorized - Authentication required"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
 def update_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list to update"),
     list_data: ListUpdate = ...,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Update an existing list (PUT - full replacement)"""
@@ -78,6 +84,7 @@ def update_list_endpoint(
 @router.patch("/{list_id}", response_model=ListSchema, responses={
     200: {"description": "List updated successfully"},
     400: {"description": "Bad request, e.g., no valid fields to update"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "List not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -85,6 +92,7 @@ def update_list_endpoint(
 def patch_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list to update"),
     list_data: ListUpdate = ...,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Partially update an existing list (PATCH - only update provided fields)"""
@@ -93,6 +101,7 @@ def patch_list_endpoint(
 
 @router.delete("/{list_id}", response_model=Dict[str, str], responses={
     200: {"description": "List deleted successfully"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "List not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -100,6 +109,7 @@ def patch_list_endpoint(
 def delete_list_endpoint(
     list_id: int,
     soft_delete: bool = Query(True, description="If True, perform soft delete; otherwise, hard delete"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a list"""

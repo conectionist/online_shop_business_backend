@@ -4,6 +4,7 @@ import uuid
 import datetime
 from integration.test_utils import EntityTestUtils
 from integration.test_delivery_schedules_api import DeliveryScheduleTestUtils
+from integration.test_auth_utils import auth_utils
 
 
 class ListTestUtils(EntityTestUtils):
@@ -52,8 +53,13 @@ class ListTestUtils(EntityTestUtils):
             
         # Generate short intro message (under 45 chars)
         mesaj_introducere = f"Test Message {str(uuid.uuid4())[:8]}"
+        
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
             
-        create_response = requests.post(
+        create_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             json={
                 "data": date,
@@ -101,7 +107,12 @@ class ListTestUtils(EntityTestUtils):
         if is_published is not None:
             update_data["is_published"] = is_published
         
-        update_response = requests.put(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        update_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{self.base_url}/{entity_id}",
             json=update_data
         )
@@ -131,8 +142,15 @@ class ListTestUtils(EntityTestUtils):
         delete_url = f"{self.base_url}/{entity_id}"
         if hard_delete:
             delete_url += "?hard_delete=true"
+        
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
             
-        delete_response = requests.delete(delete_url)
+        delete_response = auth_utils.make_authenticated_request(
+            "DELETE",
+            delete_url
+        )
         
         # For lists, we expect 200 OK with a message rather than 204 No Content
         assert delete_response.status_code == 200, (
@@ -200,7 +218,15 @@ class ListTestUtils(EntityTestUtils):
         
         # 2. Try HARD DELETE (but verify if API supports it)
         delete_url = f"{self.base_url}/{entity_id}?hard_delete=true"
-        delete_response = requests.delete(delete_url)
+        
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        delete_response = auth_utils.make_authenticated_request(
+            "DELETE",
+            delete_url
+        )
         assert delete_response.status_code == 200
         
         # Get the response message to determine if hard or soft delete was performed
@@ -229,7 +255,12 @@ class ListTestUtils(EntityTestUtils):
         assert invalid_id_response.status_code == 422
         
         # Test missing required fields
-        missing_fields_response = requests.post(
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        missing_fields_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             json={}
         )
@@ -237,7 +268,8 @@ class ListTestUtils(EntityTestUtils):
         
         # Test invalid WhatsApp number
         _, schedule_id = self.create_delivery_schedule()
-        invalid_whatsapp_response = requests.post(
+        invalid_whatsapp_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             json={
                 "data": self.generate_test_date(),
@@ -249,7 +281,8 @@ class ListTestUtils(EntityTestUtils):
         assert invalid_whatsapp_response.status_code == 422
         
         # Test invalid delivery schedule ID
-        invalid_schedule_response = requests.post(
+        invalid_schedule_response = auth_utils.make_authenticated_request(
+            "POST",
             f"{self.base_url}/",
             json={
                 "data": self.generate_test_date(),
@@ -326,7 +359,8 @@ def test_patch_with_valid_data():
     try:
         # PATCH with new message
         new_message = "Patched Message"
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{list_utils.base_url}/{entity_id}",
             json={"mesaj_introducere": new_message}
         )
@@ -356,7 +390,8 @@ def test_patch_with_empty_json():
     
     try:
         # PATCH with empty JSON should return 400 (no valid fields to update)
-        empty_patch_response = requests.patch(
+        empty_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{list_utils.base_url}/{entity_id}",
             json={}
         )
@@ -378,7 +413,8 @@ def test_patch_with_non_existent_list():
     """
     Test PATCH with non-existent list ID.
     """
-    non_existent_response = requests.patch(
+    non_existent_response = auth_utils.make_authenticated_request(
+        "PATCH",
         f"{list_utils.base_url}/99999",
         json={"mesaj_introducere": "test"}
     )
@@ -397,7 +433,8 @@ def test_patch_with_invalid_data():
     try:
         # PATCH with message that's too long (exceeds 45 char limit)
         long_message = "This message is way too long and exceeds the 45 character limit for this field"
-        invalid_patch_response = requests.patch(
+        invalid_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{list_utils.base_url}/{entity_id}",
             json={"mesaj_introducere": long_message}
         )
@@ -429,7 +466,8 @@ def test_patch_multiple_fields():
             "alte_detalii": "Updated details for testing"
         }
         
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{list_utils.base_url}/{entity_id}",
             json=patch_data
         )
@@ -463,7 +501,8 @@ def test_patch_with_invalid_foreign_key():
     
     try:
         # PATCH with invalid delivery schedule ID
-        invalid_patch_response = requests.patch(
+        invalid_patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{list_utils.base_url}/{entity_id}",
             json={"orare_livrari_id": 999999}  # Non-existent ID
         )
@@ -490,7 +529,8 @@ def test_patch_with_partial_data_works():
     try:
         # PATCH with partial data (should work)
         patch_data = {"mesaj_introducere": "Patched Message"}
-        patch_response = requests.patch(
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
             f"{list_utils.base_url}/{entity_id}",
             json=patch_data
         )
@@ -514,7 +554,8 @@ def test_put_with_empty_json_fails():
     
     try:
         # PUT with empty JSON (should fail)
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{list_utils.base_url}/{entity_id}",
             json={}  # Empty JSON for PUT should fail
         )
@@ -553,7 +594,8 @@ def test_put_with_complete_data_works():
             "orare_livrari_id": current_entity["orare_livrari_id"]
         }
         
-        put_response = requests.put(
+        put_response = auth_utils.make_authenticated_request(
+            "PUT",
             f"{list_utils.base_url}/{entity_id}",
             json=put_data
         )

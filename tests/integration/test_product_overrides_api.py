@@ -3,6 +3,7 @@ import requests
 import datetime
 from integration.test_utils import EntityTestUtils
 from integration.test_products_api import ProductTestUtils
+from integration.test_auth_utils import auth_utils
 
 
 class ProductOverrideTestUtils:
@@ -41,7 +42,14 @@ class ProductOverrideTestUtils:
             for override in existing_overrides:
                 if override["field_name"] == field_name:
                     # Deactivate existing override
-                    requests.put(f"{self.base_url}/product-overrides/{override['id']}", json={"is_active": False})
+                    # Ensure we're authenticated
+                    if not auth_utils.access_token:
+                        auth_utils.login()
+                    auth_utils.make_authenticated_request(
+                        "PUT",
+                        f"{self.base_url}/product-overrides/{override['id']}",
+                        json={"is_active": False}
+                    )
         
         override_data = {
             "produse_id": product_id,
@@ -52,7 +60,15 @@ class ProductOverrideTestUtils:
             "is_active": True
         }
         
-        response = requests.post(f"{self.base_url}/product-overrides/", json=override_data)
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{self.base_url}/product-overrides/",
+            json=override_data
+        )
         assert response.status_code == 201
         override_id = response.json()["id"]
         return override_data, override_id
@@ -109,7 +125,15 @@ class ProductOverrideTestUtils:
             "is_active": True
         }
         
-        response = requests.post(f"{self.base_url}/product-overrides/", json=duplicate_data)
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{self.base_url}/product-overrides/",
+            json=duplicate_data
+        )
         assert response.status_code == 400
         assert "Active override already exists" in response.json()["detail"]
     
@@ -154,7 +178,15 @@ class ProductOverrideTestUtils:
             "notes": "Updated override"
         }
         
-        response = requests.put(f"{self.base_url}/product-overrides/{override_id}", json=update_data)
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "PUT",
+            f"{self.base_url}/product-overrides/{override_id}",
+            json=update_data
+        )
         assert response.status_code == 200
         updated_override = response.json()
         assert updated_override["new_value"] == "75"
@@ -169,7 +201,15 @@ class ProductOverrideTestUtils:
         # Deactivate override
         update_data = {"is_active": False}
         
-        response = requests.put(f"{self.base_url}/product-overrides/{override_id}", json=update_data)
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "PUT",
+            f"{self.base_url}/product-overrides/{override_id}",
+            json=update_data
+        )
         assert response.status_code == 200
         updated_override = response.json()
         assert updated_override["is_active"] == False
@@ -181,7 +221,14 @@ class ProductOverrideTestUtils:
         override_data, override_id = self.create_test_override(product_id)
         
         # Delete override
-        response = requests.delete(f"{self.base_url}/product-overrides/{override_id}")
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{self.base_url}/product-overrides/{override_id}"
+        )
         assert response.status_code == 204
         
         # Verify override was deleted
@@ -198,13 +245,28 @@ class ProductOverrideTestUtils:
         """Test updating a non-existent override."""
         update_data = {"new_value": "75"}
         
-        response = requests.put(f"{self.base_url}/product-overrides/999", json=update_data)
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "PUT",
+            f"{self.base_url}/product-overrides/999",
+            json=update_data
+        )
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
     
     def test_delete_nonexistent_override(self):
         """Test deleting a non-existent override."""
-        response = requests.delete(f"{self.base_url}/product-overrides/999")
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{self.base_url}/product-overrides/999"
+        )
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
     
@@ -218,7 +280,15 @@ class ProductOverrideTestUtils:
             "is_active": True
         }
         
-        response = requests.post(f"{self.base_url}/product-overrides/", json=override_data)
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{self.base_url}/product-overrides/",
+            json=override_data
+        )
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
     
@@ -235,7 +305,15 @@ class ProductOverrideTestUtils:
             "is_active": True
         }
         
-        response = requests.post(f"{self.base_url}/product-overrides/", json=override_data)
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{self.base_url}/product-overrides/",
+            json=override_data
+        )
         assert response.status_code == 422  # Validation error
     
     def test_filter_overrides_by_product(self):

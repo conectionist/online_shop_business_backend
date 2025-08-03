@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dependencies import get_authenticated_admin
+from app.models.admin import Admin
 from app.schemas.product_override import (
     ProductOverride,
     ProductOverrideCreate,
@@ -60,9 +62,16 @@ def get_override(
     return override
 
 
-@router.post("/", response_model=ProductOverrideResponse, status_code=status.HTTP_201_CREATED, tags=["Product Overrides"])
+@router.post("/", response_model=ProductOverrideResponse, status_code=status.HTTP_201_CREATED, tags=["Product Overrides"], responses={
+    201: {"description": "Product override created successfully"},
+    400: {"description": "Bad request, e.g., invalid data"},
+    401: {"description": "Unauthorized - Authentication required"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
 def create_override(
     override_data: ProductOverrideCreate,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -79,10 +88,18 @@ def create_override(
     return override
 
 
-@router.put("/{override_id}", response_model=ProductOverrideResponse, tags=["Product Overrides"])
+@router.put("/{override_id}", response_model=ProductOverrideResponse, tags=["Product Overrides"], responses={
+    200: {"description": "Product override updated successfully"},
+    400: {"description": "Bad request, e.g., invalid data"},
+    401: {"description": "Unauthorized - Authentication required"},
+    404: {"description": "Product override not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
 def update_override(
     override_id: int = Path(..., gt=0, description="ID of the override to update"),
     override_data: ProductOverrideUpdate = None,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -103,9 +120,16 @@ def update_override(
     return override
 
 
-@router.delete("/{override_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Product Overrides"])
+@router.delete("/{override_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Product Overrides"], responses={
+    204: {"description": "Product override deleted successfully"},
+    401: {"description": "Unauthorized - Authentication required"},
+    404: {"description": "Product override not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
 def delete_override(
     override_id: int = Path(..., gt=0, description="ID of the override to delete"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """

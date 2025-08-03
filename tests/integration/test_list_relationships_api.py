@@ -6,6 +6,7 @@ from integration.test_utils import EntityTestUtils
 from integration.test_lists_api import ListTestUtils
 from integration.test_products_api import ProductTestUtils
 from integration.test_delivery_types_api import delivery_type_utils
+from integration.test_auth_utils import auth_utils
 
 
 class ListRelationshipTestUtils:
@@ -54,7 +55,16 @@ class ListRelationshipTestUtils:
     def add_product_to_list(self, list_id, product_id, stoc_produs=None, expected_status=201):
         """Add a product to a list."""
         data = {"stoc_produs": stoc_produs} if stoc_produs is not None else {}
-        response = requests.post(f"{self.base_url}/{list_id}/products/{product_id}", json=data)
+        
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{self.base_url}/{list_id}/products/{product_id}",
+            json=data
+        )
         assert response.status_code == expected_status, (
             f"Failed to add product {product_id} to list {list_id}. "
             f"Expected {expected_status}, got {response.status_code}: {response.text}"
@@ -63,7 +73,14 @@ class ListRelationshipTestUtils:
     
     def add_delivery_type_to_list(self, list_id, delivery_type_id, expected_status=201):
         """Add a delivery type to a list."""
-        response = requests.post(f"{self.base_url}/{list_id}/delivery-types/{delivery_type_id}")
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{self.base_url}/{list_id}/delivery-types/{delivery_type_id}"
+        )
         assert response.status_code == expected_status, (
             f"Failed to add delivery type {delivery_type_id} to list {list_id}. "
             f"Expected {expected_status}, got {response.status_code}: {response.text}"
@@ -72,7 +89,14 @@ class ListRelationshipTestUtils:
     
     def remove_product_from_list(self, list_id, product_id, expected_status=204):
         """Remove a product from a list."""
-        response = requests.delete(f"{self.base_url}/{list_id}/products/{product_id}")
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{self.base_url}/{list_id}/products/{product_id}"
+        )
         assert response.status_code == expected_status, (
             f"Failed to remove product {product_id} from list {list_id}. "
             f"Expected {expected_status}, got {response.status_code}: {response.text}"
@@ -80,7 +104,14 @@ class ListRelationshipTestUtils:
     
     def remove_delivery_type_from_list(self, list_id, delivery_type_id, expected_status=204):
         """Remove a delivery type from a list."""
-        response = requests.delete(f"{self.base_url}/{list_id}/delivery-types/{delivery_type_id}")
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "DELETE",
+            f"{self.base_url}/{list_id}/delivery-types/{delivery_type_id}"
+        )
         assert response.status_code == expected_status, (
             f"Failed to remove delivery type {delivery_type_id} from list {list_id}. "
             f"Expected {expected_status}, got {response.status_code}: {response.text}"
@@ -88,7 +119,15 @@ class ListRelationshipTestUtils:
     
     def replace_list_products(self, list_id, product_ids, expected_status=200):
         """Replace all products in a list."""
-        response = requests.put(f"{self.base_url}/{list_id}/products", json=product_ids)
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "PUT",
+            f"{self.base_url}/{list_id}/products",
+            json=product_ids
+        )
         assert response.status_code == expected_status, (
             f"Failed to replace products for list {list_id}. "
             f"Expected {expected_status}, got {response.status_code}: {response.text}"
@@ -97,7 +136,15 @@ class ListRelationshipTestUtils:
     
     def replace_list_delivery_types(self, list_id, delivery_type_ids, expected_status=200):
         """Replace all delivery types in a list."""
-        response = requests.put(f"{self.base_url}/{list_id}/delivery-types", json=delivery_type_ids)
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        response = auth_utils.make_authenticated_request(
+            "PUT",
+            f"{self.base_url}/{list_id}/delivery-types",
+            json=delivery_type_ids
+        )
         assert response.status_code == expected_status, (
             f"Failed to replace delivery types for list {list_id}. "
             f"Expected {expected_status}, got {response.status_code}: {response.text}"
@@ -402,7 +449,12 @@ def test_list_products_stoc_produs_validation():
     product_data, product_id = list_relationship_utils.create_test_product()
     
     # 2. Test negative stoc_produs (should fail validation)
-    response = requests.post(
+    # Ensure we're authenticated
+    if not auth_utils.access_token:
+        auth_utils.login()
+        
+    response = auth_utils.make_authenticated_request(
+        "POST",
         f"{list_relationship_utils.base_url}/{list_id}/products/{product_id}",
         json={"stoc_produs": -5}
     )
@@ -431,7 +483,8 @@ def test_list_products_stoc_produs_edge_cases():
     
     # 3. Test adding product with empty request body (should work)
     product2_data, product2_id = list_relationship_utils.create_test_product()
-    response = requests.post(
+    response = auth_utils.make_authenticated_request(
+        "POST",
         f"{list_relationship_utils.base_url}/{list_id}/products/{product2_id}",
         json={}
     )

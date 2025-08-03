@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
+from app.core.dependencies import get_authenticated_admin
+from app.models.admin import Admin
 from app.schemas.product import Product as ProductSchema
 from app.services.list_product import (
     get_list_products,
@@ -47,6 +49,7 @@ def get_list_products_endpoint(
 @router.post("/{list_id}/products/{product_id}", response_model=dict, status_code=status.HTTP_201_CREATED, responses={
     201: {"description": "Product added to list successfully"},
     400: {"description": "Bad request, e.g., product already in list"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "List or product not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -55,6 +58,7 @@ def add_product_to_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to add to the list"),
     request: AddProductRequest = Body(...),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -82,6 +86,7 @@ def add_product_to_list_endpoint(
 
 @router.delete("/{list_id}/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT, responses={
     204: {"description": "Product removed from list successfully"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "List or product not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -89,6 +94,7 @@ def add_product_to_list_endpoint(
 def remove_product_from_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to remove from the list"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -117,6 +123,7 @@ def remove_product_from_list_endpoint(
 @router.put("/{list_id}/products", response_model=List[ProductSchema], responses={
     200: {"description": "List products replaced successfully"},
     400: {"description": "Bad request, e.g., invalid product IDs"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "List not found or products not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -124,6 +131,7 @@ def remove_product_from_list_endpoint(
 def replace_list_products_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_ids: List[int] = ...,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """

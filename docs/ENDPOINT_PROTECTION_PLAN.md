@@ -97,20 +97,23 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 - [x] `DELETE /liste/{id}` - Delete lists
 
 #### List Relationships:
-- [ ] `POST /liste/{list_id}/products/{product_id}` - Add product to list
-- [ ] `DELETE /liste/{list_id}/products/{product_id}` - Remove product from list
-- [ ] `POST /liste/{list_id}/delivery-types/{delivery_type_id}` - Add delivery type to list
-- [ ] `DELETE /liste/{list_id}/delivery-types/{delivery_type_id}` - Remove delivery type from list
+- [x] `POST /liste/{list_id}/products/{product_id}` - Add product to list
+- [x] `DELETE /liste/{list_id}/products/{product_id}` - Remove product from list
+- [x] `PUT /liste/{list_id}/products` - Replace all products in list
+- [x] `POST /liste/{list_id}/delivery-types/{delivery_type_id}` - Add delivery type to list
+- [x] `DELETE /liste/{list_id}/delivery-types/{delivery_type_id}` - Remove delivery type from list
+- [x] `PUT /liste/{list_id}/delivery-types` - Replace all delivery types in list
 
 **Files to Modify in Phase 3:**
 - [x] `app/api/endpoints/product_images.py`
 - [x] `tests/integration/test_products_api.py` (product images tests)
 - [x] `app/api/endpoints/lists.py`
 - [x] `tests/integration/test_lists_api.py`
+- [x] `app/api/endpoints/list_products.py`
+- [x] `app/api/endpoints/list_delivery_types.py`
+- [x] `tests/integration/test_list_relationships_api.py`
 - `app/api/endpoints/product_overrides.py`
-- `app/api/endpoints/list_relationships.py`
 - `tests/integration/test_product_overrides_api.py`
-- `tests/integration/test_list_relationships_api.py`
 
 ---
 
@@ -202,8 +205,8 @@ response = auth_utils.make_authenticated_request(
 ### **Phase 3 Status:** ⏳ IN PROGRESS
 - **Product Images:** ✅ All endpoints protected
 - **Lists:** ✅ All endpoints protected
+- **List Relationships:** ✅ All endpoints protected
 - **Product Overrides:** ⏳ Not started
-- **List Relationships:** ⏳ Not started
 
 ---
 
@@ -211,7 +214,7 @@ response = auth_utils.make_authenticated_request(
 
 1. **Phase 1 Complete:** All critical business operations are now protected
 2. **Phase 2 Complete:** All business operations are now protected
-3. **Phase 3 In Progress:** Product Images and Lists completed, continue with Product Overrides and List Relationships
+3. **Phase 3 In Progress:** Product Images, Lists, and List Relationships completed, continue with Product Overrides
 4. **Final Review:** Ensure all mutable endpoints are protected
 
 ---
@@ -227,4 +230,4 @@ response = auth_utils.make_authenticated_request(
 
 ---
 
-**Last Updated:** Phase 1 and Phase 2 completed - All business configuration, core data management, and business operations endpoints are now protected. Phase 3 in progress - Product Images and Lists completed. System configuration is read-only and doesn't require protection. 
+**Last Updated:** Phase 1 and Phase 2 completed - All business configuration, core data management, and business operations endpoints are now protected. Phase 3 in progress - Product Images, Lists, and List Relationships completed. System configuration is read-only and doesn't require protection. 

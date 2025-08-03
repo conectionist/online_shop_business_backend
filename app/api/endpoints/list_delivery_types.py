@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dependencies import get_authenticated_admin
+from app.models.admin import Admin
 from app.schemas.delivery_type import DeliveryType as DeliveryTypeSchema
 from app.services.list_delivery_type import (
     get_list_delivery_types,
@@ -43,6 +45,7 @@ def get_list_delivery_types_endpoint(
 @router.post("/{list_id}/delivery-types/{delivery_type_id}", response_model=dict, status_code=status.HTTP_201_CREATED, responses={
     201: {"description": "Delivery type added to list successfully"},
     400: {"description": "Bad request, e.g., delivery type already in list"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "List or delivery type not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -50,6 +53,7 @@ def get_list_delivery_types_endpoint(
 def add_delivery_type_to_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     delivery_type_id: int = Path(..., gt=0, description="The ID of the delivery type to add to the list"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -76,6 +80,7 @@ def add_delivery_type_to_list_endpoint(
 
 @router.delete("/{list_id}/delivery-types/{delivery_type_id}", status_code=status.HTTP_204_NO_CONTENT, responses={
     204: {"description": "Delivery type removed from list successfully"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "List or delivery type not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -83,6 +88,7 @@ def add_delivery_type_to_list_endpoint(
 def remove_delivery_type_from_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     delivery_type_id: int = Path(..., gt=0, description="The ID of the delivery type to remove from the list"),
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -111,6 +117,7 @@ def remove_delivery_type_from_list_endpoint(
 @router.put("/{list_id}/delivery-types", response_model=List[DeliveryTypeSchema], responses={
     200: {"description": "List delivery types replaced successfully"},
     400: {"description": "Bad request, e.g., invalid delivery type IDs"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "List not found or delivery types not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
@@ -118,6 +125,7 @@ def remove_delivery_type_from_list_endpoint(
 def replace_list_delivery_types_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     delivery_type_ids: List[int] = ...,
+    current_admin: Admin = Depends(get_authenticated_admin),
     db: Session = Depends(get_db)
 ):
     """

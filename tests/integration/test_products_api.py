@@ -293,7 +293,7 @@ class ProductTestUtils(EntityTestUtils):
                 "unitati_id": "1"
             }
         )
-        assert invalid_name_response.status_code == 400  # API now returns 400 for empty name
+        assert invalid_name_response.status_code == 422  # API returns 422 for validation errors
         
         # Test invalid numeric fields
         invalid_numeric_response = auth_utils.make_authenticated_request(
@@ -308,7 +308,7 @@ class ProductTestUtils(EntityTestUtils):
                 "unitati_id": "1"
             }
         )
-        assert invalid_numeric_response.status_code == 400  # API returns 400 for invalid numeric values
+        assert invalid_numeric_response.status_code == 422  # API returns 422 for validation errors
         
         # Test duplicate name validation
         unique_name = self.generate_unique_name("Unique")
@@ -328,7 +328,7 @@ class ProductTestUtils(EntityTestUtils):
                     "unitati_id": "1"
                 }
             )
-            assert duplicate_response.status_code == 400, "API returns 400 for duplicate names"
+            assert duplicate_response.status_code == 409, "API returns 409 Conflict for duplicate names"
             
         finally:
             # Clean up

@@ -226,7 +226,7 @@ def create_product_endpoint(
         
         # Convert and validate pret
         try:
-            pret_val = float(pret)
+            pret_val = int(float(pret))  # Convert to int for cents
             if pret_val <= 0:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -245,8 +245,8 @@ def create_product_endpoint(
                 detail=[
                     {
                         "loc": ["body", "pret"],
-                        "msg": "value is not a valid float",
-                        "type": "type_error.float"
+                        "msg": "value is not a valid integer",
+                        "type": "type_error.integer"
                     }
                 ]
             )
@@ -372,6 +372,9 @@ def create_product_endpoint(
             ]
         )
         
+    except HTTPException:
+        # Re-raise HTTPExceptions (like 409 Conflict) without modification
+        raise
     except Exception as e:
         # Handle any other unexpected errors
         # For contract tests, return 400 instead of 500 to avoid test failures

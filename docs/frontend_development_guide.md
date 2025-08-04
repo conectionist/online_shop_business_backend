@@ -580,7 +580,7 @@ curl -X POST "http://localhost:8001/api/v1/products/" \
 **Required Fields**:
 - `nume` (string): Product name
 - `cantitate` (integer): Product quantity (must be >= 0)
-- `pret` (float): Product price (must be > 0)
+- `pret` (integer): Product price in cents (must be > 0)
 - `unitati_id` (integer): ID of the associated unit (must be > 0)
 
 **Optional Fields**:
@@ -628,7 +628,7 @@ curl -X PATCH "http://localhost:8001/api/v1/products/8" \
 **Optional Fields** (all fields are optional for PATCH):
 - `nume` (string): Product name
 - `cantitate` (integer): Product quantity (must be >= 0)
-- `pret` (float): Product price (must be > 0)
+- `pret` (integer): Product price in cents (must be > 0)
 - `description` (string): Product description
 - `category_id` (integer): ID of the associated category (must be > 0)
 - `unitati_id` (integer): ID of the associated unit (must be > 0)

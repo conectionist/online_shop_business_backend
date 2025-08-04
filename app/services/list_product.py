@@ -276,4 +276,72 @@ def replace_list_products(db: Session, list_id: int, product_ids: TypeList[int])
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error occurred: {str(e)}"
+        )
+
+
+def add_products_to_list(db: Session, list_id: int, product_ids: TypeList[int]) -> TypeList[Product]:
+    """
+    Add multiple products to a list without replacing existing ones.
+    
+    Args:
+        db: Database session
+        list_id: ID of the list
+        product_ids: List of product IDs to add to the list
+        
+    Returns:
+        List of Product objects that were added to the list
+        
+    Raises:
+        HTTPException: If list not found or any product doesn't exist
+    """
+    # Check if list exists
+    list_obj = db.query(List).filter(List.id == list_id).first()
+    if not list_obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"List with ID {list_id} not found"
+        )
+    
+    # Check if all products exist
+    products = db.query(Product).filter(Product.id.in_(product_ids)).all()
+    if len(products) != len(product_ids):
+        found_ids = [p.id for p in products]
+        missing_ids = [pid for pid in product_ids if pid not in found_ids]
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Products with IDs {missing_ids} not found"
+        )
+    
+    try:
+        # Get existing product IDs in the list
+        existing_relationships = db.query(ListProduct).filter(
+            ListProduct.liste_id == list_id
+        ).all()
+        existing_product_ids = [rel.produse_id for rel in existing_relationships]
+        
+        # Filter out products that are already in the list
+        new_product_ids = [pid for pid in product_ids if pid not in existing_product_ids]
+        
+        if not new_product_ids:
+            # All products are already in the list
+            return []
+        
+        # Add new relationships
+        added_products = []
+        for product_id in new_product_ids:
+            list_product = ListProduct(liste_id=list_id, produse_id=product_id)
+            db.add(list_product)
+            # Find the product object for the response
+            product = next(p for p in products if p.id == product_id)
+            added_products.append(product)
+        
+        db.commit()
+        
+        # Return only the products that were actually added
+        return added_products
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error occurred: {str(e)}"
         ) 

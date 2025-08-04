@@ -12,6 +12,7 @@ from app.services.list_product import (
     add_product_to_list,
     remove_product_from_list,
     replace_list_products,
+    add_products_to_list,
 )
 
 class AddProductRequest(BaseModel):
@@ -142,6 +143,38 @@ def replace_list_products_endpoint(
     """
     try:
         return replace_list_products(db=db, list_id=list_id, product_ids=product_ids)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+
+@router.patch("/{list_id}/products", response_model=List[ProductSchema], responses={
+    200: {"description": "Products added to list successfully"},
+    400: {"description": "Bad request, e.g., invalid product IDs"},
+    401: {"description": "Unauthorized - Authentication required"},
+    404: {"description": "List not found or products not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def add_products_to_list_endpoint(
+    list_id: int = Path(..., gt=0, description="The ID of the list"),
+    product_ids: List[int] = ...,
+    current_admin: Admin = Depends(get_authenticated_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Add multiple products to a list.
+    
+    Adds the specified products to the list without removing existing ones.
+    If a product is already in the list, it will be skipped.
+    Returns only the products that were actually added.
+    """
+    try:
+        return add_products_to_list(db=db, list_id=list_id, product_ids=product_ids)
     except HTTPException:
         raise
     except Exception as e:

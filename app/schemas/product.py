@@ -13,7 +13,7 @@ class ProductBase(BaseModel):
     nume: Annotated[str, Field(
         description="The name of the product",
         min_length=1,
-        max_length=45,
+        max_length=100,
         examples=["Apple", "Milk", "Bread"]
     )]
     
@@ -71,7 +71,7 @@ class ProductUpdate(BaseModel):
         None,
         description="The name of the product",
         min_length=1,
-        max_length=45
+        max_length=100
     )
     
     cantitate: Optional[int] = Field(

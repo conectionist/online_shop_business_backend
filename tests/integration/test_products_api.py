@@ -334,6 +334,38 @@ class ProductTestUtils(EntityTestUtils):
             # Clean up
             if entity_id:
                 self.hard_delete_entity(entity_id)
+        
+        # Test maximum length validation
+        # Create a name that's exactly 100 characters (the new limit)
+        max_length_name = "A" * 100
+        max_length_entity, max_length_id = self.create_entity(name=max_length_name)
+        
+        try:
+            # Verify the product was created successfully
+            assert max_length_entity["nume"] == max_length_name
+            assert len(max_length_entity["nume"]) == 100
+            
+            # Try to create a product with a name that's 101 characters (exceeds the limit)
+            too_long_name = "A" * 101
+            too_long_response = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/",
+                data={
+                    "nume": too_long_name,
+                    "cantitate": "10",
+                    "pret": "100",
+                    "description": "Test description",
+                    "category_id": "1",
+                    "unitati_id": "1"
+                }
+            )
+            # The API might return 400 or 422 for validation errors, both are acceptable
+            assert too_long_response.status_code in [400, 422], f"API should return 400 or 422 for names longer than 100 characters, got {too_long_response.status_code}: {too_long_response.text}"
+            
+        finally:
+            # Clean up
+            if max_length_id:
+                self.hard_delete_entity(max_length_id)
     
     def test_list_and_pagination(self):
         """

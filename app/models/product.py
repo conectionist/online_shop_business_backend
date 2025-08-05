@@ -11,7 +11,7 @@ class Product(Base):
     __tablename__ = "produse"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    nume = Column(String(45), nullable=False, unique=True)
+    nume = Column(String(100), nullable=False, unique=True)
     cantitate = Column(SmallInteger, nullable=False)
     pret = Column(SmallInteger, nullable=False)
     description = Column(String(1500), nullable=True)

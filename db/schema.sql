@@ -49,7 +49,7 @@ ENGINE = InnoDB;
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `online_shop`.`produse` (
   `id` INT NOT NULL AUTO_INCREMENT,
-  `nume` VARCHAR(45) NOT NULL,
+  `nume` VARCHAR(100) NOT NULL,
   `cantitate` SMALLINT NOT NULL,
   `pret` SMALLINT NOT NULL,
   `description` VARCHAR(1500) NULL DEFAULT NULL,

@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS `online_shop`.`liste` (
   `data` DATE NOT NULL,
   `is_current` TINYINT NOT NULL,
   `is_published` TINYINT NULL DEFAULT NULL,
-  `mesaj_introducere` VARCHAR(45) NULL,
+  `mesaj_introducere` VARCHAR(100) NULL,
   `alte_detalii` VARCHAR(500) NULL,
   `numar_whatsapp` VARCHAR(15) NULL,
   `orare_livrari_id` INT NOT NULL,

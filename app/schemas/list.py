@@ -10,7 +10,7 @@ class ListBase(BaseModel):
     is_published: Optional[bool] = Field(None, description="Flag indicating if the list is published")
     mesaj_introducere: Optional[str] = Field(
         None, 
-        max_length=45,
+        max_length=100,
         description="Introduction message for the list"
     )
     alte_detalii: Optional[str] = Field(
@@ -45,7 +45,7 @@ class ListUpdate(BaseModel):
     is_published: Optional[bool] = None
     mesaj_introducere: Optional[str] = Field(
         None, 
-        max_length=45,
+        max_length=100,
     )
     alte_detalii: Optional[str] = Field(
         None, 

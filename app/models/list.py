@@ -14,7 +14,7 @@ class List(Base):
     data = Column(Date, nullable=False)
     is_current = Column(SmallInteger, nullable=False)
     is_published = Column(SmallInteger, nullable=True)
-    mesaj_introducere = Column(String(45), nullable=True)
+    mesaj_introducere = Column(String(100), nullable=True)
     alte_detalii = Column(String(500), nullable=True)
     numar_whatsapp = Column(String(15), nullable=True)
     orare_livrari_id = Column(Integer, ForeignKey("orare_livrari.id"), nullable=False)

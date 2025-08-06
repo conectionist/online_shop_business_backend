@@ -328,6 +328,9 @@ DEFAULT CHARACTER SET = utf8mb4;
 
 -- -----------------------------------------------------
 -- Table `online_shop`.`liste_au_categorii` (List-Category ordering)
+-- This table manages the order of categories within each list.
+-- Each list can have categories in a specific admin-defined order.
+-- The position field determines the display order (0 = first, 1 = second, etc.)
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `online_shop`.`liste_au_categorii` (
   `liste_id` INT NOT NULL,
@@ -353,6 +356,10 @@ DEFAULT CHARACTER SET = utf8mb4;
 
 -- -----------------------------------------------------
 -- Table `online_shop`.`liste_au_produse_ordered` (List-Product ordering within categories)
+-- This table manages the order of products within each category for each list.
+-- Each product in a list belongs to a specific category and has a position within that category.
+-- The position field determines the display order within the category (0 = first, 1 = second, etc.)
+-- The stoc_produs field stores the stock quantity for this product in this specific list.
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `online_shop`.`liste_au_produse_ordered` (
   `liste_id` INT NOT NULL,
@@ -387,6 +394,33 @@ DEFAULT CHARACTER SET = utf8mb4;
 SET SQL_MODE=@OLD_SQL_MODE;
 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
+
+-- -----------------------------------------------------
+-- List Ordering System Documentation
+-- -----------------------------------------------------
+-- This database implements a flexible ordering system for lists:
+--
+-- 1. LIST-CATEGORY ORDERING (liste_au_categorii):
+--    - Each list can have categories in a specific order
+--    - Position field determines category display order (0 = first)
+--    - Categories can be reordered independently for each list
+--
+-- 2. PRODUCT-CATEGORY ORDERING (liste_au_produse_ordered):
+--    - Each product in a list belongs to a specific category
+--    - Position field determines product order within its category (0 = first)
+--    - Products can be reordered within categories
+--    - Stock quantity (stoc_produs) is managed per list-product
+--
+-- 3. EXAMPLE USAGE:
+--    List1 with categories: [Category2(pos=0), Category1(pos=1), Category3(pos=2)]
+--    Category1 products: [Product2(pos=0), Product3(pos=1), Product1(pos=2), Product4(pos=3)]
+--    This results in the exact order specified by the admin.
+--
+-- 4. PERFORMANCE:
+--    - Indexes on (liste_id, position) for efficient category ordering
+--    - Indexes on (liste_id, category_id, position) for efficient product ordering
+--    - CASCADE constraints ensure data integrity when lists are deleted
+-- -----------------------------------------------------
 
 -- -----------------------------------------------------
 -- Data for table `online_shop`.`unitati`

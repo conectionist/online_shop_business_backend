@@ -27,9 +27,9 @@ This plan implements a comprehensive solution for ordering categories and produc
 - [x] Add proper imports in `app/models/__init__.py`
 
 ### Step 1.3: Update Database Schema Documentation
-- [ ] Update `db/schema.sql` to include new tables
-- [ ] Add comments explaining the ordering system
-- [ ] Document the relationship between tables
+- [x] Update `db/schema.sql` to include new tables
+- [x] Add comments explaining the ordering system
+- [x] Document the relationship between tables
 
 ---
 

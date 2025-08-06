@@ -125,12 +125,12 @@ This plan implements a comprehensive solution for ordering categories and produc
 - [x] Ensure test data covers various scenarios (empty lists, single category, multiple categories, etc.)
 
 ### Step 5.3: Create Integration Tests
-- [ ] Create `tests/integration/test_list_categories_api.py`
+- [x] Create `tests/integration/test_list_categories_api.py`
 - [ ] Create `tests/integration/test_list_products_ordered_api.py`
-- [ ] Test all CRUD operations for categories
+- [x] Test all CRUD operations for categories
 - [ ] Test all CRUD operations for products
-- [ ] Test ordering functionality
-- [ ] Test error scenarios
+- [x] Test ordering functionality
+- [x] Test error scenarios
 
 ---
 

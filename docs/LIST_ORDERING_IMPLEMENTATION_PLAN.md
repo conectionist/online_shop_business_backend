@@ -14,17 +14,17 @@ This plan implements a comprehensive solution for ordering categories and produc
 ## Phase 1: Database Schema & Models
 
 ### Step 1.1: Update Database Schema
-- [ ] Update `db/schema.sql` to add new ordering tables
-- [ ] Add `liste_au_categorii` table for list-category ordering
-- [ ] Add `liste_au_produse_ordered` table for list-product ordering within categories
-- [ ] Add appropriate indexes for performance
-- [ ] Add foreign key constraints
+- [x] Update `db/schema.sql` to add new ordering tables
+- [x] Add `liste_au_categorii` table for list-category ordering
+- [x] Add `liste_au_produse_ordered` table for list-product ordering within categories
+- [x] Add appropriate indexes for performance
+- [x] Add foreign key constraints
 
 ### Step 1.2: Create SQLAlchemy Models
-- [ ] Create `app/models/list_category.py` for ListCategory model
-- [ ] Create `app/models/list_product_ordered.py` for ListProductOrdered model
-- [ ] Update `app/models/list.py` to include new relationships
-- [ ] Add proper imports in `app/models/__init__.py`
+- [x] Create `app/models/list_category.py` for ListCategory model
+- [x] Create `app/models/list_product_ordered.py` for ListProductOrdered model
+- [x] Update `app/models/list.py` to include new relationships
+- [x] Add proper imports in `app/models/__init__.py`
 
 ### Step 1.3: Update Database Schema Documentation
 - [ ] Update `db/schema.sql` to include new tables

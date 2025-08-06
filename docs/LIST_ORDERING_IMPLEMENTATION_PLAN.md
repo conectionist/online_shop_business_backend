@@ -120,9 +120,9 @@ This plan implements a comprehensive solution for ordering categories and produc
 - [x] Update any existing foreign key references
 
 ### Step 5.2: Create New Test Data
-- [ ] Create `test/test_data/seed_data_ordered.sql` with new table structure
-- [ ] Add sample data for ordered categories and products
-- [ ] Ensure test data covers various scenarios (empty lists, single category, multiple categories, etc.)
+- [x] Create `test/test_data/seed_data_ordered.sql` with new table structure
+- [x] Add sample data for ordered categories and products
+- [x] Ensure test data covers various scenarios (empty lists, single category, multiple categories, etc.)
 
 ### Step 5.3: Create Integration Tests
 - [ ] Create `tests/integration/test_list_categories_api.py`

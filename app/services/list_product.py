@@ -6,8 +6,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.models.list import List
 from app.models.product import Product
-from app.models.list_product import ListProduct
-from app.schemas.list_product import ListProductCreate, ListProductResponse
+from app.models.list_product_ordered import ListProductOrdered
+from app.models.category import Category
 
 
 def _get_image_versions(image_path: str) -> dict:
@@ -47,14 +47,14 @@ def _get_image_versions(image_path: str) -> dict:
 
 def get_list_products(db: Session, list_id: int) -> TypeList[dict]:
     """
-    Get all products in a list.
+    Get all products in a list, ordered by category and position.
     
     Args:
         db: Database session
         list_id: ID of the list
         
     Returns:
-        List of Product objects with full image data and stock information
+        List of Product objects with full image data and stock information, ordered by category and position
         
     Raises:
         HTTPException: If list not found
@@ -68,8 +68,14 @@ def get_list_products(db: Session, list_id: int) -> TypeList[dict]:
         )
     
     try:
-        # Get products with their stock information through the many-to-many relationship
-        list_products = db.query(ListProduct).filter(ListProduct.liste_id == list_id).all()
+        # Get products with their stock information through the new ordered relationship
+        list_products = db.query(ListProductOrdered).filter(
+            ListProductOrdered.liste_id == list_id
+        ).order_by(
+            ListProductOrdered.category_id,
+            ListProductOrdered.position
+        ).all()
+        
         result = []
         for list_product in list_products:
             product = list_product.product
@@ -86,6 +92,7 @@ def get_list_products(db: Session, list_id: int) -> TypeList[dict]:
                 "created_at": product.created_at,
                 "updated_at": product.updated_at,
                 "is_deleted": product.is_deleted,
+                "position": list_product.position,
                 "images": [
                     {
                         "id": img.id,
@@ -109,17 +116,18 @@ def get_list_products(db: Session, list_id: int) -> TypeList[dict]:
         )
 
 
-def add_product_to_list(db: Session, list_id: int, product_id: int, stoc_produs: int = None) -> ListProduct:
+def add_product_to_list(db: Session, list_id: int, product_id: int, stoc_produs: int = None) -> ListProductOrdered:
     """
-    Add a product to a list.
+    Add a product to a list (legacy function - adds to product's default category).
     
     Args:
         db: Database session
         list_id: ID of the list
         product_id: ID of the product to add
+        stoc_produs: Stock quantity for this product in this list
         
     Returns:
-        Created ListProduct relationship
+        Created ListProductOrdered relationship
         
     Raises:
         HTTPException: If list or product not found, or relationship already exists
@@ -141,9 +149,9 @@ def add_product_to_list(db: Session, list_id: int, product_id: int, stoc_produs:
         )
     
     # Check if relationship already exists
-    existing_relationship = db.query(ListProduct).filter(
-        ListProduct.liste_id == list_id,
-        ListProduct.produse_id == product_id
+    existing_relationship = db.query(ListProductOrdered).filter(
+        ListProductOrdered.liste_id == list_id,
+        ListProductOrdered.produse_id == product_id
     ).first()
     
     if existing_relationship:
@@ -153,8 +161,24 @@ def add_product_to_list(db: Session, list_id: int, product_id: int, stoc_produs:
         )
     
     try:
+        # Get the product's default category
+        category_id = product.category_id
+        
+        # Get the next position in this category
+        max_position = db.query(ListProductOrdered).filter(
+            ListProductOrdered.liste_id == list_id,
+            ListProductOrdered.category_id == category_id
+        ).with_entities(db.func.max(ListProductOrdered.position)).scalar()
+        position = 0 if max_position is None else max_position + 1
+        
         # Create the relationship
-        list_product = ListProduct(liste_id=list_id, produse_id=product_id, stoc_produs=stoc_produs)
+        list_product = ListProductOrdered(
+            liste_id=list_id,
+            produse_id=product_id,
+            category_id=category_id,
+            position=position,
+            stoc_produs=stoc_produs
+        )
         db.add(list_product)
         db.commit()
         db.refresh(list_product)
@@ -206,15 +230,28 @@ def remove_product_from_list(db: Session, list_id: int, product_id: int) -> bool
     
     try:
         # Find and delete the relationship
-        relationship = db.query(ListProduct).filter(
-            ListProduct.liste_id == list_id,
-            ListProduct.produse_id == product_id
+        relationship = db.query(ListProductOrdered).filter(
+            ListProductOrdered.liste_id == list_id,
+            ListProductOrdered.produse_id == product_id
         ).first()
         
         if not relationship:
             return False
         
+        # Get the position and category of the product being removed
+        removed_position = relationship.position
+        category_id = relationship.category_id
+        
+        # Delete the relationship
         db.delete(relationship)
+        
+        # Update positions of remaining products in the same category (shift them down)
+        db.query(ListProductOrdered).filter(
+            ListProductOrdered.liste_id == list_id,
+            ListProductOrdered.category_id == category_id,
+            ListProductOrdered.position > removed_position
+        ).update({ListProductOrdered.position: ListProductOrdered.position - 1})
+        
         db.commit()
         return True
     except SQLAlchemyError as e:
@@ -260,12 +297,26 @@ def replace_list_products(db: Session, list_id: int, product_ids: TypeList[int])
     
     try:
         # Remove all existing relationships
-        db.query(ListProduct).filter(ListProduct.liste_id == list_id).delete()
+        db.query(ListProductOrdered).filter(ListProductOrdered.liste_id == list_id).delete()
         
-        # Add new relationships
-        for product_id in product_ids:
-            list_product = ListProduct(liste_id=list_id, produse_id=product_id)
-            db.add(list_product)
+        # Add new relationships grouped by category
+        category_products = {}
+        for product in products:
+            category_id = product.category_id
+            if category_id not in category_products:
+                category_products[category_id] = []
+            category_products[category_id].append(product)
+        
+        # Add products to their respective categories with positions
+        for category_id, category_products_list in category_products.items():
+            for position, product in enumerate(category_products_list):
+                list_product = ListProductOrdered(
+                    liste_id=list_id,
+                    produse_id=product.id,
+                    category_id=category_id,
+                    position=position
+                )
+                db.add(list_product)
         
         db.commit()
         
@@ -314,8 +365,8 @@ def add_products_to_list(db: Session, list_id: int, product_ids: TypeList[int]) 
     
     try:
         # Get existing product IDs in the list
-        existing_relationships = db.query(ListProduct).filter(
-            ListProduct.liste_id == list_id
+        existing_relationships = db.query(ListProductOrdered).filter(
+            ListProductOrdered.liste_id == list_id
         ).all()
         existing_product_ids = [rel.produse_id for rel in existing_relationships]
         
@@ -326,14 +377,34 @@ def add_products_to_list(db: Session, list_id: int, product_ids: TypeList[int]) 
             # All products are already in the list
             return []
         
-        # Add new relationships
+        # Group new products by category
+        category_products = {}
+        for product in products:
+            if product.id in new_product_ids:
+                category_id = product.category_id
+                if category_id not in category_products:
+                    category_products[category_id] = []
+                category_products[category_id].append(product)
+        
+        # Add new relationships with proper positioning
         added_products = []
-        for product_id in new_product_ids:
-            list_product = ListProduct(liste_id=list_id, produse_id=product_id)
-            db.add(list_product)
-            # Find the product object for the response
-            product = next(p for p in products if p.id == product_id)
-            added_products.append(product)
+        for category_id, category_products_list in category_products.items():
+            # Get the next position in this category
+            max_position = db.query(ListProductOrdered).filter(
+                ListProductOrdered.liste_id == list_id,
+                ListProductOrdered.category_id == category_id
+            ).with_entities(db.func.max(ListProductOrdered.position)).scalar()
+            start_position = 0 if max_position is None else max_position + 1
+            
+            for position, product in enumerate(category_products_list):
+                list_product = ListProductOrdered(
+                    liste_id=list_id,
+                    produse_id=product.id,
+                    category_id=category_id,
+                    position=start_position + position
+                )
+                db.add(list_product)
+                added_products.append(product)
         
         db.commit()
         

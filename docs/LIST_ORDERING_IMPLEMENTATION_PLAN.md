@@ -53,10 +53,10 @@ This plan implements a comprehensive solution for ordering categories and produc
 - [x] Add proper error handling and validation
 
 ### Step 2.3: Replace Existing List Product Service
-- [ ] Replace `app/services/list_product.py` with new ordered structure
-- [ ] Update `get_list_products()` to return ordered data using new tables
-- [ ] Remove old functions that are no longer needed
-- [ ] Update any imports that reference the old service
+- [x] Replace `app/services/list_product.py` with new ordered structure
+- [x] Update `get_list_products()` to return ordered data using new tables
+- [x] Remove old functions that are no longer needed
+- [x] Update any imports that reference the old service
 
 ---
 

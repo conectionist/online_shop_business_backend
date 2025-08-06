@@ -114,10 +114,10 @@ This plan implements a comprehensive solution for ordering categories and produc
 ## Phase 5: Database Updates & Testing
 
 ### Step 5.1: Update Database Schema
-- [ ] Update `db/schema.sql` to replace `liste_au_produse` with new ordering tables
-- [ ] Remove old `liste_au_produse` table definition
-- [ ] Add new `liste_au_categorii` and `liste_au_produse_ordered` table definitions
-- [ ] Update any existing foreign key references
+- [x] Update `db/schema.sql` to replace `liste_au_produse` with new ordering tables
+- [x] Remove old `liste_au_produse` table definition
+- [x] Add new `liste_au_categorii` and `liste_au_produse_ordered` table definitions
+- [x] Update any existing foreign key references
 
 ### Step 5.2: Create New Test Data
 - [ ] Create `test/test_data/seed_data_ordered.sql` with new table structure

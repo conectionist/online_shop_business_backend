@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
-from app.core.dependencies import get_authenticated_admin
+from app.services.auth import get_current_admin
 from app.models.admin import Admin
 from app.schemas.product import Product as ProductSchema
 from app.services.list_product import (
@@ -59,7 +59,7 @@ def add_product_to_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to add to the list"),
     request: AddProductRequest = Body(...),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -95,7 +95,7 @@ def add_product_to_list_endpoint(
 def remove_product_from_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to remove from the list"),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -132,7 +132,7 @@ def remove_product_from_list_endpoint(
 def replace_list_products_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_ids: List[int] = ...,
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -163,7 +163,7 @@ def replace_list_products_endpoint(
 def add_products_to_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_ids: List[int] = ...,
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """

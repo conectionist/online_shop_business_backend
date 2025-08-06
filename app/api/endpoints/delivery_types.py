@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_authenticated_admin
+from app.services.auth import get_current_admin
 from app.models.admin import Admin
 from app.schemas.delivery_type import DeliveryType, DeliveryTypeCreate, DeliveryTypeUpdate
 from app.services.delivery_type import (
@@ -47,7 +47,7 @@ def read_delivery_types(
 })
 def create_delivery_type_endpoint(
     delivery_type: DeliveryTypeCreate, 
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new delivery type"""
@@ -95,7 +95,7 @@ def read_delivery_type(
 def update_delivery_type_endpoint(
     delivery_type_id: int = Path(..., gt=0, description="The ID of the delivery type to update"),
     delivery_type: DeliveryTypeUpdate = ...,
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Update a delivery type (PUT - full replacement)"""
@@ -121,7 +121,7 @@ def update_delivery_type_endpoint(
 def patch_delivery_type_endpoint(
     delivery_type_id: int = Path(..., gt=0, description="The ID of the delivery type to update"),
     delivery_type: DeliveryTypeUpdate = ...,
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Partially update a delivery type (PATCH - only update provided fields)"""
@@ -145,7 +145,7 @@ def patch_delivery_type_endpoint(
 })
 def delete_delivery_type_endpoint(
     delivery_type_id: int = Path(..., gt=0, description="The ID of the delivery type to delete"),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a delivery type"""

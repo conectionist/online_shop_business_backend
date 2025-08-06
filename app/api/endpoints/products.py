@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.core.database import get_db
 from app.core.constants import UNCATEGORIZED_CATEGORY_ID
-from app.core.dependencies import get_authenticated_admin
+from app.services.auth import get_current_admin
 from app.models.admin import Admin
 from app.core.file_upload import (
     delete_file, save_upload_file, is_valid_image, get_upload_dir
@@ -161,7 +161,7 @@ def create_product_endpoint(
     description: Optional[str] = Form(None),
     category_id: Optional[str] = Form(None), # Made optional, defaults to "Uncategorized"
     unitati_id: str = Form(...),  # Changed to str to handle validation manually
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -405,7 +405,7 @@ def update_product_endpoint(
     description: Optional[str] = Form(None),
     category_id: Optional[int] = Form(None),
     unitati_id: Optional[int] = Form(None),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     """
@@ -544,7 +544,7 @@ def update_product_endpoint(
 def delete_product(
     product_id: int,
     permanent: bool = Query(False, description="If true, performs a hard delete (default: False)"),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     """

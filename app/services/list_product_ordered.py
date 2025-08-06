@@ -2,6 +2,7 @@ from typing import List as TypeList
 import os
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.models.list import List
@@ -76,14 +77,33 @@ def get_list_products_by_category(db: Session, list_id: int) -> dict:
             ListProductOrdered.position
         ).all()
         
+        # Get category positions from list_categories table
+        from app.models.list_category import ListCategory
+        list_categories = db.query(ListCategory).filter(
+            ListCategory.liste_id == list_id
+        ).all()
+        
         # Group products by category
         categories = {}
+        
+        # First, add all categories that are explicitly in the list
+        for list_category in list_categories:
+            category = db.query(Category).filter(Category.id == list_category.category_id).first()
+            if category:
+                categories[list_category.category_id] = {
+                    "id": list_category.category_id,
+                    "name": category.name,
+                    "position": list_category.position,
+                    "products": []
+                }
+        
+        # Then add products to their categories
         for list_product in list_products:
             product = list_product.product
             category_id = list_product.category_id
             
+            # If category is not in categories (shouldn't happen, but just in case)
             if category_id not in categories:
-                # Get category info
                 category = db.query(Category).filter(Category.id == category_id).first()
                 categories[category_id] = {
                     "id": category_id,
@@ -119,17 +139,6 @@ def get_list_products_by_category(db: Session, list_id: int) -> dict:
                 ]
             }
             categories[category_id]["products"].append(product_dict)
-        
-        # Get category positions from list_categories table
-        from app.models.list_category import ListCategory
-        list_categories = db.query(ListCategory).filter(
-            ListCategory.liste_id == list_id
-        ).all()
-        
-        # Update category positions
-        for list_category in list_categories:
-            if list_category.category_id in categories:
-                categories[list_category.category_id]["position"] = list_category.position
         
         # Convert to list and sort by category position
         categories_list = list(categories.values())
@@ -207,7 +216,7 @@ def add_product_to_category(db: Session, list_id: int, product_id: int, category
             max_position = db.query(ListProductOrdered).filter(
                 ListProductOrdered.liste_id == list_id,
                 ListProductOrdered.category_id == category_id
-            ).with_entities(db.func.max(ListProductOrdered.position)).scalar()
+            ).with_entities(func.max(ListProductOrdered.position)).scalar()
             position = 0 if max_position is None else max_position + 1
         
         # Create the relationship
@@ -295,10 +304,10 @@ def update_product_position(db: Session, list_id: int, product_id: int, new_posi
         ).order_by(ListProductOrdered.position).all()
         
         # Validate new position
-        if new_position < 0 or new_position >= len(products):
+        if new_position < 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid position {new_position}. Must be between 0 and {len(products) - 1}"
+                detail=f"Invalid position {new_position}. Must be non-negative"
             )
         
         # Update positions of other products in the same category
@@ -398,8 +407,28 @@ def move_product_between_categories(db: Session, list_id: int, product_id: int, 
             max_position = db.query(ListProductOrdered).filter(
                 ListProductOrdered.liste_id == list_id,
                 ListProductOrdered.category_id == new_category_id
-            ).with_entities(db.func.max(ListProductOrdered.position)).scalar()
+            ).with_entities(func.max(ListProductOrdered.position)).scalar()
             position = 0 if max_position is None else max_position + 1
+        else:
+            # If position is specified, validate it's not negative
+            if position < 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid position {position}. Must be non-negative"
+                )
+            
+            # If the target category is empty, allow any position
+            # If not empty, validate the position is within bounds
+            if new_category_id != old_category_id:  # Only check if moving to different category
+                existing_products = db.query(ListProductOrdered).filter(
+                    ListProductOrdered.liste_id == list_id,
+                    ListProductOrdered.category_id == new_category_id
+                ).count()
+                if existing_products > 0 and position > existing_products:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid position {position}. Must be between 0 and {existing_products} for category with {existing_products} products"
+                    )
         
         # Update positions of products in the old category (shift them down)
         db.query(ListProductOrdered).filter(

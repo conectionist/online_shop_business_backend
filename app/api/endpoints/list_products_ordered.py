@@ -1,18 +1,26 @@
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Path, status, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Path
 from sqlalchemy.orm import Session
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
-from app.core.dependencies import get_authenticated_admin
+from app.services.auth import get_current_admin
 from app.models.admin import Admin
-from app.schemas.product import Product as ProductSchema
 from app.services.list_product_ordered import (
     get_list_products_by_category,
     add_product_to_category,
     update_product_position,
     move_product_between_categories,
-    remove_product_from_list,
+    remove_product_from_list
+)
+from app.schemas.list_product_ordered import (
+    ListProductOrderedCreate,
+    ListProductOrderedUpdate,
+    ListProductOrderedResponse,
+    ProductInListResponse,
+    CategoryWithProductsResponse,
+    ListProductsOrderedResponse,
+    MoveProductRequest
 )
 
 class AddProductRequest(BaseModel):
@@ -31,12 +39,14 @@ router = APIRouter()
 
 @router.get("/{list_id}/products/ordered", responses={
     200: {"description": "List of products grouped by category and ordered by position"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "List not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
 def get_list_products_ordered_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list to get products for"),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -69,7 +79,7 @@ def add_product_to_category_endpoint(
     category_id: int = Path(..., gt=0, description="The ID of the category"),
     product_id: int = Path(..., gt=0, description="The ID of the product to add"),
     request: AddProductRequest = Body(...),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -117,7 +127,7 @@ def update_product_position_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to update"),
     request: UpdateProductPositionRequest = Body(...),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -161,7 +171,7 @@ def move_product_between_categories_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to move"),
     request: MoveProductRequest = Body(...),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -176,7 +186,7 @@ def move_product_between_categories_endpoint(
             list_id=list_id, 
             product_id=product_id, 
             new_category_id=request.new_category_id,
-            new_position=request.new_position
+            position=request.new_position
         )
         return {
             "message": f"Product {product_id} moved to category {request.new_category_id} successfully",
@@ -205,7 +215,7 @@ def move_product_between_categories_endpoint(
 def remove_product_from_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to remove from the list"),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """

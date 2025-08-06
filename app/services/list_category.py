@@ -1,6 +1,7 @@
 from typing import List as TypeList
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.models.list import List
@@ -108,7 +109,7 @@ def add_category_to_list(db: Session, list_id: int, category_id: int, position: 
         if position is None:
             max_position = db.query(ListCategory).filter(
                 ListCategory.liste_id == list_id
-            ).with_entities(db.func.max(ListCategory.position)).scalar()
+            ).with_entities(func.max(ListCategory.position)).scalar()
             position = 0 if max_position is None else max_position + 1
         
         # Create the relationship
@@ -192,10 +193,10 @@ def update_category_position(db: Session, list_id: int, category_id: int, new_po
         ).order_by(ListCategory.position).all()
         
         # Validate new position
-        if new_position < 0 or new_position >= len(categories):
+        if new_position < 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid position {new_position}. Must be between 0 and {len(categories) - 1}"
+                detail=f"Invalid position {new_position}. Must be non-negative"
             )
         
         # Update positions of other categories

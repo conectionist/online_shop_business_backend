@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_authenticated_admin
+from app.services.auth import get_current_admin
 from app.models.admin import Admin
 from app.schemas.delivery_schedule import DeliverySchedule, DeliveryScheduleCreate, DeliveryScheduleUpdate
 from app.services.delivery_schedule import (
@@ -46,7 +46,7 @@ def read_delivery_schedules(
 })
 def create_delivery_schedule_endpoint(
     delivery_schedule: DeliveryScheduleCreate, 
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new delivery schedule"""
@@ -94,7 +94,7 @@ def read_delivery_schedule(
 def update_delivery_schedule_endpoint(
     delivery_schedule_id: int = Path(..., gt=0, description="The ID of the delivery schedule to update"),
     delivery_schedule: DeliveryScheduleUpdate = ...,
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Update a delivery schedule (PUT - full replacement)"""
@@ -124,7 +124,7 @@ def update_delivery_schedule_endpoint(
 def patch_delivery_schedule(
     delivery_schedule_id: int = Path(..., gt=0, description="The ID of the delivery schedule to update"),
     delivery_schedule: DeliveryScheduleUpdate = ...,
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Partially update a delivery schedule (PATCH - only update provided fields)"""
@@ -152,7 +152,7 @@ def patch_delivery_schedule(
 })
 def delete_delivery_schedule_endpoint(
     delivery_schedule_id: int = Path(..., gt=0, description="The ID of the delivery schedule to delete"),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a delivery schedule"""

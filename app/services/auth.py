@@ -19,6 +19,7 @@ from app.core.security import (
 from app.core.config import settings
 from app.models.admin import Admin
 from app.schemas.admin import AdminCreate, AdminLogin, AdminResponse
+from app.core.dependencies import custom_security
 
 # Security scheme for JWT tokens
 security = HTTPBearer()
@@ -144,7 +145,7 @@ def get_admin_by_username(db: Session, username: str) -> Optional[Admin]:
 
 
 def get_current_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(custom_security),
     db: Session = Depends(get_db)
 ) -> Admin:
     """

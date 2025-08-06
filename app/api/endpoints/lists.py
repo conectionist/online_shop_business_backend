@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 
 from app.core.database import get_db
-from app.core.dependencies import get_authenticated_admin
+from app.services.auth import get_current_admin
 from app.models.admin import Admin
 from app.schemas.list import List as ListSchema, ListCreate, ListUpdate
 from app.services.list import (
@@ -56,7 +56,7 @@ def read_list(
 })
 def create_list_endpoint(
     list_data: ListCreate,
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new list"""
@@ -74,7 +74,7 @@ def create_list_endpoint(
 def update_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list to update"),
     list_data: ListUpdate = ...,
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Update an existing list (PUT - full replacement)"""
@@ -92,7 +92,7 @@ def update_list_endpoint(
 def patch_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list to update"),
     list_data: ListUpdate = ...,
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Partially update an existing list (PATCH - only update provided fields)"""
@@ -109,7 +109,7 @@ def patch_list_endpoint(
 def delete_list_endpoint(
     list_id: int,
     soft_delete: bool = Query(True, description="If True, perform soft delete; otherwise, hard delete"),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a list"""

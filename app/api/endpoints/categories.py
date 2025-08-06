@@ -11,7 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from app.core.database import get_db
 from app.core.file_upload import delete_file, is_valid_image, get_upload_dir
 from app.core.image_processing import process_and_save_image_versions
-from app.core.dependencies import get_authenticated_admin
+from app.services.auth import get_current_admin
 from app.models.admin import Admin
 from app.schemas.category import Category, CategoryCreate, CategoryUpdate
 from app.services.category import (
@@ -141,7 +141,7 @@ def read_categories(
 def create_category_endpoint(
     name: str = Form(..., description="The name of the category"),
     primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new category
@@ -252,7 +252,7 @@ def update_category_endpoint(
     name: str = Form(..., description="The name of the category"),
     primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
     clear_image: bool = Form(False, description="If true, will clear the image and use placeholder"),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Update an existing category (PUT - full replacement)
@@ -504,7 +504,7 @@ def patch_category_endpoint(
 def delete_category(
     category_id: int = Path(..., gt=0, description="The ID of the category to delete"),
     permanent: bool = Query(False, description="Whether to permanently delete the category"),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a category (soft delete by default, hard delete if permanent=True)"""

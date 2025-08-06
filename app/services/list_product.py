@@ -2,6 +2,7 @@ from typing import List as TypeList
 import os
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.models.list import List
@@ -168,7 +169,7 @@ def add_product_to_list(db: Session, list_id: int, product_id: int, stoc_produs:
         max_position = db.query(ListProductOrdered).filter(
             ListProductOrdered.liste_id == list_id,
             ListProductOrdered.category_id == category_id
-        ).with_entities(db.func.max(ListProductOrdered.position)).scalar()
+        ).with_entities(func.max(ListProductOrdered.position)).scalar()
         position = 0 if max_position is None else max_position + 1
         
         # Create the relationship
@@ -393,7 +394,7 @@ def add_products_to_list(db: Session, list_id: int, product_ids: TypeList[int]) 
             max_position = db.query(ListProductOrdered).filter(
                 ListProductOrdered.liste_id == list_id,
                 ListProductOrdered.category_id == category_id
-            ).with_entities(db.func.max(ListProductOrdered.position)).scalar()
+            ).with_entities(func.max(ListProductOrdered.position)).scalar()
             start_position = 0 if max_position is None else max_position + 1
             
             for position, product in enumerate(category_products_list):

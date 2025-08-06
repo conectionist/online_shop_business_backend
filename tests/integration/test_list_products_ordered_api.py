@@ -117,6 +117,23 @@ class ListProductOrderedTestUtils(EntityTestUtils):
 list_product_ordered_utils = ListProductOrderedTestUtils()
 
 
+def add_category_to_list(list_id, category_id, position=None):
+    """Helper function to add a category to a list."""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    request_data = {}
+    if position is not None:
+        request_data["position"] = position
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{list_product_ordered_utils.base_url}/{list_id}/categories/{category_id}",
+        json=request_data
+    )
+    return response
+
+
 def test_get_list_products_ordered_empty():
     """Test getting products from an empty list."""
     # Create a test list
@@ -258,12 +275,16 @@ def test_move_product_between_categories():
     category2_data, category2_id = list_product_ordered_utils.create_test_category()
     product_data, product_id = list_product_ordered_utils.create_test_product(category1_id)
     
+    # Add both categories to the list first
+    add_category_to_list(list_id, category1_id, position=1)
+    add_category_to_list(list_id, category2_id, position=2)
+    
     # Add product to first category
     add_response = list_product_ordered_utils.add_product_to_category(list_id, category1_id, product_id, position=1)
     assert add_response.status_code == 201
     
     # Move product to second category
-    move_response = list_product_ordered_utils.move_product_between_categories(list_id, product_id, category2_id, 2)
+    move_response = list_product_ordered_utils.move_product_between_categories(list_id, product_id, category2_id, new_position=2)
     assert move_response.status_code == 200
     
     response_data = move_response.json()
@@ -414,23 +435,23 @@ def test_unauthorized_access():
     
     # Test unauthorized GET
     response = requests.get(f"{list_product_ordered_utils.base_url}/{list_id}/products/ordered")
-    assert response.status_code == 401
+    assert response.status_code == 403
     
     # Test unauthorized POST
     response = requests.post(f"{list_product_ordered_utils.base_url}/{list_id}/categories/{category_id}/products/{product_id}")
-    assert response.status_code == 401
+    assert response.status_code == 403
     
     # Test unauthorized PATCH (position)
     response = requests.patch(f"{list_product_ordered_utils.base_url}/{list_id}/products/{product_id}/position")
-    assert response.status_code == 401
+    assert response.status_code == 403
     
     # Test unauthorized PATCH (move)
     response = requests.patch(f"{list_product_ordered_utils.base_url}/{list_id}/products/{product_id}/move")
-    assert response.status_code == 401
+    assert response.status_code == 403
     
     # Test unauthorized DELETE
     response = requests.delete(f"{list_product_ordered_utils.base_url}/{list_id}/products/{product_id}")
-    assert response.status_code == 401
+    assert response.status_code == 403
     
     # Restore authentication
     auth_utils.login() 

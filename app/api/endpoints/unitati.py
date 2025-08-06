@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_authenticated_admin
+from app.services.auth import get_current_admin
 from app.models.admin import Admin
 from app.schemas.unitati import Unit, UnitCreate, UnitUpdate
 from app.services.unitati import (
@@ -49,7 +49,7 @@ def read_units(
 })
 def create_units(
     unit: UnitCreate, 
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new unit"""
@@ -114,7 +114,7 @@ def read_unit(
 def update_units(
     unit_id: int = Path(..., gt=0, description="The ID of the unit to update"),
     unit: UnitUpdate = ...,
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Update an existing unit (PUT - full replacement)"""
@@ -151,7 +151,7 @@ def update_units(
 def patch_units(
     unit_id: int = Path(..., gt=0, description="The ID of the unit to update"),
     unit: UnitUpdate = ...,
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Partially update an existing unit (PATCH - only update provided fields)"""
@@ -187,7 +187,7 @@ def patch_units(
 })
 def delete_units(
     unit_id: int = Path(..., gt=0, description="The ID of the unit to delete"),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Delete a unit"""

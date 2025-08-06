@@ -1,17 +1,22 @@
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Path, status, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Path, Body
 from sqlalchemy.orm import Session
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
-from app.core.dependencies import get_authenticated_admin
+from app.services.auth import get_current_admin
 from app.models.admin import Admin
-from app.schemas.category import Category as CategorySchema
 from app.services.list_category import (
     get_list_categories_ordered,
     add_category_to_list,
     update_category_position,
-    remove_category_from_list,
+    remove_category_from_list
+)
+from app.schemas.list_category import (
+    ListCategoryCreate,
+    ListCategoryUpdate,
+    ListCategoryResponse,
+    CategoryInListResponse
 )
 
 class AddCategoryRequest(BaseModel):
@@ -25,12 +30,14 @@ router = APIRouter()
 
 @router.get("/{list_id}/categories", responses={
     200: {"description": "List of categories in the list, ordered by position"},
+    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "List not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
 def get_list_categories_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list to get categories for"),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -62,7 +69,7 @@ def add_category_to_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     category_id: int = Path(..., gt=0, description="The ID of the category to add to the list"),
     request: AddCategoryRequest = Body(...),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -106,7 +113,7 @@ def update_category_position_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     category_id: int = Path(..., gt=0, description="The ID of the category to update"),
     request: UpdateCategoryPositionRequest = Body(...),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -146,7 +153,7 @@ def update_category_position_endpoint(
 def remove_category_from_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     category_id: int = Path(..., gt=0, description="The ID of the category to remove from the list"),
-    current_admin: Admin = Depends(get_authenticated_admin),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """

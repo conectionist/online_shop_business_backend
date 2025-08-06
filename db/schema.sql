@@ -327,25 +327,59 @@ DEFAULT CHARACTER SET = utf8mb4;
 
 
 -- -----------------------------------------------------
--- Table `online_shop`.`liste_au_produse`
+-- Table `online_shop`.`liste_au_categorii` (List-Category ordering)
 -- -----------------------------------------------------
-CREATE TABLE IF NOT EXISTS `online_shop`.`liste_au_produse` (
+CREATE TABLE IF NOT EXISTS `online_shop`.`liste_au_categorii` (
   `liste_id` INT NOT NULL,
-  `produse_id` INT NOT NULL,
-  `stoc_produs` INT NULL DEFAULT NULL,
-  PRIMARY KEY (`liste_id`, `produse_id`),
-  INDEX `fk_liste_has_produse_produse1_idx` (`produse_id` ASC),
-  INDEX `fk_liste_has_produse_liste1_idx` (`liste_id` ASC),
-  CONSTRAINT `fk_liste_has_produse_liste1`
+  `category_id` INT NOT NULL,
+  `position` INT NOT NULL,
+  PRIMARY KEY (`liste_id`, `category_id`),
+  INDEX `idx_liste_categorii_position` (`liste_id`, `position` ASC),
+  INDEX `fk_liste_au_categorii_liste1_idx` (`liste_id` ASC),
+  INDEX `fk_liste_au_categorii_category1_idx` (`category_id` ASC),
+  CONSTRAINT `fk_liste_au_categorii_liste1`
     FOREIGN KEY (`liste_id`)
     REFERENCES `online_shop`.`liste` (`id`)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION,
-  CONSTRAINT `fk_liste_has_produse_produse1`
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_liste_au_categorii_category1`
+    FOREIGN KEY (`category_id`)
+    REFERENCES `online_shop`.`category` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET = utf8mb4;
+
+
+-- -----------------------------------------------------
+-- Table `online_shop`.`liste_au_produse_ordered` (List-Product ordering within categories)
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `online_shop`.`liste_au_produse_ordered` (
+  `liste_id` INT NOT NULL,
+  `produse_id` INT NOT NULL,
+  `category_id` INT NOT NULL,
+  `position` INT NOT NULL,
+  `stoc_produs` INT NULL DEFAULT NULL,
+  PRIMARY KEY (`liste_id`, `produse_id`),
+  INDEX `idx_liste_produse_category_position` (`liste_id`, `category_id`, `position` ASC),
+  INDEX `fk_liste_au_produse_ordered_liste1_idx` (`liste_id` ASC),
+  INDEX `fk_liste_au_produse_ordered_produse1_idx` (`produse_id` ASC),
+  INDEX `fk_liste_au_produse_ordered_category1_idx` (`category_id` ASC),
+  CONSTRAINT `fk_liste_au_produse_ordered_liste1`
+    FOREIGN KEY (`liste_id`)
+    REFERENCES `online_shop`.`liste` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_liste_au_produse_ordered_produse1`
     FOREIGN KEY (`produse_id`)
     REFERENCES `online_shop`.`produse` (`id`)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_liste_au_produse_ordered_category1`
+    FOREIGN KEY (`category_id`)
+    REFERENCES `online_shop`.`category` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE)
 ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4;
 

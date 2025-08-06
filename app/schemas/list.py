@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from typing import Optional, List
+from typing import Optional, List as TypeList
 from datetime import date, datetime
 
 
@@ -78,7 +78,7 @@ class List(ListBase):
 
 class ListWithOrderedContent(List):
     """Schema for list responses that includes ordered categories and products"""
-    categories: Optional[List[dict]] = Field(None, description="Ordered categories in this list")
-    products_ordered: Optional[List[dict]] = Field(None, description="Products grouped by category and ordered")
+    categories: Optional[TypeList[dict]] = Field(None, description="Ordered categories in this list")
+    products_ordered: Optional[TypeList[dict]] = Field(None, description="Products grouped by category and ordered")
     
     model_config = ConfigDict(from_attributes=True)

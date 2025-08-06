@@ -44,13 +44,13 @@ This plan implements a comprehensive solution for ordering categories and produc
 - [x] Add proper error handling and validation
 
 ### Step 2.2: Create List Product Ordered Service
-- [ ] Create `app/services/list_product_ordered.py`
-- [ ] Implement `get_list_products_by_category(db, list_id)` function
-- [ ] Implement `add_product_to_category(db, list_id, product_id, category_id, position)` function
-- [ ] Implement `update_product_position(db, list_id, product_id, new_position)` function
-- [ ] Implement `move_product_between_categories(db, list_id, product_id, new_category_id, position)` function
-- [ ] Implement `remove_product_from_list(db, list_id, product_id)` function
-- [ ] Add proper error handling and validation
+- [x] Create `app/services/list_product_ordered.py`
+- [x] Implement `get_list_products_by_category(db, list_id)` function
+- [x] Implement `add_product_to_category(db, list_id, product_id, category_id, position)` function
+- [x] Implement `update_product_position(db, list_id, product_id, new_position)` function
+- [x] Implement `move_product_between_categories(db, list_id, product_id, new_category_id, position)` function
+- [x] Implement `remove_product_from_list(db, list_id, product_id)` function
+- [x] Add proper error handling and validation
 
 ### Step 2.3: Replace Existing List Product Service
 - [ ] Replace `app/services/list_product.py` with new ordered structure

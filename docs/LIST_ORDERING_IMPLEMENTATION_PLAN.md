@@ -63,28 +63,28 @@ This plan implements a comprehensive solution for ordering categories and produc
 ## Phase 3: API Endpoints
 
 ### Step 3.1: Create List Category Endpoints
-- [ ] Create `app/api/endpoints/list_categories.py`
-- [ ] Implement `GET /api/v1/liste/{list_id}/categories` - Get ordered categories
-- [ ] Implement `POST /api/v1/liste/{list_id}/categories/{category_id}` - Add category at position
-- [ ] Implement `PUT /api/v1/liste/{list_id}/categories/{category_id}/position` - Update category position
-- [ ] Implement `DELETE /api/v1/liste/{list_id}/categories/{category_id}` - Remove category
-- [ ] Add proper authentication and authorization
-- [ ] Add comprehensive error handling
+- [x] Create `app/api/endpoints/list_categories.py`
+- [x] Implement `GET /api/v1/liste/{list_id}/categories` - Get ordered categories
+- [x] Implement `POST /api/v1/liste/{list_id}/categories/{category_id}` - Add category at position
+- [x] Implement `PATCH /api/v1/liste/{list_id}/categories/{category_id}/position` - Update category position
+- [x] Implement `DELETE /api/v1/liste/{list_id}/categories/{category_id}` - Remove category
+- [x] Add proper authentication and authorization
+- [x] Add comprehensive error handling
 
 ### Step 3.2: Create List Product Ordered Endpoints
-- [ ] Create `app/api/endpoints/list_products_ordered.py`
-- [ ] Implement `GET /api/v1/liste/{list_id}/products/ordered` - Get products grouped by category
-- [ ] Implement `POST /api/v1/liste/{list_id}/categories/{category_id}/products/{product_id}` - Add product to category
-- [ ] Implement `PUT /api/v1/liste/{list_id}/products/{product_id}/position` - Update product position
-- [ ] Implement `PUT /api/v1/liste/{list_id}/products/{product_id}/category` - Move product to different category
-- [ ] Implement `DELETE /api/v1/liste/{list_id}/products/{product_id}` - Remove product from list
-- [ ] Add proper authentication and authorization
-- [ ] Add comprehensive error handling
+- [x] Create `app/api/endpoints/list_products_ordered.py`
+- [x] Implement `GET /api/v1/liste/{list_id}/products/ordered` - Get products grouped by category
+- [x] Implement `POST /api/v1/liste/{list_id}/categories/{category_id}/products/{product_id}` - Add product to category
+- [x] Implement `PATCH /api/v1/liste/{list_id}/products/{product_id}/position` - Update product position
+- [x] Implement `PATCH /api/v1/liste/{list_id}/products/{product_id}/move` - Move product to different category
+- [x] Implement `DELETE /api/v1/liste/{list_id}/products/{product_id}` - Remove product from list
+- [x] Add proper authentication and authorization
+- [x] Add comprehensive error handling
 
 ### Step 3.3: Update API Router
-- [ ] Update `app/api/api.py` to include new endpoints
-- [ ] Add proper route prefixes and tags
-- [ ] Update API documentation
+- [x] Update `app/api/api.py` to include new endpoints
+- [x] Add proper route prefixes and tags
+- [x] Update API documentation
 
 ---
 

@@ -126,9 +126,9 @@ This plan implements a comprehensive solution for ordering categories and produc
 
 ### Step 5.3: Create Integration Tests
 - [x] Create `tests/integration/test_list_categories_api.py`
-- [ ] Create `tests/integration/test_list_products_ordered_api.py`
+- [x] Create `tests/integration/test_list_products_ordered_api.py`
 - [x] Test all CRUD operations for categories
-- [ ] Test all CRUD operations for products
+- [x] Test all CRUD operations for products
 - [x] Test ordering functionality
 - [x] Test error scenarios
 

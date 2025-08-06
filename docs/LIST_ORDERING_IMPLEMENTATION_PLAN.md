@@ -36,12 +36,12 @@ This plan implements a comprehensive solution for ordering categories and produc
 ## Phase 2: Core Service Layer
 
 ### Step 2.1: Create List Category Service
-- [ ] Create `app/services/list_category.py`
-- [ ] Implement `get_list_categories_ordered(db, list_id)` function
-- [ ] Implement `add_category_to_list(db, list_id, category_id, position)` function
-- [ ] Implement `update_category_position(db, list_id, category_id, new_position)` function
-- [ ] Implement `remove_category_from_list(db, list_id, category_id)` function
-- [ ] Add proper error handling and validation
+- [x] Create `app/services/list_category.py`
+- [x] Implement `get_list_categories_ordered(db, list_id)` function
+- [x] Implement `add_category_to_list(db, list_id, category_id, position)` function
+- [x] Implement `update_category_position(db, list_id, category_id, new_position)` function
+- [x] Implement `remove_category_from_list(db, list_id, category_id)` function
+- [x] Add proper error handling and validation
 
 ### Step 2.2: Create List Product Ordered Service
 - [ ] Create `app/services/list_product_ordered.py`

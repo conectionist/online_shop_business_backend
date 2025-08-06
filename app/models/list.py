@@ -29,6 +29,10 @@ class List(Base):
     products = relationship("ListProduct", back_populates="list")
     delivery_types = relationship("ListDeliveryType", back_populates="list")
     
+    # New ordering relationships
+    categories = relationship("ListCategory", back_populates="list")
+    products_ordered = relationship("ListProductOrdered", back_populates="list")
+    
     # Indexes for foreign keys and soft delete functionality
     __table_args__ = (
         Index("fk_liste_orare_livrari1_idx", "orare_livrari_id"),

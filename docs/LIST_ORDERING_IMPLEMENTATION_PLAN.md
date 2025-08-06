@@ -91,23 +91,23 @@ This plan implements a comprehensive solution for ordering categories and produc
 ## Phase 4: Schemas & Validation
 
 ### Step 4.1: Create List Category Schemas
-- [ ] Create `app/schemas/list_category.py`
-- [ ] Define `ListCategoryCreate` schema
-- [ ] Define `ListCategoryUpdate` schema
-- [ ] Define `ListCategoryResponse` schema
-- [ ] Add proper validation rules
+- [x] Create `app/schemas/list_category.py`
+- [x] Define `ListCategoryCreate` schema
+- [x] Define `ListCategoryUpdate` schema
+- [x] Define `ListCategoryResponse` schema
+- [x] Add proper validation rules
 
 ### Step 4.2: Create List Product Ordered Schemas
-- [ ] Create `app/schemas/list_product_ordered.py`
-- [ ] Define `ListProductOrderedCreate` schema
-- [ ] Define `ListProductOrderedUpdate` schema
-- [ ] Define `ListProductOrderedResponse` schema
-- [ ] Add proper validation rules
+- [x] Create `app/schemas/list_product_ordered.py`
+- [x] Define `ListProductOrderedCreate` schema
+- [x] Define `ListProductOrderedUpdate` schema
+- [x] Define `ListProductOrderedResponse` schema
+- [x] Add proper validation rules
 
 ### Step 4.3: Update Existing Schemas
-- [ ] Update `app/schemas/list.py` to include new relationships
-- [ ] Update `app/schemas/product.py` if needed
-- [ ] Ensure all schemas are properly imported
+- [x] Update `app/schemas/list.py` to include new relationships
+- [x] Update `app/schemas/product.py` if needed
+- [x] Ensure all schemas are properly imported
 
 ---
 

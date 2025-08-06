@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime
 
 
@@ -72,5 +72,13 @@ class List(ListBase):
     created_at: datetime
     updated_at: datetime
     is_deleted: bool = False
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ListWithOrderedContent(List):
+    """Schema for list responses that includes ordered categories and products"""
+    categories: Optional[List[dict]] = Field(None, description="Ordered categories in this list")
+    products_ordered: Optional[List[dict]] = Field(None, description="Products grouped by category and ordered")
     
     model_config = ConfigDict(from_attributes=True)

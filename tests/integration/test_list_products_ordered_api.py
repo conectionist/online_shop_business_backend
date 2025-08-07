@@ -454,4 +454,193 @@ def test_unauthorized_access():
     assert response.status_code == 403
     
     # Restore authentication
+    auth_utils.login()
+
+
+def test_bulk_update_positions():
+    """Test bulk update of positions for categories and products."""
+    # Create test data
+    list_data, list_id = list_product_ordered_utils.create_test_list()
+    category1_data, category1_id = list_product_ordered_utils.create_test_category()
+    category2_data, category2_id = list_product_ordered_utils.create_test_category()
+    
+    # Create products in different categories
+    product1_data, product1_id = list_product_ordered_utils.create_test_product(category1_id)
+    product2_data, product2_id = list_product_ordered_utils.create_test_product(category1_id)
+    product3_data, product3_id = list_product_ordered_utils.create_test_product(category2_id)
+    product4_data, product4_id = list_product_ordered_utils.create_test_product(category2_id)
+    
+    # Add categories to list
+    add_category_to_list(list_id, category1_id, position=0)
+    add_category_to_list(list_id, category2_id, position=1)
+    
+    # Add products to categories
+    list_product_ordered_utils.add_product_to_category(list_id, category1_id, product1_id, position=0)
+    list_product_ordered_utils.add_product_to_category(list_id, category1_id, product2_id, position=1)
+    list_product_ordered_utils.add_product_to_category(list_id, category2_id, product3_id, position=0)
+    list_product_ordered_utils.add_product_to_category(list_id, category2_id, product4_id, position=1)
+    
+    # Verify initial structure
+    initial_response = list_product_ordered_utils.get_list_products_ordered(list_id)
+    initial_data = initial_response.json()
+    assert len(initial_data["categories"]) == 2
+    assert initial_data["categories"][0]["id"] == category1_id
+    assert initial_data["categories"][1]["id"] == category2_id
+    assert len(initial_data["categories"][0]["products"]) == 2
+    assert len(initial_data["categories"][1]["products"]) == 2
+    
+    # Perform bulk update - reverse category order and product order within categories
+    bulk_update_data = {
+        "positions": [
+            {
+                "category_id": category2_id,
+                "products": [product4_id, product3_id]  # Reverse product order
+            },
+            {
+                "category_id": category1_id,
+                "products": [product2_id, product1_id]  # Reverse product order
+            }
+        ]
+    }
+    
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "PUT",
+        f"{list_product_ordered_utils.base_url}/{list_id}/positions",
+        json=bulk_update_data
+    )
+    
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["list_id"] == list_id
+    assert "updated_structure" in response_data
+    
+    # Verify the new structure
+    updated_response = list_product_ordered_utils.get_list_products_ordered(list_id)
+    updated_data = updated_response.json()
+    
+    # Check category order (category2 should be first now)
+    assert len(updated_data["categories"]) == 2
+    assert updated_data["categories"][0]["id"] == category2_id
+    assert updated_data["categories"][1]["id"] == category1_id
+    
+    # Check product order within category2 (reversed)
+    category2_products = updated_data["categories"][0]["products"]
+    assert len(category2_products) == 2
+    assert category2_products[0]["id"] == product4_id
+    assert category2_products[1]["id"] == product3_id
+    
+    # Check product order within category1 (reversed)
+    category1_products = updated_data["categories"][1]["products"]
+    assert len(category1_products) == 2
+    assert category1_products[0]["id"] == product2_id
+    assert category1_products[1]["id"] == product1_id
+
+
+def test_bulk_update_positions_validation():
+    """Test validation errors in bulk update positions."""
+    list_data, list_id = list_product_ordered_utils.create_test_list()
+    category_data, category_id = list_product_ordered_utils.create_test_category()
+    product_data, product_id = list_product_ordered_utils.create_test_product(category_id)
+    
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    # Test with duplicate category IDs
+    duplicate_category_data = {
+        "positions": [
+            {"category_id": category_id, "products": [product_id]},
+            {"category_id": category_id, "products": [product_id]}  # Duplicate category
+        ]
+    }
+    
+    response = auth_utils.make_authenticated_request(
+        "PUT",
+        f"{list_product_ordered_utils.base_url}/{list_id}/positions",
+        json=duplicate_category_data
+    )
+    assert response.status_code == 422
+    
+    # Test with duplicate product IDs
+    duplicate_product_data = {
+        "positions": [
+            {"category_id": category_id, "products": [product_id, product_id]}  # Duplicate product
+        ]
+    }
+    
+    response = auth_utils.make_authenticated_request(
+        "PUT",
+        f"{list_product_ordered_utils.base_url}/{list_id}/positions",
+        json=duplicate_product_data
+    )
+    assert response.status_code == 422
+    
+    # Test with empty products array
+    empty_products_data = {
+        "positions": [
+            {"category_id": category_id, "products": []}  # Empty products
+        ]
+    }
+    
+    response = auth_utils.make_authenticated_request(
+        "PUT",
+        f"{list_product_ordered_utils.base_url}/{list_id}/positions",
+        json=empty_products_data
+    )
+    assert response.status_code == 422
+    
+    # Test with nonexistent product
+    nonexistent_product_data = {
+        "positions": [
+            {"category_id": category_id, "products": [99999]}  # Nonexistent product
+        ]
+    }
+    
+    response = auth_utils.make_authenticated_request(
+        "PUT",
+        f"{list_product_ordered_utils.base_url}/{list_id}/positions",
+        json=nonexistent_product_data
+    )
+    assert response.status_code == 404
+    
+    # Test with nonexistent category
+    nonexistent_category_data = {
+        "positions": [
+            {"category_id": 99999, "products": [product_id]}  # Nonexistent category
+        ]
+    }
+    
+    response = auth_utils.make_authenticated_request(
+        "PUT",
+        f"{list_product_ordered_utils.base_url}/{list_id}/positions",
+        json=nonexistent_category_data
+    )
+    assert response.status_code == 404
+
+
+def test_bulk_update_positions_unauthorized():
+    """Test unauthorized access to bulk update positions endpoint."""
+    list_data, list_id = list_product_ordered_utils.create_test_list()
+    category_data, category_id = list_product_ordered_utils.create_test_category()
+    product_data, product_id = list_product_ordered_utils.create_test_product(category_id)
+    
+    bulk_update_data = {
+        "positions": [
+            {"category_id": category_id, "products": [product_id]}
+        ]
+    }
+    
+    # Clear authentication
+    auth_utils.access_token = None
+    
+    # Test unauthorized PUT
+    response = requests.put(
+        f"{list_product_ordered_utils.base_url}/{list_id}/positions",
+        json=bulk_update_data
+    )
+    assert response.status_code == 403
+    
+    # Restore authentication
     auth_utils.login() 

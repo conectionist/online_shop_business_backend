@@ -520,4 +520,110 @@ def remove_product_from_list(db: Session, list_id: int, product_id: int) -> bool
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error occurred: {str(e)}"
+        )
+
+
+def bulk_update_positions(db: Session, list_id: int, positions_data: TypeList[dict]) -> dict:
+    """
+    Bulk update positions of categories and products in a list.
+    
+    Args:
+        db: Database session
+        list_id: ID of the list
+        positions_data: List of category positions with their product orderings
+        
+    Returns:
+        Updated list structure with categories and products in new order
+        
+    Raises:
+        HTTPException: If list not found, invalid data, or database error
+    """
+    # Check if list exists
+    list_obj = db.query(List).filter(List.id == list_id).first()
+    if not list_obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"List with ID {list_id} not found"
+        )
+    
+    try:
+        # Import the schema for validation
+        from app.schemas.list_product_ordered import BulkUpdatePositionsRequest, CategoryPosition
+        
+        # Convert the raw data to proper schema objects for validation
+        category_positions = []
+        for pos_data in positions_data:
+            category_positions.append(CategoryPosition(**pos_data))
+        
+        # Validate the entire structure
+        bulk_request = BulkUpdatePositionsRequest(positions=category_positions)
+        
+        # Clear all existing product positions for this list
+        db.query(ListProductOrdered).filter(
+            ListProductOrdered.liste_id == list_id
+        ).delete()
+        
+        # Clear all existing category positions for this list
+        from app.models.list_category import ListCategory
+        db.query(ListCategory).filter(
+            ListCategory.liste_id == list_id
+        ).delete()
+        
+        # Process each category in order (array index becomes category position)
+        for category_index, category_pos in enumerate(bulk_request.positions):
+            # Add category to list with position
+            list_category = ListCategory(
+                liste_id=list_id,
+                category_id=category_pos.category_id,
+                position=category_index
+            )
+            db.add(list_category)
+            
+            # Add products to category with positions based on array indices
+            for product_index, product_id in enumerate(category_pos.products):
+                # Check if product exists
+                product = db.query(Product).filter(Product.id == product_id).first()
+                if not product:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Product with ID {product_id} not found"
+                    )
+                
+                # Check if category exists
+                category = db.query(Category).filter(Category.id == category_pos.category_id).first()
+                if not category:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Category with ID {category_pos.category_id} not found"
+                    )
+                
+                # Create the product-category relationship
+                list_product = ListProductOrdered(
+                    liste_id=list_id,
+                    produse_id=product_id,
+                    category_id=category_pos.category_id,
+                    position=product_index,
+                    stoc_produs=None  # Keep existing stock logic if needed
+                )
+                db.add(list_product)
+        
+        db.commit()
+        
+        # Return the updated list structure
+        return get_list_products_by_category(db=db, list_id=list_id)
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error occurred: {str(e)}"
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid data provided: {str(e)}"
         ) 

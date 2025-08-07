@@ -11,7 +11,8 @@ from app.services.list_product_ordered import (
     add_product_to_category,
     update_product_position,
     move_product_between_categories,
-    remove_product_from_list
+    remove_product_from_list,
+    bulk_update_positions
 )
 from app.schemas.list_product_ordered import (
     ListProductOrderedCreate,
@@ -20,7 +21,8 @@ from app.schemas.list_product_ordered import (
     ProductInListResponse,
     CategoryWithProductsResponse,
     ListProductsOrderedResponse,
-    MoveProductRequest
+    MoveProductRequest,
+    BulkUpdatePositionsRequest
 )
 
 class AddProductRequest(BaseModel):
@@ -232,6 +234,69 @@ def remove_product_from_list_endpoint(
                 detail=f"Product {product_id} is not in list {list_id}"
             )
         return None
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+
+@router.put("/{list_id}/positions", response_model=dict, responses={
+    200: {"description": "Bulk position update completed successfully"},
+    400: {"description": "Bad request, e.g., invalid data structure"},
+    401: {"description": "Unauthorized - Authentication required"},
+    404: {"description": "List, category, or product not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def bulk_update_positions_endpoint(
+    list_id: int = Path(..., gt=0, description="The ID of the list"),
+    request: BulkUpdatePositionsRequest = Body(...),
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Bulk update positions of categories and products in a list.
+    
+    Replaces the entire structure of the list with the provided ordering.
+    Categories are ordered by their position in the array.
+    Products within each category are ordered by their position in the products array.
+    
+    Example request:
+    {
+        "positions": [
+            {
+                "category_id": 2,
+                "products": [1, 3, 0, 2]
+            },
+            {
+                "category_id": 3,
+                "products": [1, 0]
+            },
+            {
+                "category_id": 1,
+                "products": [33, 55]
+            }
+        ]
+    }
+    """
+    try:
+        # Convert the request to the format expected by the service
+        positions_data = [pos.dict() for pos in request.positions]
+        
+        result = bulk_update_positions(
+            db=db, 
+            list_id=list_id, 
+            positions_data=positions_data
+        )
+        
+        return {
+            "message": f"Bulk position update completed successfully for list {list_id}",
+            "list_id": list_id,
+            "updated_structure": result
+        }
     except HTTPException:
         raise
     except Exception as e:

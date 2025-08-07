@@ -147,4 +147,52 @@ class ListProductOrderedBulkUpdate(BaseModel):
             if position < 0:
                 raise ValueError(f'Position for product {product_id} must be non-negative')
         
+        return v
+
+
+class CategoryPosition(BaseModel):
+    """Schema for a category with its products in a specific order"""
+    category_id: int = Field(..., gt=0, description="ID of the category")
+    products: List[int] = Field(..., description="Product IDs in desired order within this category")
+    
+    @validator('category_id')
+    def validate_category_id(cls, v):
+        if v <= 0:
+            raise ValueError('Category ID must be positive')
+        return v
+    
+    @validator('products')
+    def validate_products(cls, v):
+        if not v:
+            raise ValueError('At least one product must be provided for each category')
+        
+        # Check for duplicate product IDs within the same category
+        if len(v) != len(set(v)):
+            raise ValueError('Duplicate product IDs are not allowed within the same category')
+        
+        return v
+
+
+class BulkUpdatePositionsRequest(BaseModel):
+    """Schema for bulk updating positions of categories and products in a list"""
+    positions: List[CategoryPosition] = Field(..., min_items=1, description="List of categories with their product orderings")
+    
+    @validator('positions')
+    def validate_positions(cls, v):
+        if not v:
+            raise ValueError('At least one category must be provided')
+        
+        # Check for duplicate category IDs
+        category_ids = [pos.category_id for pos in v]
+        if len(category_ids) != len(set(category_ids)):
+            raise ValueError('Duplicate category IDs are not allowed')
+        
+        # Check for duplicate product IDs across all categories
+        all_product_ids = []
+        for pos in v:
+            all_product_ids.extend(pos.products)
+        
+        if len(all_product_ids) != len(set(all_product_ids)):
+            raise ValueError('Duplicate product IDs are not allowed across categories')
+        
         return v 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Index, Enum, TIMESTAMP
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, Index, Enum, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mysql import ENUM
 
@@ -17,8 +17,8 @@ class ProductOverride(Base):
     new_value = Column(Text, nullable=False)
     notes = Column(String(500), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(TIMESTAMP, nullable=False, server_default="CURRENT_TIMESTAMP")
-    updated_at = Column(TIMESTAMP, nullable=False, server_default="CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+    created_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
     
     # Relationships
     product = relationship("Product", foreign_keys=[produse_id])

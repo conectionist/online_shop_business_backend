@@ -41,14 +41,12 @@ router = APIRouter()
 
 @router.get("/{list_id}/products/ordered", responses={
     200: {"description": "List of products grouped by category and ordered by position"},
-    401: {"description": "Unauthorized - Authentication required"},
     404: {"description": "List not found"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
 def get_list_products_ordered_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list to get products for"),
-    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """

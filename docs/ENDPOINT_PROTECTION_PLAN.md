@@ -135,6 +135,7 @@ This document outlines the comprehensive plan for protecting API endpoints with 
 - [x] `GET /product-overrides/` - List product overrides
 - [x] `GET /liste/` - List lists
 - [x] `GET /liste/{list_id}/products` - Get list products
+- [x] `GET /liste/{list_id}/products/ordered` - Get list products ordered by category and position
 - [x] `GET /liste/{list_id}/delivery-types` - Get list delivery types
 
 ### **Authentication Endpoints:**

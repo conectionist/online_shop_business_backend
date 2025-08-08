@@ -169,6 +169,8 @@ class TestPublicEndpoints:
         ("unitati/1", "GET"),
         ("lists", "GET"),
         ("lists/1", "GET"),
+        ("lists/1/products", "GET"),
+        ("lists/1/products/ordered", "GET"),
         ("product-overrides", "GET"),
         ("product-overrides/1", "GET"),
     ]

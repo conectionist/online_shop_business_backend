@@ -424,7 +424,7 @@ def test_nonexistent_product_operations():
 
 
 def test_unauthorized_access():
-    """Test that unauthorized access is properly rejected."""
+    """Test that unauthorized access is properly rejected for management endpoints."""
     # Create test data
     list_data, list_id = list_product_ordered_utils.create_test_list()
     category_data, category_id = list_product_ordered_utils.create_test_category()
@@ -433,23 +433,23 @@ def test_unauthorized_access():
     # Clear authentication
     auth_utils.access_token = None
     
-    # Test unauthorized GET
+    # Test that GET endpoint is public (should work without authentication)
     response = requests.get(f"{list_product_ordered_utils.base_url}/{list_id}/products/ordered")
-    assert response.status_code == 403
+    assert response.status_code != 403, "GET endpoint should be public"
     
-    # Test unauthorized POST
+    # Test unauthorized POST (management endpoint - should be protected)
     response = requests.post(f"{list_product_ordered_utils.base_url}/{list_id}/categories/{category_id}/products/{product_id}")
     assert response.status_code == 403
     
-    # Test unauthorized PATCH (position)
+    # Test unauthorized PATCH (position) (management endpoint - should be protected)
     response = requests.patch(f"{list_product_ordered_utils.base_url}/{list_id}/products/{product_id}/position")
     assert response.status_code == 403
     
-    # Test unauthorized PATCH (move)
+    # Test unauthorized PATCH (move) (management endpoint - should be protected)
     response = requests.patch(f"{list_product_ordered_utils.base_url}/{list_id}/products/{product_id}/move")
     assert response.status_code == 403
     
-    # Test unauthorized DELETE
+    # Test unauthorized DELETE (management endpoint - should be protected)
     response = requests.delete(f"{list_product_ordered_utils.base_url}/{list_id}/products/{product_id}")
     assert response.status_code == 403
     

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.core.config import API_VERSION, API_TITLE, API_DESCRIPTION, settings
-from app.core.database import get_db
+from app.core.database import get_db, Base, engine
 from app.api.api import api_router
 from app.api.endpoints.system_config import mount_static_files
 from app.core.admin_init import initialize_default_admin
@@ -36,13 +36,17 @@ mount_static_files(app)
 async def startup_event():
     """Initialize application on startup"""
     try:
+        # Create database tables if they don't exist
+        Base.metadata.create_all(bind=engine)
+        
+        # Initialize default admin user
         initialize_default_admin()
     except Exception as e:
         # Log the error but don't prevent the app from starting
         # This allows the app to start even if admin creation fails
         import logging
         logger = logging.getLogger(__name__)
-        logger.error(f"Failed to initialize default admin: {str(e)}")
+        logger.error(f"Failed to initialize application: {str(e)}")
 
 
 class HealthResponse(BaseModel):

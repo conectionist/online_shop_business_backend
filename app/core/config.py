@@ -21,7 +21,9 @@ if cors_origins_str:
 else:
     CORS_ORIGINS = [
         "http://localhost:3000",
-        "http://localhost:8000"
+        "https://localhost:3000",
+        "http://localhost:8000",
+        "https://localhost:8000"
     ]
 
 # JWT Configuration - Fail fast if not configured

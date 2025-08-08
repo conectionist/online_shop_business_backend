@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -14,6 +15,12 @@ app = FastAPI(
     title=API_TITLE,
     description=API_DESCRIPTION,
     version=API_VERSION
+)
+
+# Add TrustedHostMiddleware to handle proxy headers
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["pcma-api.duckdns.org", "localhost", "127.0.0.1", "*"]
 )
 
 # Set up CORS

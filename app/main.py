@@ -20,7 +20,7 @@ app = FastAPI(
 # Add TrustedHostMiddleware to handle proxy headers
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["pcma-api.duckdns.org", "localhost", "127.0.0.1", "*"]
+    allowed_hosts=settings.ALLOWED_HOSTS
 )
 
 # Set up CORS

@@ -26,6 +26,15 @@ else:
         "https://localhost:8000"
     ]
 
+# Trusted Hosts configuration for FastAPI TrustedHostMiddleware
+# Accept comma-separated host patterns (e.g. "example.com,*.example.com,localhost,127.0.0.1,*")
+allowed_hosts_str = os.getenv("ALLOWED_HOSTS", "*")
+if allowed_hosts_str:
+    ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_str.split(",") if host.strip()]
+else:
+    # Fallback to wildcard to preserve previous behavior that included "*"
+    ALLOWED_HOSTS = ["*"]
+
 # JWT Configuration - Fail fast if not configured
 def get_required_env_var(var_name: str, description: str) -> str:
     """Get a required environment variable or exit gracefully if missing"""
@@ -68,6 +77,7 @@ class Settings:
         self.API_TITLE = API_TITLE
         self.API_DESCRIPTION = API_DESCRIPTION
         self.CORS_ORIGINS = CORS_ORIGINS
+        self.ALLOWED_HOSTS = ALLOWED_HOSTS
         
         # JWT Settings
         self.JWT_SECRET_KEY = JWT_SECRET_KEY

@@ -38,6 +38,8 @@ services:
       - DB_NAME=${TEST_MYSQL_DATABASE}
       - ENVIRONMENT=test
       - UPLOAD_FOLDER=/app/uploads
+      # Trusted Hosts for FastAPI TrustedHostMiddleware
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
       # CORS Configuration
       # Set your production domains here or override in .env file
       - CORS_ORIGINS=${CORS_ORIGINS}

@@ -689,7 +689,7 @@ export const ImageUpload = ({
     onDrop,
     accept: acceptedTypes.reduce((acc, type) => ({ ...acc, [type]: [] }), {}),
     maxFiles,
-    maxSize: 5 * 1024 * 1024, // 5MB
+    maxSize: 25 * 1024 * 1024, // 25MB
   });
 
   return (
@@ -711,7 +711,7 @@ export const ImageUpload = ({
             Drag & drop images here, or click to select
           </p>
           <p className="text-sm text-gray-500">
-            Supports: JPEG, PNG, GIF (max 5MB each)
+            Supports: JPEG, PNG, GIF (max 25MB each)
           </p>
         </div>
       )}

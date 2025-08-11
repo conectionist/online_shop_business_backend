@@ -687,7 +687,7 @@ curl -X POST "http://localhost:8001/api/v1/products/8/images" \
 ```
 
 **Parameters**:
-- `file` (file, required): Image file to upload (JPEG, PNG, or GIF, max 5MB)
+- `file` (file, required): Image file to upload (JPEG, PNG, or GIF, max 25MB)
 - `position` (integer, optional): Image position (0=primary, if not specified will be added at the end)
 
 #### 7. Get Product Images

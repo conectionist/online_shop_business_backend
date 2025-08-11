@@ -63,7 +63,7 @@ Categories can have a single image associated with them:
 
 **Constraints**:
 - Supported formats: JPEG, PNG, GIF
-- Maximum file size: 5MB
+- Maximum file size: 25MB
 
 **Response**:
 ```json

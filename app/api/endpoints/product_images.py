@@ -31,7 +31,7 @@ router = APIRouter()
 })
 async def upload_product_image(
     product_id: int = Path(..., gt=0, description="The ID of the product to upload an image for"),
-    file: UploadFile = File(..., description="The image file to upload (JPEG, PNG, or GIF, max 5MB)"),
+    file: UploadFile = File(..., description="The image file to upload (JPEG, PNG, or GIF, max 25MB)"),
     position: int = Form(None, description="Image position (0=primary, if not specified will be added at the end)"),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -44,7 +44,7 @@ async def upload_product_image(
     added to the product's image gallery.
     
     - Supported file formats: JPEG, PNG, GIF
-    - Maximum file size: 5MB
+    - Maximum file size: 25MB
     - Position 0 indicates primary image
     - If position is not specified, the image will be added at the end of the gallery
     

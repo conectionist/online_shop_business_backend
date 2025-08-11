@@ -50,7 +50,7 @@ router = APIRouter()
 })
 def upload_category_image(
     category_id: int = Path(..., gt=0, description="The ID of the category to upload an image for"),
-    file: UploadFile = File(..., description="The image file to upload (JPEG, PNG, or GIF, max 5MB)"),
+    file: UploadFile = File(..., description="The image file to upload (JPEG, PNG, or GIF, max 25MB)"),
     db: Session = Depends(get_db)
 ):
     """Upload an image for a specific category
@@ -59,7 +59,7 @@ def upload_category_image(
     in the server's filesystem and the path will be saved in the category record.
     
     - Supported file formats: JPEG, PNG, GIF
-    - Maximum file size: 5MB
+    - Maximum file size: 25MB
     - If the category already has an image, the old image will be replaced
     - The image directory will have a UUID-based name
     - Multiple versions of the image will be created (original, medium, thumbnail)

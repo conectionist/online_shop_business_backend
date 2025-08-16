@@ -12,6 +12,7 @@ from app.services.list import (
     get_list_by_id,
     get_lists,
     update_list,
+    clone_list,
 )
 
 router = APIRouter()
@@ -114,3 +115,20 @@ def delete_list_endpoint(
 ):
     """Delete a list"""
     return delete_list(db=db, list_id=list_id, soft_delete=soft_delete)
+
+
+@router.post("/{list_id}/clone", response_model=ListSchema, status_code=status.HTTP_201_CREATED, responses={
+    201: {"description": "List cloned successfully"},
+    400: {"description": "Bad request, e.g., invalid source list"},
+    401: {"description": "Unauthorized - Authentication required"},
+    404: {"description": "Source list not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def clone_list_endpoint(
+    list_id: int = Path(..., gt=0, description="The ID of the list to clone"),
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Clone an existing list with all its structure, ordering, and products"""
+    return clone_list(db=db, source_list_id=list_id)

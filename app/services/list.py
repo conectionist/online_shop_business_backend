@@ -264,3 +264,88 @@ def delete_list(db: Session, list_id: int, soft_delete: bool = True) -> dict:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error occurred: {str(e)}"
         )
+
+
+def clone_list(db: Session, source_list_id: int) -> List:
+    """
+    Clone an existing list with all its structure, ordering, and products.
+    
+    Args:
+        db: Database session
+        source_list_id: ID of the list to clone
+        
+    Returns:
+        Newly created List object (clone)
+        
+    Raises:
+        HTTPException: If cloning fails or source list is not found
+    """
+    if source_list_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid source list ID: {source_list_id} - must be positive"
+        )
+    
+    try:
+        # Get the source list
+        source_list = get_list_by_id(db=db, list_id=source_list_id, include_deleted=False)
+        
+        # Create new list with same metadata (new ID will be auto-generated)
+        new_list = List(
+            data=source_list.data,
+            is_current=False,  # New list should not be current by default
+            is_published=False,  # New list should not be published by default
+            mesaj_introducere=source_list.mesaj_introducere,
+            alte_detalii=source_list.alte_detalii,
+            numar_whatsapp=source_list.numar_whatsapp,
+            orare_livrari_id=source_list.orare_livrari_id
+        )
+        
+        db.add(new_list)
+        db.flush()  # Flush to get the new ID without committing
+        
+        # Clone category ordering
+        from app.models.list_category import ListCategory
+        source_categories = db.query(ListCategory).filter(
+            ListCategory.liste_id == source_list_id
+        ).order_by(ListCategory.position).all()
+        
+        for source_cat in source_categories:
+            new_category = ListCategory(
+                liste_id=new_list.id,
+                category_id=source_cat.category_id,
+                position=source_cat.position
+            )
+            db.add(new_category)
+        
+        # Clone product ordering within categories
+        from app.models.list_product_ordered import ListProductOrdered
+        source_products = db.query(ListProductOrdered).filter(
+            ListProductOrdered.liste_id == source_list_id
+        ).order_by(ListProductOrdered.category_id, ListProductOrdered.position).all()
+        
+        for source_prod in source_products:
+            new_product = ListProductOrdered(
+                liste_id=new_list.id,
+                produse_id=source_prod.produse_id,
+                category_id=source_prod.category_id,
+                position=source_prod.position,
+                stoc_produs=source_prod.stoc_produs
+            )
+            db.add(new_product)
+        
+        # Commit all changes
+        db.commit()
+        db.refresh(new_list)
+        
+        return new_list
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 for source list not found)
+        raise
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error occurred during cloning: {str(e)}"
+        )

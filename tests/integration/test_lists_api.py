@@ -680,3 +680,291 @@ def test_list_and_pagination():
     Tests listing lists with pagination and include_deleted filter.
     """
     list_utils.test_list_and_pagination()
+
+
+# =============================================================================
+# LIST CLONING TESTS
+# =============================================================================
+
+def test_clone_list_basic():
+    """
+    Test basic list cloning functionality.
+    """
+    # Create a source list for cloning
+    source_entity, source_id = list_utils.create_entity(
+        is_current=True,
+        is_published=True
+    )
+    
+    try:
+        # Clone the list
+        clone_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{list_utils.base_url}/{source_id}/clone",
+            json={}
+        )
+        
+        assert clone_response.status_code == 201, (
+            f"Clone should return 201, got {clone_response.status_code}: {clone_response.text}"
+        )
+        
+        cloned_entity = clone_response.json()
+        
+        # Verify basic structure
+        assert "id" in cloned_entity
+        assert cloned_entity["id"] != source_id, "Cloned list should have different ID"
+        
+        # Verify metadata was copied
+        assert cloned_entity["data"] == source_entity["data"]
+        assert cloned_entity["mesaj_introducere"] == source_entity["mesaj_introducere"]
+        assert cloned_entity["alte_detalii"] == source_entity["alte_detalii"]
+        assert cloned_entity["numar_whatsapp"] == source_entity["numar_whatsapp"]
+        assert cloned_entity["orare_livrari_id"] == source_entity["orare_livrari_id"]
+        
+        # Verify smart defaults were applied
+        assert cloned_entity["is_current"] == False, "Cloned list should not be current"
+        assert cloned_entity["is_published"] == False, "Cloned list should not be published"
+        assert cloned_entity["is_deleted"] == False, "Cloned list should not be deleted"
+        
+        # Verify timestamps are current (allow for same second creation)
+        assert cloned_entity["created_at"] >= source_entity["created_at"]
+        assert cloned_entity["updated_at"] >= source_entity["updated_at"]
+        
+        cloned_id = cloned_entity["id"]
+        
+        # Clean up cloned list
+        list_utils.delete_entity(cloned_id)
+        
+    finally:
+        # Clean up source list
+        list_utils.delete_entity(source_id)
+
+
+def test_clone_list_with_categories_and_products():
+    """
+    Test cloning a list that has categories and products.
+    """
+    # Create a source list
+    source_entity, source_id = list_utils.create_entity()
+    
+    try:
+        # Add a category to the source list
+        from integration.test_list_categories_api import ListCategoryTestUtils
+        category_utils = ListCategoryTestUtils()
+        
+        # Get a category to add
+        categories_response = auth_utils.make_authenticated_request(
+            "GET",
+            f"{auth_utils.api_base_url}{auth_utils.api_v1_str}/categories/"
+        )
+        assert categories_response.status_code == 200
+        categories = categories_response.json()
+        assert len(categories) > 0, "Need at least one category for testing"
+        
+        category_id = categories[0]["id"]
+        
+        # Add category to source list
+        add_category_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{list_utils.base_url}/{source_id}/categories/{category_id}",
+            json={"position": 0}
+        )
+        assert add_category_response.status_code == 201
+        
+        # Add a product to the category
+        from integration.test_list_products_ordered_api import ListProductOrderedTestUtils
+        product_utils = ListProductOrderedTestUtils()
+        
+        # Get a product to add
+        products_response = auth_utils.make_authenticated_request(
+            "GET",
+            f"{auth_utils.api_base_url}{auth_utils.api_v1_str}/products/"
+        )
+        assert products_response.status_code == 200
+        products = products_response.json()
+        assert len(products) > 0, "Need at least one product for testing"
+        
+        product_id = products[0]["id"]
+        
+        # Add product to category in source list
+        add_product_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{list_utils.base_url}/{source_id}/categories/{category_id}/products/{product_id}",
+            json={"position": 0, "stoc_produs": 10}
+        )
+        assert add_product_response.status_code == 201
+        
+        # Now clone the list
+        clone_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{list_utils.base_url}/{source_id}/clone",
+            json={}
+        )
+        
+        assert clone_response.status_code == 201
+        cloned_entity = clone_response.json()
+        cloned_id = cloned_entity["id"]
+        
+        # Verify the cloned list has the same structure
+        cloned_categories_response = auth_utils.make_authenticated_request(
+            "GET",
+            f"{list_utils.base_url}/{cloned_id}/categories"
+        )
+        assert cloned_categories_response.status_code == 200
+        
+        cloned_products_response = auth_utils.make_authenticated_request(
+            "GET",
+            f"{list_utils.base_url}/{cloned_id}/products/ordered"
+        )
+        assert cloned_products_response.status_code == 200
+        
+        # Clean up cloned list
+        list_utils.delete_entity(cloned_id)
+        
+    finally:
+        # Clean up source list
+        list_utils.delete_entity(source_id)
+
+
+def test_clone_list_unauthorized():
+    """
+    Test that cloning requires admin authentication.
+    """
+    # Create a list for testing
+    source_entity, source_id = list_utils.create_entity()
+    
+    try:
+        # Try to clone without authentication
+        clone_response = requests.post(
+            f"{list_utils.base_url}/{source_id}/clone",
+            json={}
+        )
+        
+        assert clone_response.status_code in [401, 403], (
+            f"Unauthorized clone should return 401 or 403, got {clone_response.status_code}"
+        )
+        
+    finally:
+        # Clean up
+        list_utils.delete_entity(source_id)
+
+
+def test_clone_nonexistent_list():
+    """
+    Test cloning a list that doesn't exist.
+    """
+    nonexistent_id = 99999
+    
+    clone_response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{list_utils.base_url}/{nonexistent_id}/clone",
+        json={}
+    )
+    
+    assert clone_response.status_code == 404, (
+        f"Cloning nonexistent list should return 404, got {clone_response.status_code}"
+    )
+
+
+def test_clone_list_invalid_id():
+    """
+    Test cloning with invalid list ID.
+    """
+    invalid_ids = [0, -1, "invalid"]
+    
+    for invalid_id in invalid_ids:
+        clone_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{list_utils.base_url}/{invalid_id}/clone",
+            json={}
+        )
+        
+        assert clone_response.status_code in [404, 422], (
+            f"Invalid ID {invalid_id} should return 404 or 422, got {clone_response.status_code}"
+        )
+
+
+def test_clone_list_multiple_times():
+    """
+    Test cloning the same list multiple times.
+    """
+    # Create a source list
+    source_entity, source_id = list_utils.create_entity()
+    cloned_ids = []
+    
+    try:
+        # Clone the list 3 times
+        for i in range(3):
+            clone_response = auth_utils.make_authenticated_request(
+                "POST",
+                f"{list_utils.base_url}/{source_id}/clone",
+                json={}
+            )
+            
+            assert clone_response.status_code == 201
+            cloned_entity = clone_response.json()
+            cloned_ids.append(cloned_entity["id"])
+            
+            # Verify each clone is unique
+            assert cloned_entity["id"] not in [source_id] + cloned_ids[:-1]
+            
+            # Verify metadata is identical
+            assert cloned_entity["data"] == source_entity["data"]
+            assert cloned_entity["mesaj_introducere"] == source_entity["mesaj_introducere"]
+        
+        # Clean up all cloned lists
+        for cloned_id in cloned_ids:
+            list_utils.delete_entity(cloned_id)
+            
+    finally:
+        # Clean up source list
+        list_utils.delete_entity(source_id)
+
+
+def test_clone_list_workflow():
+    """
+    Test the complete workflow: clone -> customize -> publish.
+    """
+    # Create a source list
+    source_entity, source_id = list_utils.create_entity(
+        is_current=False,
+        is_published=False
+    )
+    
+    try:
+        # Clone the list
+        clone_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{list_utils.base_url}/{source_id}/clone",
+            json={}
+        )
+        
+        assert clone_response.status_code == 201
+        cloned_entity = clone_response.json()
+        cloned_id = cloned_entity["id"]
+        
+        # Customize the cloned list
+        update_response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{list_utils.base_url}/{cloned_id}",
+            json={
+                "mesaj_introducere": "Customized cloned list!",
+                "is_current": True,
+                "is_published": True
+            }
+        )
+        
+        assert update_response.status_code == 200
+        
+        # Verify the customization
+        updated_entity = update_response.json()
+        assert updated_entity["mesaj_introducere"] == "Customized cloned list!"
+        assert updated_entity["is_current"] == True
+        assert updated_entity["is_published"] == True
+        
+        # Clean up
+        list_utils.delete_entity(cloned_id)
+        
+    finally:
+        # Clean up source list
+        list_utils.delete_entity(source_id)

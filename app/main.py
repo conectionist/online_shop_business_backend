@@ -1,9 +1,18 @@
+import os
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+
+# Initialize debugpy if DEBUG=1
+if os.getenv("DEBUG", "0") == "1":
+    import debugpy
+    debugpy.listen(("0.0.0.0", 5678))
+    print("🔧 Debugpy listening on 0.0.0.0:5678")
+    # Uncomment the next line if you want the app to wait for a debugger to attach
+    # debugpy.wait_for_client()
 
 from app.core.config import API_VERSION, API_TITLE, API_DESCRIPTION, settings
 from app.core.database import get_db, Base, engine

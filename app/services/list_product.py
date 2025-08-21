@@ -252,8 +252,32 @@ def remove_product_from_list(db: Session, list_id: int, product_id: int) -> bool
             ListProductOrdered.category_id == category_id,
             ListProductOrdered.position > removed_position
         ).update({ListProductOrdered.position: ListProductOrdered.position - 1})
-        
+
         db.commit()
+
+        # After committing the transaction, check if there are no more products in this category for this list,
+        # and remove the category from the list as well to avoid leaving empty categories being shown
+        remaining_count = db.query(ListProductOrdered).filter(
+            ListProductOrdered.liste_id == list_id,
+            ListProductOrdered.category_id == category_id
+        ).count()
+
+        if remaining_count == 0:
+            # Remove the category from the list directly to avoid leaving empty categories
+            from app.models.list_category import ListCategory
+            list_category_rel = db.query(ListCategory).filter(
+                ListCategory.liste_id == list_id,
+                ListCategory.category_id == category_id
+            ).first()
+            if list_category_rel:
+                removed_cat_position = list_category_rel.position
+                db.delete(list_category_rel)
+                # Shift positions of remaining categories down
+                db.query(ListCategory).filter(
+                    ListCategory.liste_id == list_id,
+                    ListCategory.position > removed_cat_position
+                ).update({ListCategory.position: ListCategory.position - 1})
+                db.commit()
         return True
     except SQLAlchemyError as e:
         db.rollback()

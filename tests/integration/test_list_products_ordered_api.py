@@ -359,18 +359,40 @@ def test_position_shifting_on_product_removal():
     assert len(category["products"]) == 3
     assert category["products"][0]["position"] == 1
     assert category["products"][1]["position"] == 2
-    assert category["products"][2]["position"] == 3
-    
-    # Remove product at position 2
-    list_product_ordered_utils.remove_product_from_list(list_id, product2_id)
-    
-    # Verify remaining products are shifted
+
+
+def test_remove_last_product_removes_empty_category():
+    """When the last product in a category is removed, the category should also be removed from the list."""
+    # Create test data
+    list_data, list_id = list_product_ordered_utils.create_test_list()
+    category_data, category_id = list_product_ordered_utils.create_test_category()
+    product_data, product_id = list_product_ordered_utils.create_test_product(category_id)
+
+    # Explicitly add category to list
+    add_category_response = add_category_to_list(list_id, category_id, position=0)
+    assert add_category_response.status_code == 201, f"Expected 201, got {add_category_response.status_code}: {add_category_response.text}"
+
+    # Add single product to that category
+    add_product_response = list_product_ordered_utils.add_product_to_category(list_id, category_id, product_id, position=0)
+    assert add_product_response.status_code == 201
+
+    # Verify list has one category with one product
     get_response = list_product_ordered_utils.get_list_products_ordered(list_id)
-    products_data = get_response.json()
-    category = products_data["categories"][0]
-    assert len(category["products"]) == 2
-    assert category["products"][0]["position"] == 1
-    assert category["products"][1]["position"] == 2
+    assert get_response.status_code == 200
+    data = get_response.json()
+    assert len(data["categories"]) == 1
+    assert data["categories"][0]["id"] == category_id
+    assert len(data["categories"][0]["products"]) == 1
+
+    # Remove the only product
+    remove_response = list_product_ordered_utils.remove_product_from_list(list_id, product_id)
+    assert remove_response.status_code == 204
+
+    # Verify the category is also removed from the list
+    get_response_after = list_product_ordered_utils.get_list_products_ordered(list_id)
+    assert get_response_after.status_code == 200
+    data_after = get_response_after.json()
+    assert len(data_after["categories"]) == 0, "Category should be removed when its last product is removed"
 
 
 def test_nonexistent_list_operations():

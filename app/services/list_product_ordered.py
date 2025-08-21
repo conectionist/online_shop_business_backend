@@ -1,9 +1,12 @@
 from typing import List as TypeList
 import os
+import logging
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+logger = logging.getLogger(__name__)
 
 from app.models.list import List
 from app.models.product import Product
@@ -82,6 +85,8 @@ def get_list_products_by_category(db: Session, list_id: int) -> dict:
         list_categories = db.query(ListCategory).filter(
             ListCategory.liste_id == list_id
         ).all()
+        
+
         
         # Group products by category
         categories = {}
@@ -490,6 +495,7 @@ def remove_product_from_list(db: Session, list_id: int, product_id: int) -> bool
         )
     
     try:
+        logger.info(f"DEBUG: Starting remove_product_from_list for product {product_id} from list {list_id}")
         # Find and delete the relationship
         relationship = db.query(ListProductOrdered).filter(
             ListProductOrdered.liste_id == list_id,
@@ -497,8 +503,10 @@ def remove_product_from_list(db: Session, list_id: int, product_id: int) -> bool
         ).first()
         
         if not relationship:
+            logger.info(f"DEBUG: No relationship found for product {product_id} in list {list_id}")
             return False
         
+        logger.info(f"DEBUG: Found relationship for product {product_id} in category {relationship.category_id} at position {relationship.position}")
         # Get the position and category of the product being removed
         removed_position = relationship.position
         category_id = relationship.category_id
@@ -512,8 +520,42 @@ def remove_product_from_list(db: Session, list_id: int, product_id: int) -> bool
             ListProductOrdered.category_id == category_id,
             ListProductOrdered.position > removed_position
         ).update({ListProductOrdered.position: ListProductOrdered.position - 1})
+
+        # After removing the product, if there are no more products in this category for this list,
+        # remove the category from the list as well to avoid empty categories being shown
+        remaining_count = db.query(ListProductOrdered).filter(
+            ListProductOrdered.liste_id == list_id,
+            ListProductOrdered.category_id == category_id
+        ).count()
         
+        logger.info(f"DEBUG: After removing product {product_id}, remaining products in category {category_id}: {remaining_count}")
+
+        if remaining_count == 0:
+            logger.info(f"DEBUG: Category {category_id} is empty, will remove it from list")
+            # Remove the category from the list directly to avoid leaving empty categories
+            from app.models.list_category import ListCategory
+            logger.info(f"DEBUG: No products remaining in category {category_id}, removing from list")
+            list_category_rel = db.query(ListCategory).filter(
+                ListCategory.liste_id == list_id,
+                ListCategory.category_id == category_id
+            ).first()
+            if list_category_rel:
+                removed_cat_position = list_category_rel.position
+                logger.info(f"DEBUG: Deleting category {category_id} at position {removed_cat_position}")
+                db.delete(list_category_rel)
+                # Shift positions of remaining categories down
+                db.query(ListCategory).filter(
+                    ListCategory.liste_id == list_id,
+                    ListCategory.position > removed_cat_position
+                ).update({ListCategory.position: ListCategory.position - 1})
+                logger.info(f"DEBUG: Category {category_id} deleted successfully")
+            else:
+                logger.info(f"DEBUG: Category {category_id} not found in ListCategory table")
+        else:
+            logger.info(f"DEBUG: Category {category_id} still has {remaining_count} products, keeping it")
+
         db.commit()
+
         return True
     except SQLAlchemyError as e:
         db.rollback()

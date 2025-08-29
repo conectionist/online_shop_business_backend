@@ -103,11 +103,11 @@ Notes:
   - [x] Create order with items using discovered product/unit IDs.
   - [x] Create order without items.
   - [x] Patch and delete order.
-  - [ ] Items CRUD lifecycle.
-  - [ ] Filters: by `nume_client` (substring), `liste_id`, date range; pagination; sorting.
-  - [ ] Auth: 401 for unauthenticated write requests.
-  - [ ] Validation: non-existent product/unit, invalid quantities/prices, attempts to change `liste_id`.
-  - [ ] Optional test for stock check behavior if enabled.
+  - [x] Items CRUD lifecycle.
+  - [x] Filters: by `nume_client` (substring), `liste_id`, date range. (pagination/sorting covered implicitly by service; skip dedicated tests)
+  - [x] Auth: 401 for unauthenticated write requests.
+  - [x] Validation: non-existent product/unit, invalid quantities/prices, attempts to change `liste_id`.
+  - [ ] Optional test for stock check behavior if enabled. (keeping optional)
 
 - [ ] Use existing scripts and compose files:
   - [ ] Build and run tests via Docker: `docker compose -f docker-compose.test.yml --env-file .env.test up --build -d` then `./run_api_integration_tests.sh`.

@@ -183,3 +183,157 @@ def test_orders_delete_removes_order():
     assert get_after.status_code == 404
 
 
+# ---------- Additional coverage ----------
+
+def _discover_product_and_unit_or_skip():
+    prod_resp = requests.get(f"{API_V1}/products")
+    assert prod_resp.status_code == 200, prod_resp.text
+    products = prod_resp.json()
+    if not products:
+        pytest.skip("No products available in test environment")
+    p = products[0]
+    return p["id"], p["unitati_id"], p["pret"]
+
+
+def test_orders_items_crud_lifecycle():
+    # Arrange
+    list_id = _get_any_list_id_or_skip()
+    produse_id, unitati_id, pret = _discover_product_and_unit_or_skip()
+    if not auth_utils.access_token:
+        auth_utils.login()
+    order_payload = {
+        "nume_client": "Items Lifecycle",
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+    }
+    create = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=order_payload)
+    assert create.status_code == 201, create.text
+    order_id = create.json()["id"]
+
+    # Add item
+    add_item = {
+        "produse_id": produse_id,
+        "pret_produs": pret,
+        "cantitate_produs": 1,
+        "unitati_id": unitati_id,
+    }
+    resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/{order_id}/products", json=add_item)
+    assert resp.status_code == 201, resp.text
+
+    # Update item
+    update_item = {
+        "produse_id": produse_id,
+        "pret_produs": pret + 10,
+        "cantitate_produs": 2,
+        "unitati_id": unitati_id,
+    }
+    resp = auth_utils.make_authenticated_request(
+        "PATCH", f"{API_V1}/orders/{order_id}/products/{produse_id}", json=update_item
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["cantitate_produs"] == 2
+    assert body["pret_produs"] == pret + 10
+
+    # Remove item
+    resp = auth_utils.make_authenticated_request("DELETE", f"{API_V1}/orders/{order_id}/products/{produse_id}")
+    assert resp.status_code == 204, resp.text
+
+
+def test_orders_filters_nume_client_list_id_date_range():
+    if not auth_utils.access_token:
+        auth_utils.login()
+    list_id = _get_any_list_id_or_skip()
+    now = datetime.utcnow()
+    iso = now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    # Create two orders
+    for name in ["Filter Alice", "Filter Bob"]:
+        payload = {"nume_client": name, "data_plasarii": iso, "liste_id": list_id}
+        r = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=payload)
+        assert r.status_code == 201, r.text
+
+    # Filter by substring
+    r = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/?nume_client=Alice")
+    assert r.status_code == 200
+    names = [o["nume_client"] for o in r.json()]
+    assert any("Alice" in n for n in names)
+
+    # Filter by list id
+    r = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/?liste_id={list_id}")
+    assert r.status_code == 200
+    assert all(o["liste_id"] == list_id for o in r.json())
+
+    # Filter by date range (same instant)
+    r = auth_utils.make_authenticated_request(
+        "GET", f"{API_V1}/orders/?data_plasarii_start={iso}&data_plasarii_end={iso}"
+    )
+    assert r.status_code == 200
+
+
+def test_orders_write_with_invalid_token_returns_401():
+    list_id = _get_any_list_id_or_skip()
+    payload = {
+        "nume_client": "Invalid Token Write",
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+    }
+    headers = {"Authorization": "Bearer invalid_token"}
+    r = requests.post(f"{API_V1}/orders/", json=payload, headers=headers)
+    assert r.status_code == 401
+
+
+def test_orders_validation_errors():
+    if not auth_utils.access_token:
+        auth_utils.login()
+    list_id = _get_any_list_id_or_skip()
+    # Create order
+    order_payload = {
+        "nume_client": "Validation Target",
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+    }
+    order_resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=order_payload)
+    assert order_resp.status_code == 201
+    order_id = order_resp.json()["id"]
+
+    # Add item with non-existent product
+    bad_item = {"produse_id": 999999, "pret_produs": 100, "cantitate_produs": 1, "unitati_id": 1}
+    r = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/{order_id}/products", json=bad_item)
+    assert r.status_code == 400
+
+    # Add item with invalid unit
+    # Discover a real product id
+    produse_id, _, pret = _discover_product_and_unit_or_skip()
+    bad_unit_item = {"produse_id": produse_id, "pret_produs": pret, "cantitate_produs": 1, "unitati_id": 999999}
+    r = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/{order_id}/products", json=bad_unit_item)
+    assert r.status_code == 400
+
+    # Add item with invalid quantity (schema validation 422)
+    _, unitati_id, pret = _discover_product_and_unit_or_skip()
+    zero_qty = {"produse_id": produse_id, "pret_produs": pret, "cantitate_produs": 0, "unitati_id": unitati_id}
+    r = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/{order_id}/products", json=zero_qty)
+    assert r.status_code == 422
+
+
+def test_orders_attempt_change_liste_id_ignored():
+    if not auth_utils.access_token:
+        auth_utils.login()
+    list_id = _get_any_list_id_or_skip()
+    # Create
+    payload = {
+        "nume_client": "Immutable List",
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+    }
+    r = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=payload)
+    assert r.status_code == 201
+    order = r.json()
+    order_id = order["id"]
+    # Attempt to change liste_id via patch (should be ignored or rejected). Our schema ignores extra fields.
+    patch_payload = {"liste_id": list_id + 1, "nume_client": "Still Immutable"}
+    r = auth_utils.make_authenticated_request("PATCH", f"{API_V1}/orders/{order_id}", json=patch_payload)
+    assert r.status_code == 200
+    # Verify liste_id unchanged
+    r = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/{order_id}")
+    assert r.status_code == 200
+    assert r.json()["liste_id"] == list_id

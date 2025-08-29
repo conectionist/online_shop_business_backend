@@ -99,7 +99,10 @@ Notes:
 
 ### Phase 6: Integration Tests (Dockerized)
 - [ ] Add tests under `tests/integration/orders/`:
-  - [ ] Create order (with and without items), read, patch, delete.
+  - [x] Create order (with items) and read basics; auth enforcement.
+  - [x] Create order with items using discovered product/unit IDs.
+  - [x] Create order without items.
+  - [x] Patch and delete order.
   - [ ] Items CRUD lifecycle.
   - [ ] Filters: by `nume_client` (substring), `liste_id`, date range; pagination; sorting.
   - [ ] Auth: 401 for unauthenticated write requests.

@@ -75,23 +75,23 @@ Business rules:
 - [x] Disallow changing `liste_id` after creation to keep FK semantics predictable.
 
 ### Phase 4: API Endpoints (FastAPI)
-- [ ] Add `app/api/endpoints/orders.py` with routes:
-  - [ ] `GET /api/v1/orders`: filters (nume_client, liste_id, date range), pagination, sorting.
-  - [ ] `POST /api/v1/orders`: create order (with optional embedded items).
-  - [ ] `GET /api/v1/orders/{id}`: order details with items.
-  - [ ] `PATCH /api/v1/orders/{id}`: update `nume_client`, `order_notes` only.
-  - [ ] `DELETE /api/v1/orders/{id}`: hard delete.
-  - [ ] `GET /api/v1/orders/{id}/products`: list items.
-  - [ ] `POST /api/v1/orders/{id}/products`: add item.
-  - [ ] `PATCH /api/v1/orders/{id}/products/{produse_id}`: update item (qty/price/unit).
-  - [ ] `DELETE /api/v1/orders/{id}/products/{produse_id}`: remove item.
+- [x] Add `app/api/endpoints/orders.py` with routes:
+  - [x] `GET /api/v1/orders`: filters (nume_client, liste_id, date range), pagination, sorting.
+  - [x] `POST /api/v1/orders`: create order (with optional embedded items).
+  - [x] `GET /api/v1/orders/{id}`: order details with items.
+  - [x] `PATCH /api/v1/orders/{id}`: update `nume_client`, `order_notes` only.
+  - [x] `DELETE /api/v1/orders/{id}`: hard delete.
+  - [x] `GET /api/v1/orders/{id}/products`: list items.
+  - [x] `POST /api/v1/orders/{id}/products`: add item.
+  - [x] `PATCH /api/v1/orders/{id}/products/{produse_id}`: update item (qty/price/unit).
+  - [x] `DELETE /api/v1/orders/{id}/products/{produse_id}`: remove item.
 
-- [ ] Wire into `app/api/api.py`:
-  - [ ] `api_router.include_router(orders.router, prefix="/orders", tags=["orders"])`
+- [x] Wire into `app/api/api.py`:
+  - [x] `api_router.include_router(orders.router, prefix="/orders", tags=["orders"])`
 
 Notes:
-- [ ] No status endpoints (no status column in schema).
-- [ ] Consistent error handling with `HTTPException`.
+- [x] No status endpoints (no status column in schema).
+- [x] Consistent error handling with `HTTPException`.
 
 ### Phase 5: Security
 - [ ] Require admin authentication for all write operations.

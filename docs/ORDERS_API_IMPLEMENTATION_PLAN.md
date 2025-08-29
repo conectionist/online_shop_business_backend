@@ -32,9 +32,9 @@ Implications:
   - [ ] Relationship to `OrderItem` as `items`.
 
 - [ ] Add `app/models/order_item.py`:
-  - [ ] `OrderItem` maps to `comenzi_au_produse` with composite PK (`comenzi_id`, `produse_id`).
-  - [ ] Columns: `pret_produs`, `cantitate_produs`, `unitati_id`.
-  - [ ] Relationships: `order` (→ `Order`), `product` (→ `Product`), `unit` (→ `Unitati`).
+  - [x] `OrderItem` maps to `comenzi_au_produse` with composite PK (`comenzi_id`, `produse_id`).
+  - [x] Columns: `pret_produs`, `cantitate_produs`, `unitati_id`.
+  - [x] Relationships: `order` (→ `Order`), `product` (→ `Product`), `unit` (→ `Unitati`).
 
 - [ ] Update `app/models/__init__.py` to export `Order`, `OrderItem`.
 

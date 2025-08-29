@@ -19,7 +19,7 @@ def _get_any_list_id_or_skip():
     return lists[0]["id"]
 
 
-def test_orders_create_requires_auth():
+def test_orders_create_public_success():
     list_id = _get_any_list_id_or_skip()
     payload = {
         "nume_client": "John Doe",
@@ -28,11 +28,14 @@ def test_orders_create_requires_auth():
         "order_notes": "Leave at door",
     }
     resp = requests.post(f"{API_V1}/orders/", json=payload)
-    # No Authorization header → HTTPBearer returns 403
-    assert resp.status_code == 403
+    # Order creation is now public - no auth required
+    assert resp.status_code == 201, resp.text
+    order = resp.json()
+    assert order["nume_client"] == "John Doe"
+    assert order["liste_id"] == list_id
 
 
-def test_orders_create_and_read_success_with_auth():
+def test_orders_create_public_and_read_with_auth():
     list_id = _get_any_list_id_or_skip()
     payload = {
         "nume_client": "John Doe",
@@ -40,35 +43,34 @@ def test_orders_create_and_read_success_with_auth():
         "liste_id": list_id,
         "order_notes": "Leave at door",
     }
-    if not auth_utils.access_token:
-        auth_utils.login()
-    resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=payload)
+    # Create order without auth (public)
+    resp = requests.post(f"{API_V1}/orders/", json=payload)
     assert resp.status_code == 201, resp.text
     order = resp.json()
     order_id = order["id"]
 
-    # List
+    # List requires auth
+    if not auth_utils.access_token:
+        auth_utils.login()
     resp = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/")
     assert resp.status_code == 200
     assert any(o["id"] == order_id for o in resp.json())
 
-    # Get details
+    # Get details requires auth
     resp = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/{order_id}")
     assert resp.status_code == 200
     assert resp.json()["id"] == order_id
 
 
 def test_orders_list_and_get_require_auth():
-    # Create an order with auth to have an ID
+    # Create an order without auth (public) to have an ID
     list_id = _get_any_list_id_or_skip()
     payload = {
         "nume_client": "Jane Doe",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
     }
-    if not auth_utils.access_token:
-        auth_utils.login()
-    resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=payload)
+    resp = requests.post(f"{API_V1}/orders/", json=payload)
     assert resp.status_code == 201
     order_id = resp.json()["id"]
 
@@ -129,7 +131,7 @@ def test_orders_create_with_items_success():
         ],
     }
 
-    create_resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=payload)
+    create_resp = requests.post(f"{API_V1}/orders/", json=payload)
     assert create_resp.status_code == 201, create_resp.text
     created = create_resp.json()
     assert created["liste_id"] == liste_id
@@ -146,15 +148,12 @@ def _create_minimal_order_and_return_id():
         pytest.skip("No lists available in test environment")
     liste_id = lists[0]["id"]
 
-    if not auth_utils.access_token:
-        auth_utils.login()
-
     payload = {
         "nume_client": "Patch/Delete Target",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": liste_id,
     }
-    resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=payload)
+    resp = requests.post(f"{API_V1}/orders/", json=payload)
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
 
@@ -206,7 +205,7 @@ def test_orders_items_crud_lifecycle():
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
     }
-    create = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=order_payload)
+    create = requests.post(f"{API_V1}/orders/", json=order_payload)
     assert create.status_code == 201, create.text
     order_id = create.json()["id"]
 
@@ -249,7 +248,7 @@ def test_orders_filters_nume_client_list_id_date_range():
     # Create two orders
     for name in ["Filter Alice", "Filter Bob"]:
         payload = {"nume_client": name, "data_plasarii": iso, "liste_id": list_id}
-        r = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=payload)
+        r = requests.post(f"{API_V1}/orders/", json=payload)
         assert r.status_code == 201, r.text
 
     # Filter by substring
@@ -279,7 +278,8 @@ def test_orders_write_with_invalid_token_returns_401():
     }
     headers = {"Authorization": "Bearer invalid_token"}
     r = requests.post(f"{API_V1}/orders/", json=payload, headers=headers)
-    assert r.status_code == 401
+    # Order creation is public, so invalid token should still work
+    assert r.status_code == 201
 
 
 def test_orders_validation_errors():
@@ -292,7 +292,7 @@ def test_orders_validation_errors():
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
     }
-    order_resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=order_payload)
+    order_resp = requests.post(f"{API_V1}/orders/", json=order_payload)
     assert order_resp.status_code == 201
     order_id = order_resp.json()["id"]
 
@@ -325,7 +325,7 @@ def test_orders_attempt_change_liste_id_ignored():
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
     }
-    r = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/", json=payload)
+    r = requests.post(f"{API_V1}/orders/", json=payload)
     assert r.status_code == 201
     order = r.json()
     order_id = order["id"]

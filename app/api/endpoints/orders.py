@@ -63,12 +63,10 @@ def read_orders(
 @router.post("/", response_model=OrderSchema, status_code=status.HTTP_201_CREATED, responses={
     201: {"description": "Order created"},
     400: {"description": "Bad request"},
-    401: {"description": "Unauthorized"},
     422: {"description": "Validation error"},
 })
 def create_order_endpoint(
     order_in: OrderCreate,
-    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     return create_order(db=db, order_in=order_in)

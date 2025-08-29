@@ -3,7 +3,10 @@
 This guide shows how a frontend app can authenticate and interact with the Orders API. It uses the base path `/api/v1` and assumes the API is reachable at `http://localhost:8000`.
 
 ### Authentication
-- Obtain an access token via `POST /api/v1/auth/login` and send it as `Authorization: Bearer <token>` for all protected endpoints.
+
+**Order creation is public** (no authentication required) - customers can place orders without admin access.
+
+**All other operations require admin authentication** - obtain an access token via `POST /api/v1/auth/login` and send it as `Authorization: Bearer <token>`.
 
 Example (fetch):
 ```javascript
@@ -42,7 +45,7 @@ async function listOrders(token, params = {}) {
 ```
 
 ### Create Order (with or without items)
-Endpoint: `POST /api/v1/orders`
+Endpoint: `POST /api/v1/orders` - **No authentication required**
 
 Body:
 ```json
@@ -64,10 +67,10 @@ Body:
 
 Example (fetch):
 ```javascript
-async function createOrder(token, order) {
+async function createOrder(order) {
   const res = await fetch(`/api/v1/orders/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(order)
   });
   if (!res.ok) throw new Error(await res.text());

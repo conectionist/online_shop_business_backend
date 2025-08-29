@@ -27,6 +27,7 @@ class Order(Base):
 
     # Relationships
     list = relationship("List", foreign_keys=[liste_id])
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("fk_comenzi_liste1_idx", "liste_id"),

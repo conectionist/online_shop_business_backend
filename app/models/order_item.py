@@ -19,7 +19,7 @@ class OrderItem(Base):
     unitati_id = Column(Integer, ForeignKey("unitati.id"), nullable=False)
 
     # Relationships
-    order = relationship("Order", foreign_keys=[comenzi_id])
+    order = relationship("Order", foreign_keys=[comenzi_id], back_populates="items")
     product = relationship("Product", foreign_keys=[produse_id])
     unit = relationship("Unitati", foreign_keys=[unitati_id])
 

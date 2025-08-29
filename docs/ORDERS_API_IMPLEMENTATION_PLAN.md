@@ -29,7 +29,7 @@ Implications:
 - [ ] Add `app/models/order.py`:
   - [x] `Order` maps to `comenzi` with columns: `id`, `nume_client`, `data_plasarii`, `liste_id`, `order_notes`, `created_at`, `updated_at`.
   - [x] Relationship to `List` via `liste_id`.
-  - [ ] Relationship to `OrderItem` as `items`.
+  - [x] Relationship to `OrderItem` as `items`.
 
 - [ ] Add `app/models/order_item.py`:
   - [x] `OrderItem` maps to `comenzi_au_produse` with composite PK (`comenzi_id`, `produse_id`).
@@ -39,7 +39,7 @@ Implications:
 - [x] Update `app/models/__init__.py` to export `Order`, `OrderItem`.
 
 Notes:
-- [ ] Use explicit `__table_args__` for composite PK, indexes as needed.
+- [x] Use explicit `__table_args__` for composite PK, indexes as needed.
 
 ### Phase 2: Pydantic Schemas
 - [ ] Add `app/schemas/order.py`:
@@ -52,9 +52,9 @@ Notes:
 - [x] Add `app/schemas/__init__.py` exports.
 
 Validation policy:
-- [ ] Quantities must be positive; `pret_produs` must be ≥ 0.
-- [ ] `unitati_id` must exist; `produse_id` must exist and not deleted.
-- [ ] Optional: enforce item unit compatibility with product unit.
+- [x] Quantities must be positive; `pret_produs` must be ≥ 0. (Pydantic validators)
+- [x] `unitati_id` must exist; `produse_id` must exist and not deleted. (validated in services)
+- [ ] Optional: enforce item unit compatibility with product unit. (not implemented)
 
 ### Phase 3: Service Layer
 - [x] Add `app/services/order.py` with functions:
@@ -70,9 +70,9 @@ Validation policy:
     - [x] `remove_order_item(db, order_id, produse_id)`
 
 Business rules:
-- [ ] Accept client-provided `pret_produs` but validate/fill from product/override if missing; document snapshot semantics.
-- [ ] Optional stock check against `liste_au_produse_ordered.stoc_produs` for (`liste_id`, `produse_id`).
-- [ ] Disallow changing `liste_id` after creation to keep FK semantics predictable.
+- [x] Accept client-provided `pret_produs` but validate/fill from product/override if missing; document snapshot semantics.
+- [x] Optional stock check against `liste_au_produse_ordered.stoc_produs` for (`liste_id`, `produse_id`).
+- [x] Disallow changing `liste_id` after creation to keep FK semantics predictable.
 
 ### Phase 4: API Endpoints (FastAPI)
 - [ ] Add `app/api/endpoints/orders.py` with routes:

@@ -36,7 +36,7 @@ Implications:
   - [x] Columns: `pret_produs`, `cantitate_produs`, `unitati_id`.
   - [x] Relationships: `order` (→ `Order`), `product` (→ `Product`), `unit` (→ `Unitati`).
 
-- [ ] Update `app/models/__init__.py` to export `Order`, `OrderItem`.
+- [x] Update `app/models/__init__.py` to export `Order`, `OrderItem`.
 
 Notes:
 - [ ] Use explicit `__table_args__` for composite PK, indexes as needed.

@@ -43,13 +43,13 @@ Notes:
 
 ### Phase 2: Pydantic Schemas
 - [ ] Add `app/schemas/order.py`:
-  - [ ] `OrderItemBase`: `produse_id`, `pret_produs`, `cantitate_produs` (>0), `unitati_id`.
-  - [ ] `OrderCreate`: `nume_client`, `data_plasarii`, `liste_id`, `order_notes`?, `items: list[OrderItemBase]` (optional).
-  - [ ] `OrderUpdate`: updatable fields: `nume_client`, `order_notes` (do not allow changing `data_plasarii` or `liste_id` by default; see Validation policy below).
-  - [ ] `OrderRead`: include `id`, timestamps, and nested `items`.
-  - [ ] `OrderFilterParams`: optional `nume_client` (substring), `liste_id`, date range (`data_plasarii_start`, `data_plasarii_end`), pagination (skip/limit), sort options.
+  - [x] `OrderItemBase`: `produse_id`, `pret_produs`, `cantitate_produs` (>0), `unitati_id`.
+  - [x] `OrderCreate`: `nume_client`, `data_plasarii`, `liste_id`, `order_notes`?, `items: list[OrderItemBase]` (optional).
+  - [x] `OrderUpdate`: updatable fields: `nume_client`, `order_notes` (do not allow changing `data_plasarii` or `liste_id` by default; see Validation policy below).
+  - [x] `OrderRead`: include `id`, timestamps, and nested `items`.
+  - [x] `OrderFilterParams`: optional `nume_client` (substring), `liste_id`, date range (`data_plasarii_start`, `data_plasarii_end`), pagination (skip/limit), sort options.
 
-- [ ] Add `app/schemas/__init__.py` exports.
+- [x] Add `app/schemas/__init__.py` exports.
 
 Validation policy:
 - [ ] Quantities must be positive; `pret_produs` must be ≥ 0.

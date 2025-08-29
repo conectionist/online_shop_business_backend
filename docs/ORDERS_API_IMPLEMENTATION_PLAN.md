@@ -57,17 +57,17 @@ Validation policy:
 - [ ] Optional: enforce item unit compatibility with product unit.
 
 ### Phase 3: Service Layer
-- [ ] Add `app/services/order.py` with functions:
-  - [ ] `create_order(db, order_in)`: create order and optional items atomically.
-  - [ ] `get_order_by_id(db, id)`: include items.
-  - [ ] `list_orders(db, filters, skip, limit, sort)`: filter by `nume_client` (ILIKE/LIKE), `liste_id`, `data_plasarii` range.
-  - [ ] `update_order(db, id, order_update)`: allow updates to `nume_client`, `order_notes`.
-  - [ ] `delete_order(db, id)`: hard delete (remove items then order).
-  - [ ] Items:
-    - [ ] `list_order_items(db, order_id)`
-    - [ ] `add_order_item(db, order_id, item_in)`
-    - [ ] `update_order_item(db, order_id, produse_id, item_update)`
-    - [ ] `remove_order_item(db, order_id, produse_id)`
+- [x] Add `app/services/order.py` with functions:
+  - [x] `create_order(db, order_in)`: create order and optional items atomically.
+  - [x] `get_order_by_id(db, id)`: include items.
+  - [x] `list_orders(db, filters, skip, limit, sort)`: filter by `nume_client` (ILIKE/LIKE), `liste_id`, `data_plasarii` range.
+  - [x] `update_order(db, id, order_update)`: allow updates to `nume_client`, `order_notes`.
+  - [x] `delete_order(db, id)`: hard delete (remove items then order).
+  - [x] Items:
+    - [x] `list_order_items(db, order_id)`
+    - [x] `add_order_item(db, order_id, item_in)`
+    - [x] `update_order_item(db, order_id, produse_id, item_update)`
+    - [x] `remove_order_item(db, order_id, produse_id)`
 
 Business rules:
 - [ ] Accept client-provided `pret_produs` but validate/fill from product/override if missing; document snapshot semantics.

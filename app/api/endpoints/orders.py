@@ -44,6 +44,7 @@ def read_orders(
     limit: int = Query(100, ge=1, le=1000),
     sort_by: str = Query("data_plasarii", pattern="^(data_plasarii|nume_client|liste_id)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     filters = OrderFilterParams(
@@ -80,6 +81,7 @@ def create_order_endpoint(
 })
 def read_order(
     order_id: int = Path(..., gt=0),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     return get_order_by_id(db=db, order_id=order_id)
@@ -125,6 +127,7 @@ def delete_order_endpoint(
 })
 def read_order_items(
     order_id: int = Path(..., gt=0),
+    current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     # Ensure order exists (service validates, but making explicit 404 behavior consistent)

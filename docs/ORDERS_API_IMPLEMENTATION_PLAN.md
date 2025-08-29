@@ -94,8 +94,8 @@ Notes:
 - [x] Consistent error handling with `HTTPException`.
 
 ### Phase 5: Security
-- [ ] Require admin authentication for all write operations.
-- [ ] Read operations: default to admin-only (consistent with current backend posture). Adjust later if business rules change.
+- [x] Require admin authentication for all write operations.
+- [x] Read operations: default to admin-only (consistent with current backend posture). Adjust later if business rules change.
 
 ### Phase 6: Integration Tests (Dockerized)
 - [ ] Add tests under `tests/integration/orders/`:

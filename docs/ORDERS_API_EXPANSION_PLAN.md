@@ -90,13 +90,13 @@ CREATE TABLE `comenzi` (
 - [x] Update model validation and constraints
 - [x] Add appropriate indexes in `__table_args__`
 
-#### 2.2 Update Pydantic Schemas
-- [ ] Update `app/schemas/order.py` to include new fields
-- [ ] Update `OrderCreate` schema with new required fields
-- [ ] Update `Order` response schema with new fields
-- [ ] Update `OrderUpdate` schema to allow updating new fields
-- [ ] Add `delivery_address` field (optional, for home delivery scenarios)
-- [ ] Add validation for delivery/payment method selection
+#### 2.2 Update Pydantic Schemas ✅
+- [x] Update `app/schemas/order.py` to include new fields
+- [x] Update `OrderCreate` schema with new required fields
+- [x] Update `Order` response schema with new fields
+- [x] Update `OrderUpdate` schema to allow updating new fields
+- [x] Add `delivery_address` field (optional, for home delivery scenarios)
+- [x] Add validation for delivery/payment method selection
 
 #### 2.3 Update Filter Parameters
 - [ ] Add new filter options for delivery type and payment method

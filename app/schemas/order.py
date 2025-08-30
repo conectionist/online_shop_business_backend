@@ -25,6 +25,9 @@ class OrderCreate(BaseModel):
     nume_client: Annotated[str, Field(min_length=1, max_length=50, description="Customer name")]
     data_plasarii: Annotated[datetime, Field(description="Order placement datetime")]
     liste_id: Annotated[int, Field(gt=0, description="Related list ID")]
+    delivery_type_id: Annotated[int, Field(gt=0, description="Delivery type ID (required)")]
+    payment_method_id: Annotated[int, Field(gt=0, description="Payment method ID (required)")]
+    delivery_address: Optional[str] = Field(None, max_length=150, description="Optional delivery address for home delivery")
     order_notes: Optional[str] = Field(None, max_length=500, description="Optional order notes")
     items: Optional[List[OrderItemBase]] = Field(default=None, description="Optional order items to create together with the order")
 
@@ -40,6 +43,9 @@ class OrderUpdate(BaseModel):
     """Schema for updating an existing order (limited fields)"""
 
     nume_client: Optional[str] = Field(default=None, min_length=1, max_length=50, description="Customer name")
+    delivery_type_id: Optional[int] = Field(default=None, gt=0, description="Delivery type ID")
+    payment_method_id: Optional[int] = Field(default=None, gt=0, description="Payment method ID")
+    delivery_address: Optional[str] = Field(default=None, max_length=150, description="Optional delivery address for home delivery")
     order_notes: Optional[str] = Field(default=None, max_length=500, description="Optional order notes")
 
     @field_validator('nume_client')
@@ -57,6 +63,9 @@ class Order(BaseModel):
     nume_client: Annotated[str, Field(description="Customer name")]
     data_plasarii: Annotated[datetime, Field(description="Order placement datetime")]
     liste_id: Annotated[int, Field(gt=0, description="Related list ID")]
+    delivery_type_id: Annotated[int, Field(gt=0, description="Delivery type ID")]
+    payment_method_id: Annotated[int, Field(gt=0, description="Payment method ID")]
+    delivery_address: Optional[str] = Field(None, description="Optional delivery address for home delivery")
     order_notes: Optional[str] = Field(None, description="Optional order notes")
     created_at: Annotated[datetime, Field(description="Creation timestamp")]
     updated_at: Annotated[datetime, Field(description="Last update timestamp")]
@@ -76,13 +85,15 @@ class OrderFilterParams(BaseModel):
 
     nume_client: Optional[str] = Field(default=None, description="Filter by customer name (substring match)")
     liste_id: Optional[int] = Field(default=None, gt=0, description="Filter by list ID")
+    delivery_type_id: Optional[int] = Field(default=None, gt=0, description="Filter by delivery type ID")
+    payment_method_id: Optional[int] = Field(default=None, gt=0, description="Filter by payment method ID")
     data_plasarii_start: Optional[datetime] = Field(default=None, description="Start of placement datetime range (inclusive)")
     data_plasarii_end: Optional[datetime] = Field(default=None, description="End of placement datetime range (inclusive)")
 
     skip: Annotated[int, Field(ge=0, description="Number of records to skip")]=0
     limit: Annotated[int, Field(ge=1, le=1000, description="Maximum number of records to return")]=100
 
-    sort_by: Literal['data_plasarii', 'nume_client', 'liste_id'] = 'data_plasarii'
+    sort_by: Literal['data_plasarii', 'nume_client', 'liste_id', 'delivery_type_id', 'payment_method_id'] = 'data_plasarii'
     sort_order: Literal['asc', 'desc'] = 'desc'
 
 

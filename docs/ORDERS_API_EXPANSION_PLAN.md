@@ -66,12 +66,12 @@ CREATE TABLE `comenzi` (
 ### Phase 1: Database Schema Migration (1-2 days)
 
 #### 1.1 Create Database Migration Script
-- [ ] Create SQL migration script to add new columns
-- [ ] Add `delivery_type_id` column (TINYINT, nullable, foreign key to `tipuri_livrare.id`)
-- [ ] Add `payment_method_id` column (INT, nullable, foreign key to `modalitati_de_plata.id`)
-- [ ] Add `delivery_address` column (VARCHAR(150), nullable, for home delivery addresses)
-- [ ] Add appropriate indexes for performance
-- [ ] Add foreign key constraints with proper ON DELETE/ON UPDATE behavior
+- [x] Create SQL migration script to add new columns
+- [x] Add `delivery_type_id` column (TINYINT, nullable, foreign key to `tipuri_livrare.id`)
+- [x] Add `payment_method_id` column (INT, nullable, foreign key to `modalitati_de_plata.id`)
+- [x] Add `delivery_address` column (VARCHAR(150), nullable, for home delivery addresses)
+- [x] Add appropriate indexes for performance
+- [x] Add foreign key constraints with proper ON DELETE/ON UPDATE behavior
 - [ ] Test migration script on test database
 
 #### 1.2 Update Database Schema Documentation

@@ -127,11 +127,11 @@ CREATE TABLE `comenzi` (
 
 ### Phase 4: API Endpoint Updates (1 day)
 
-#### 4.1 Update Order Creation Endpoint
-- [ ] Update `POST /api/v1/orders/` endpoint in `app/api/endpoints/orders.py`
-- [ ] Ensure new fields are properly documented in OpenAPI schema
-- [ ] Update request/response examples
-- [ ] Add proper error handling for new validation rules
+#### 4.1 Update Order Creation Endpoint ✅
+- [x] Update `POST /api/v1/orders/` endpoint in `app/api/endpoints/orders.py`
+- [x] Ensure new fields are properly documented in OpenAPI schema
+- [x] Update request/response examples
+- [x] Add proper error handling for new validation rules
 
 #### 4.2 Update Order Response Endpoints
 - [ ] Update `GET /api/v1/orders/` endpoint to include new fields

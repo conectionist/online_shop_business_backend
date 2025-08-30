@@ -12,6 +12,8 @@ from app.models.product import Product
 from app.models.list import List as ListModel
 from app.models.list_product_ordered import ListProductOrdered
 from app.models.unitati import Unitati
+from app.models.delivery_type import DeliveryType
+from app.models.modalitati_plata import ModalitatiPlata
 from app.schemas.order import (
     Order as OrderSchema,
     OrderCreate,
@@ -29,6 +31,10 @@ def _apply_order_filters(query, filters: OrderFilterParams):
         query = query.filter(OrderModel.nume_client.like(like_value))
     if filters.liste_id:
         query = query.filter(OrderModel.liste_id == filters.liste_id)
+    if filters.delivery_type_id:
+        query = query.filter(OrderModel.delivery_type_id == filters.delivery_type_id)
+    if filters.payment_method_id:
+        query = query.filter(OrderModel.payment_method_id == filters.payment_method_id)
     if filters.data_plasarii_start:
         query = query.filter(OrderModel.data_plasarii >= filters.data_plasarii_start)
     if filters.data_plasarii_end:
@@ -41,6 +47,8 @@ def _apply_sorting(query, sort_by: str, sort_order: str):
         "data_plasarii": OrderModel.data_plasarii,
         "nume_client": OrderModel.nume_client,
         "liste_id": OrderModel.liste_id,
+        "delivery_type_id": OrderModel.delivery_type_id,
+        "payment_method_id": OrderModel.payment_method_id,
     }.get(sort_by, OrderModel.data_plasarii)
     direction = desc if sort_order == "desc" else asc
     return query.order_by(direction(column))
@@ -52,6 +60,18 @@ def _validate_foreign_keys(db: Session, order_in: OrderCreate):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"List with ID {order_in.liste_id} does not exist",
+        )
+    # Check delivery type exists
+    if not db.query(DeliveryType).filter(DeliveryType.id == order_in.delivery_type_id).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Delivery type with ID {order_in.delivery_type_id} does not exist",
+        )
+    # Check payment method exists
+    if not db.query(ModalitatiPlata).filter(ModalitatiPlata.id == order_in.payment_method_id).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Payment method with ID {order_in.payment_method_id} does not exist",
         )
     # Validate each item FKs
     if order_in.items:
@@ -101,6 +121,9 @@ def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
             nume_client=order_in.nume_client.strip(),
             data_plasarii=order_in.data_plasarii,
             liste_id=order_in.liste_id,
+            delivery_type_id=order_in.delivery_type_id,
+            payment_method_id=order_in.payment_method_id,
+            delivery_address=order_in.delivery_address,
             order_notes=order_in.order_notes,
             created_at=datetime.now(),
             updated_at=datetime.now(),

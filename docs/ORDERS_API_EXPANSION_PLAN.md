@@ -98,10 +98,10 @@ CREATE TABLE `comenzi` (
 - [x] Add `delivery_address` field (optional, for home delivery scenarios)
 - [x] Add validation for delivery/payment method selection
 
-#### 2.3 Update Filter Parameters
-- [ ] Add new filter options for delivery type and payment method
-- [ ] Update `OrderFilterParams` schema
-- [ ] Add new sorting options if needed
+#### 2.3 Update Filter Parameters ✅
+- [x] Add new filter options for delivery type and payment method
+- [x] Update `OrderFilterParams` schema
+- [x] Add new sorting options if needed
 
 ### Phase 3: Service Layer Updates (1-2 days)
 

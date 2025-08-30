@@ -120,10 +120,10 @@ CREATE TABLE `comenzi` (
 - [x] Add validation for delivery address updates
 - [x] Ensure business logic constraints are maintained
 
-#### 3.3 Update Order Filtering and Sorting
-- [ ] Update `_apply_order_filters` function to handle new filters
-- [ ] Update `_apply_sorting` function to handle new sort options
-- [ ] Add new filter logic for delivery and payment methods
+#### 3.3 Update Order Filtering and Sorting ✅
+- [x] Update `_apply_order_filters` function to handle new filters
+- [x] Update `_apply_sorting` function to handle new sort options
+- [x] Add new filter logic for delivery and payment methods
 
 ### Phase 4: API Endpoint Updates (1 day)
 

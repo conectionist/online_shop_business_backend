@@ -139,10 +139,10 @@ CREATE TABLE `comenzi` (
 - [ ] Update response models and examples
 - [ ] Document breaking changes and migration requirements for frontend clients
 
-#### 4.3 Update Order Update Endpoint
-- [ ] Update `PATCH /api/v1/orders/{id}` endpoint to handle new fields
-- [ ] Add validation for new field updates
-- [ ] Update request/response documentation
+#### 4.3 Update Order Update Endpoint ✅
+- [x] Update `PATCH /api/v1/orders/{id}` endpoint to handle new fields
+- [x] Add validation for new field updates
+- [x] Update request/response documentation
 
 ### Phase 5: Testing and Validation (2-3 days)
 

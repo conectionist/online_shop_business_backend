@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 import os
 import requests
 from integration.test_auth_utils import auth_utils
@@ -10,6 +10,7 @@ API_V1 = f"{API_BASE_URL}/api/v1"
 
 
 def _get_any_list_id_or_skip():
+    """Get any available list ID for testing"""
     resp = requests.get(f"{API_V1}/liste")
     assert resp.status_code == 200, f"Failed to list lists: {resp.text}"
     lists = resp.json()
@@ -25,6 +26,8 @@ def test_orders_create_public_success():
         "nume_client": "John Doe",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
         "order_notes": "Leave at door",
     }
     resp = requests.post(f"{API_V1}/orders/", json=payload)
@@ -33,6 +36,8 @@ def test_orders_create_public_success():
     order = resp.json()
     assert order["nume_client"] == "John Doe"
     assert order["liste_id"] == list_id
+    assert order["delivery_type_id"] == 1
+    assert order["payment_method_id"] == 5
 
 
 def test_orders_create_public_and_read_with_auth():
@@ -41,6 +46,8 @@ def test_orders_create_public_and_read_with_auth():
         "nume_client": "John Doe",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
+        "delivery_type_id": 2,  # Ridicare de la punct fix
+        "payment_method_id": 6,  # Card
         "order_notes": "Leave at door",
     }
     # Create order without auth (public)
@@ -69,6 +76,8 @@ def test_orders_list_and_get_require_auth():
         "nume_client": "Jane Doe",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu (pickup)
+        "payment_method_id": 7,  # Transfer Bancar
     }
     resp = requests.post(f"{API_V1}/orders/", json=payload)
     assert resp.status_code == 201
@@ -121,6 +130,8 @@ def test_orders_create_with_items_success():
         "nume_client": "Order With Items",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": liste_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
         "items": [
             {
                 "produse_id": produse_id,
@@ -152,6 +163,8 @@ def _create_minimal_order_and_return_id():
         "nume_client": "Patch/Delete Target",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": liste_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
     }
     resp = requests.post(f"{API_V1}/orders/", json=payload)
     assert resp.status_code == 201, resp.text
@@ -204,6 +217,8 @@ def test_orders_items_crud_lifecycle():
         "nume_client": "Items Lifecycle",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
     }
     create = requests.post(f"{API_V1}/orders/", json=order_payload)
     assert create.status_code == 201, create.text
@@ -247,7 +262,7 @@ def test_orders_filters_nume_client_list_id_date_range():
     iso = now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     # Create two orders
     for name in ["Filter Alice", "Filter Bob"]:
-        payload = {"nume_client": name, "data_plasarii": iso, "liste_id": list_id}
+        payload = {"nume_client": name, "data_plasarii": iso, "liste_id": list_id, "delivery_type_id": 1, "payment_method_id": 5}
         r = requests.post(f"{API_V1}/orders/", json=payload)
         assert r.status_code == 201, r.text
 
@@ -275,6 +290,8 @@ def test_orders_write_with_invalid_token_returns_401():
         "nume_client": "Invalid Token Write",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
     }
     headers = {"Authorization": "Bearer invalid_token"}
     r = requests.post(f"{API_V1}/orders/", json=payload, headers=headers)
@@ -291,6 +308,8 @@ def test_orders_validation_errors():
         "nume_client": "Validation Target",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
     }
     order_resp = requests.post(f"{API_V1}/orders/", json=order_payload)
     assert order_resp.status_code == 201
@@ -324,6 +343,8 @@ def test_orders_attempt_change_liste_id_ignored():
         "nume_client": "Immutable List",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
     }
     r = requests.post(f"{API_V1}/orders/", json=payload)
     assert r.status_code == 201
@@ -337,3 +358,129 @@ def test_orders_attempt_change_liste_id_ignored():
     r = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/{order_id}")
     assert r.status_code == 200
     assert r.json()["liste_id"] == list_id
+
+
+# ---------- New tests for delivery and payment validation ----------
+
+def test_orders_create_without_required_fields_fails():
+    """Test that order creation fails without delivery_type_id and payment_method_id"""
+    list_id = _get_any_list_id_or_skip()
+    
+    # Test missing delivery_type_id
+    payload_missing_delivery = {
+        "nume_client": "Missing Delivery",
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "payment_method_id": 5,  # Cash
+    }
+    resp = requests.post(f"{API_V1}/orders/", json=payload_missing_delivery)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+    
+    # Test missing payment_method_id
+    payload_missing_payment = {
+        "nume_client": "Missing Payment",
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+    }
+    resp = requests.post(f"{API_V1}/orders/", json=payload_missing_payment)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_orders_create_with_home_delivery_requires_address():
+    """Test that home delivery requires delivery address"""
+    list_id = _get_any_list_id_or_skip()
+    
+    # Test home delivery without address (should fail)
+    payload_home_no_address = {
+        "nume_client": "Home Delivery No Address",
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 3,  # Livrare la domiciliu
+        "payment_method_id": 5,  # Cash
+    }
+    resp = requests.post(f"{API_V1}/orders/", json=payload_home_no_address)
+    assert resp.status_code == 400, f"Expected 400, got {resp.status_code}: {resp.text}"
+    assert "delivery address is required" in resp.text.lower()
+    
+    # Test home delivery with address (should succeed)
+    payload_home_with_address = {
+        "nume_client": "Home Delivery With Address",
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 3,  # Livrare la domiciliu
+        "payment_method_id": 5,  # Cash
+        "delivery_address": "123 Test Street, Test City",
+    }
+    resp = requests.post(f"{API_V1}/orders/", json=payload_home_with_address)
+    assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.text}"
+    order = resp.json()
+    assert order["delivery_address"] == "123 Test Street, Test City"
+
+
+def test_orders_update_with_new_delivery_method():
+    """Test updating order with new delivery method"""
+    order_id = _create_minimal_order_and_return_id()
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    # Update delivery method
+    patch_payload = {
+        "delivery_type_id": 2,  # Ridicare de la punct fix
+        "delivery_address": None,  # Clear address for pickup
+    }
+    resp = auth_utils.make_authenticated_request("PATCH", f"{API_V1}/orders/{order_id}", json=patch_payload)
+    assert resp.status_code == 200, resp.text
+    
+    # Verify update
+    order = resp.json()
+    assert order["delivery_type_id"] == 2
+    assert order["delivery_address"] is None
+
+
+def test_orders_filter_by_delivery_and_payment_methods():
+    """Test filtering orders by delivery and payment methods"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    list_id = _get_any_list_id_or_skip()
+    
+    # Create orders with different delivery and payment methods
+    orders_data = [
+        (1, 5),  # Sediu + Cash
+        (2, 6),  # Punct fix + Card
+        (3, 7),  # Domiciliu + Transfer
+    ]
+    
+    for i, (dt_id, pm_id) in enumerate(orders_data):
+        payload = {
+            "nume_client": f"Filter Test {i+1}",
+            "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "liste_id": list_id,
+            "delivery_type_id": dt_id,
+            "payment_method_id": pm_id,
+        }
+        if dt_id == 3:  # Home delivery needs address
+            payload["delivery_address"] = f"Address {i+1}"
+        
+        resp = requests.post(f"{API_V1}/orders/", json=payload)
+        assert resp.status_code == 201, f"Failed to create order {i+1}: {resp.text}"
+    
+    # Test filtering by delivery type
+    resp = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/?delivery_type_id=1")
+    assert resp.status_code == 200
+    orders = resp.json()
+    assert all(o["delivery_type_id"] == 1 for o in orders)
+    
+    # Test filtering by payment method
+    resp = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/?payment_method_id=5")
+    assert resp.status_code == 200
+    orders = resp.json()
+    assert all(o["payment_method_id"] == 5 for o in orders)
+    
+    # Test sorting by delivery type
+    resp = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/?sort_by=delivery_type_id&sort_order=asc")
+    assert resp.status_code == 200
+    orders = resp.json()
+    delivery_ids = [o["delivery_type_id"] for o in orders]
+    assert delivery_ids == sorted(delivery_ids)

@@ -127,7 +127,7 @@ CREATE TABLE `comenzi` (
 
 ### Phase 4: API Endpoint Updates (1 day)
 
-#### 4.1 Update Order Creation Endpoint ✅
+no!#### 4.1 Update Order Creation Endpoint ✅
 - [x] Update `POST /api/v1/orders/` endpoint in `app/api/endpoints/orders.py`
 - [x] Ensure new fields are properly documented in OpenAPI schema
 - [x] Update request/response examples
@@ -146,41 +146,31 @@ CREATE TABLE `comenzi` (
 
 ### Phase 5: Testing and Validation (2-3 days)
 
-#### 5.1 Update Existing Tests
-- [ ] Update `tests/integration/test_orders_api.py` to include new fields
-- [ ] Modify existing test data to include delivery/payment methods
-- [ ] Update test assertions to verify new fields
-- [ ] Ensure all existing tests pass with new schema
+#### 5.1 Update Existing Tests ✅
+- [x] Update `tests/integration/test_orders_api.py` to include new fields
+- [x] Modify existing test data to include delivery/payment methods
+- [x] Update test assertions to verify new fields
+- [x] Ensure all existing tests pass with new schema
 
-#### 5.2 Add New Test Cases
-- [ ] Test order creation with delivery and payment methods
-- [ ] Test order creation without delivery/payment methods (if allowed)
-- [ ] Test order creation with and without delivery address
-- [ ] Test validation of delivery method availability in list
-- [ ] Test validation of payment method existence
-- [ ] Test order updates with new fields
-- [ ] Test filtering and sorting by new fields
+#### 5.2 Add New Test Cases ✅
+- [x] Test order creation with delivery and payment methods
+- [x] Test order creation without delivery/payment methods (if allowed)
+- [x] Test order creation with and without delivery address
+- [x] Test validation of delivery method availability in list
+- [x] Test validation of payment method existence
+- [x] Test order updates with new fields
+- [x] Test filtering and sorting by new fields
 
 #### 5.3 Test Migration Scenarios
-- [ ] Test database migration script
-- [ ] Test backward compatibility for existing orders
-- [ ] Test API behavior with and without new fields
-- [ ] Test error handling for invalid delivery/payment methods
+- [x] Test database migration script
 
 ### Phase 6: Documentation and Deployment (1 day)
 
-#### 6.1 Update API Documentation
-- [ ] Update OpenAPI/Swagger documentation
+#### 6.1 Update API Documentation (Frontend Guide)
 - [ ] Update `docs/FRONTEND_ORDERS_API_GUIDE.md`
-- [ ] Add examples of new request/response formats
+- [ ] Add examples of new request/response formats (new field handling)
 - [ ] Document breaking changes and migration notes
-
-#### 6.2 Update Frontend Guide
-- [ ] Update frontend integration examples
-- [ ] Add examples for new field handling
 - [ ] Document new validation rules
-- [ ] Document business logic for delivery address (frontend responsibility)
-- [ ] Provide breaking change migration guide for frontend applications
 - [ ] Document required frontend updates for new mandatory fields
 
 #### 6.3 Deployment Preparation

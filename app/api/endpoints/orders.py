@@ -38,11 +38,13 @@ router = APIRouter()
 def read_orders(
     nume_client: Optional[str] = Query(None, description="Filter by customer name (substring)"),
     liste_id: Optional[int] = Query(None, gt=0, description="Filter by list ID"),
+    delivery_type_id: Optional[int] = Query(None, gt=0, description="Filter by delivery type ID"),
+    payment_method_id: Optional[int] = Query(None, gt=0, description="Filter by payment method ID"),
     data_plasarii_start: Optional[str] = Query(None, description="Start datetime (ISO 8601)"),
     data_plasarii_end: Optional[str] = Query(None, description="End datetime (ISO 8601)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    sort_by: str = Query("data_plasarii", pattern="^(data_plasarii|nume_client|liste_id)$"),
+    sort_by: str = Query("data_plasarii", pattern="^(data_plasarii|nume_client|liste_id|delivery_type_id|payment_method_id)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
@@ -50,6 +52,8 @@ def read_orders(
     filters = OrderFilterParams(
         nume_client=nume_client,
         liste_id=liste_id,
+        delivery_type_id=delivery_type_id,
+        payment_method_id=payment_method_id,
         data_plasarii_start=data_plasarii_start,
         data_plasarii_end=data_plasarii_end,
         skip=skip,
@@ -61,36 +65,69 @@ def read_orders(
 
 
 @router.post("/", response_model=OrderSchema, status_code=status.HTTP_201_CREATED, responses={
-    201: {"description": "Order created"},
-    400: {"description": "Bad request"},
-    422: {"description": "Validation error"},
+    201: {"description": "Order created successfully"},
+    400: {"description": "Bad request - validation failed (e.g., delivery type not available for list, missing address for home delivery)"},
+    422: {"description": "Validation error - invalid input data"},
+    500: {"description": "Internal server error"},
 })
 def create_order_endpoint(
     order_in: OrderCreate,
     db: Session = Depends(get_db),
 ):
+    """
+    Create a new order with delivery and payment method information.
+    
+    **Required Fields:**
+    - `nume_client`: Customer name
+    - `data_plasarii`: Order placement date
+    - `liste_id`: List ID
+    - `delivery_type_id`: Delivery method ID (must be available for the selected list)
+    - `payment_method_id`: Payment method ID
+    
+    **Optional Fields:**
+    - `delivery_address`: Required for home delivery types
+    - `order_notes`: Additional order notes
+    - `items`: List of order items
+    
+    **Business Rules:**
+    - Delivery type must be available for the selected list
+    - Delivery address is required for home delivery types
+    - Payment method must exist in the system
+    """
     return create_order(db=db, order_in=order_in)
 
 
 @router.get("/{order_id}", response_model=OrderSchema, responses={
-    200: {"description": "Order details"},
-    404: {"description": "Not found"},
-    422: {"description": "Validation error"},
+    200: {"description": "Order details retrieved successfully"},
+    404: {"description": "Order not found"},
+    422: {"description": "Validation error - invalid order ID"},
+    500: {"description": "Internal server error"},
 })
 def read_order(
     order_id: int = Path(..., gt=0),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
+    """
+    Retrieve a specific order by ID including delivery and payment method information.
+    
+    **Response includes:**
+    - Order details (customer, date, list)
+    - Delivery method information
+    - Payment method information
+    - Delivery address (if provided)
+    - Order notes and timestamps
+    """
     return get_order_by_id(db=db, order_id=order_id)
 
 
 @router.patch("/{order_id}", response_model=OrderSchema, responses={
-    200: {"description": "Order updated"},
-    400: {"description": "Bad request"},
+    200: {"description": "Order updated successfully"},
+    400: {"description": "Bad request - validation failed (e.g., delivery type not available for list, missing address for home delivery)"},
     401: {"description": "Unauthorized"},
-    404: {"description": "Not found"},
-    422: {"description": "Validation error"},
+    404: {"description": "Order not found"},
+    422: {"description": "Validation error - invalid input data"},
+    500: {"description": "Internal server error"},
 })
 def update_order_endpoint(
     order_id: int = Path(..., gt=0),
@@ -98,6 +135,24 @@ def update_order_endpoint(
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
+    """
+    Update an existing order with new delivery and payment method information.
+    
+    **Updatable Fields:**
+    - `nume_client`: Customer name
+    - `data_plasarii`: Order placement date
+    - `liste_id`: List ID
+    - `delivery_type_id`: Delivery method ID (must be available for the selected list)
+    - `payment_method_id`: Payment method ID
+    - `delivery_address`: Required for home delivery types
+    - `order_notes`: Additional order notes
+    
+    **Business Rules:**
+    - Delivery type must be available for the selected list
+    - Delivery address is required for home delivery types
+    - Payment method must exist in the system
+    - All validations are applied when updating delivery-related fields
+    """
     return update_order(db=db, order_id=order_id, order_update=order_update)
 
 

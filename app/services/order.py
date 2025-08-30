@@ -56,7 +56,8 @@ def _apply_sorting(query, sort_by: str, sort_order: str):
 
 def _validate_foreign_keys(db: Session, order_in: OrderCreate):
     # Check list exists
-    if not db.query(ListModel).filter(ListModel.id == order_in.liste_id).first():
+    list_obj = db.query(ListModel).filter(ListModel.id == order_in.liste_id).first()
+    if not list_obj:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"List with ID {order_in.liste_id} does not exist",
@@ -113,9 +114,59 @@ def _check_stock(db: Session, liste_id: int, produse_id: int, requested_qty: int
         )
 
 
+def _validate_delivery_method_availability(db: Session, liste_id: int, delivery_type_id: int):
+    """Validate that the selected delivery type is available for the specific list"""
+    from app.models.list_delivery_type import ListDeliveryType
+    
+    # Check if the delivery type is available for this list
+    list_delivery = db.query(ListDeliveryType).filter(
+        and_(
+            ListDeliveryType.liste_id == liste_id,
+            ListDeliveryType.tipuri_livrare_id == delivery_type_id,
+        )
+    ).first()
+    
+    if not list_delivery:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Delivery type {delivery_type_id} is not available for list {liste_id}",
+        )
+
+
+def _validate_delivery_address(db: Session, delivery_type_id: int, delivery_address: Optional[str]):
+    """Validate delivery address based on delivery type (frontend responsibility, but backend validation for consistency)"""
+    from app.models.delivery_type import DeliveryType
+    
+    # Get delivery type to check if it requires address
+    delivery_type = db.query(DeliveryType).filter(DeliveryType.id == delivery_type_id).first()
+    if not delivery_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Delivery type {delivery_type_id} not found",
+        )
+    
+    # Check if delivery type name suggests home delivery (case-insensitive)
+    delivery_name_lower = delivery_type.denumire.lower()
+    home_delivery_keywords = ['acasa', 'domiciliu', 'home', 'livrare', 'delivery']
+    
+    is_home_delivery = any(keyword in delivery_name_lower for keyword in home_delivery_keywords)
+    
+    if is_home_delivery and not delivery_address:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Delivery address is required for delivery type '{delivery_type.denumire}'",
+        )
+
+
 def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
     try:
         _validate_foreign_keys(db, order_in)
+        
+        # Validate delivery method availability for the selected list
+        _validate_delivery_method_availability(db, order_in.liste_id, order_in.delivery_type_id)
+        
+        # Validate delivery address based on delivery type
+        _validate_delivery_address(db, order_in.delivery_type_id, order_in.delivery_address)
 
         db_order = OrderModel(
             nume_client=order_in.nume_client.strip(),
@@ -194,6 +245,16 @@ def update_order(db: Session, order_id: int, order_update: OrderUpdate) -> Order
         order = db.query(OrderModel).filter(OrderModel.id == order_id).first()
         if not order:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order {order_id} not found")
+
+        # Validate delivery method changes
+        if "delivery_type_id" in update_data:
+            _validate_delivery_method_availability(db, order.liste_id, update_data["delivery_type_id"])
+        
+        # Validate delivery address changes
+        if "delivery_address" in update_data or "delivery_type_id" in update_data:
+            delivery_type_id = update_data.get("delivery_type_id", order.delivery_type_id)
+            delivery_address = update_data.get("delivery_address", order.delivery_address)
+            _validate_delivery_address(db, delivery_type_id, delivery_address)
 
         if "nume_client" in update_data:
             update_data["nume_client"] = str(update_data["nume_client"]).strip()

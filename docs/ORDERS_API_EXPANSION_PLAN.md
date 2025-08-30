@@ -105,13 +105,13 @@ CREATE TABLE `comenzi` (
 
 ### Phase 3: Service Layer Updates (1-2 days)
 
-#### 3.1 Update Order Creation Logic
-- [ ] Update `create_order` function in `app/services/order.py`
-- [ ] Add validation for delivery method availability in the selected list
-- [ ] Add validation for payment method existence
-- [ ] Add business logic validation for delivery address (frontend responsibility)
-- [ ] Update foreign key validation logic
-- [ ] Handle cases where delivery/payment methods are not specified
+#### 3.1 Update Order Creation Logic ✅
+- [x] Update `create_order` function in `app/services/order.py`
+- [x] Add validation for delivery method availability in the selected list
+- [x] Add validation for payment method existence
+- [x] Add business logic validation for delivery address (frontend responsibility)
+- [x] Update foreign key validation logic
+- [x] Handle cases where delivery/payment methods are not specified
 
 #### 3.2 Update Order Update Logic
 - [ ] Update `update_order` function to handle new fields

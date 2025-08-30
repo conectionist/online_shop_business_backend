@@ -31,7 +31,35 @@ router = APIRouter()
 
 
 @router.get("/", response_model=List[OrderSchema], responses={
-    200: {"description": "List of orders"},
+    200: {
+        "description": "List of orders with delivery and payment information",
+        "content": {
+            "application/json": {
+                "example": [
+                    {
+                        "id": 1,
+                        "nume_client": "John Doe",
+                        "data_plasarii": "2024-01-15T10:30:00.000000Z",
+                        "liste_id": 5,
+                        "delivery_type_id": 2,
+                        "payment_method_id": 1,
+                        "delivery_address": "123 Main St, City",
+                        "order_notes": "Please deliver in the morning",
+                        "created_at": "2024-01-15T10:30:00.000000Z",
+                        "updated_at": "2024-01-15T10:30:00.000000Z",
+                        "items": [
+                            {
+                                "produse_id": 10,
+                                "pret_produs": 1500,
+                                "cantitate_produs": 2,
+                                "unitati_id": 1
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    },
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"},
 })
@@ -65,7 +93,33 @@ def read_orders(
 
 
 @router.post("/", response_model=OrderSchema, status_code=status.HTTP_201_CREATED, responses={
-    201: {"description": "Order created successfully"},
+    201: {
+        "description": "Order created successfully with delivery and payment information",
+        "content": {
+            "application/json": {
+                "example": {
+                    "id": 1,
+                    "nume_client": "John Doe",
+                    "data_plasarii": "2024-01-15T10:30:00.000000Z",
+                    "liste_id": 5,
+                    "delivery_type_id": 2,
+                    "payment_method_id": 1,
+                    "delivery_address": "123 Main St, City",
+                    "order_notes": "Please deliver in the morning",
+                    "created_at": "2024-01-15T10:30:00.000000Z",
+                    "updated_at": "2024-01-15T10:30:00.000000Z",
+                    "items": [
+                        {
+                            "produse_id": 10,
+                            "pret_produs": 1500,
+                            "cantitate_produs": 2,
+                            "unitati_id": 1
+                        }
+                    ]
+                }
+            }
+        }
+    },
     400: {"description": "Bad request - validation failed (e.g., delivery type not available for list, missing address for home delivery)"},
     422: {"description": "Validation error - invalid input data"},
     500: {"description": "Internal server error"},
@@ -93,12 +147,59 @@ def create_order_endpoint(
     - Delivery type must be available for the selected list
     - Delivery address is required for home delivery types
     - Payment method must exist in the system
+    
+    **Example Request Body:**
+    ```json
+    {
+        "nume_client": "John Doe",
+        "data_plasarii": "2024-01-15T10:30:00Z",
+        "liste_id": 5,
+        "delivery_type_id": 2,
+        "payment_method_id": 1,
+        "delivery_address": "123 Main St, City",
+        "order_notes": "Please deliver in the morning",
+        "items": [
+            {
+                "produse_id": 10,
+                "pret_produs": 1500,
+                "cantitate_produs": 2,
+                "unitati_id": 1
+            }
+        ]
+    }
+    ```
     """
     return create_order(db=db, order_in=order_in)
 
 
 @router.get("/{order_id}", response_model=OrderSchema, responses={
-    200: {"description": "Order details retrieved successfully"},
+    200: {
+        "description": "Order details retrieved successfully with delivery and payment information",
+        "content": {
+            "application/json": {
+                "example": {
+                    "id": 1,
+                    "nume_client": "John Doe",
+                    "data_plasarii": "2024-01-15T10:30:00.000000Z",
+                    "liste_id": 5,
+                    "delivery_type_id": 2,
+                    "payment_method_id": 1,
+                    "delivery_address": "123 Main St, City",
+                    "order_notes": "Please deliver in the morning",
+                    "created_at": "2024-01-15T10:30:00.000000Z",
+                    "updated_at": "2024-01-15T10:30:00.000000Z",
+                    "items": [
+                        {
+                            "produse_id": 10,
+                            "pret_produs": 1500,
+                            "cantitate_produs": 2,
+                            "unitati_id": 1
+                        }
+                    ]
+                }
+            }
+        }
+    },
     404: {"description": "Order not found"},
     422: {"description": "Validation error - invalid order ID"},
     500: {"description": "Internal server error"},
@@ -152,6 +253,15 @@ def update_order_endpoint(
     - Delivery address is required for home delivery types
     - Payment method must exist in the system
     - All validations are applied when updating delivery-related fields
+    
+    **Example Request Body:**
+    ```json
+    {
+        "delivery_type_id": 3,
+        "delivery_address": "456 Oak Ave, Town",
+        "order_notes": "Updated delivery instructions"
+    }
+    ```
     """
     return update_order(db=db, order_id=order_id, order_update=order_update)
 

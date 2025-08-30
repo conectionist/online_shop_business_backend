@@ -137,7 +137,7 @@ CREATE TABLE `comenzi` (
 - [ ] Update `GET /api/v1/orders/` endpoint to include new fields
 - [ ] Update `GET /api/v1/orders/{id}` endpoint to include new fields
 - [ ] Update response models and examples
-- [ ] Ensure backward compatibility for existing clients
+- [ ] Document breaking changes and migration requirements for frontend clients
 
 #### 4.3 Update Order Update Endpoint
 - [ ] Update `PATCH /api/v1/orders/{id}` endpoint to handle new fields
@@ -180,13 +180,41 @@ CREATE TABLE `comenzi` (
 - [ ] Add examples for new field handling
 - [ ] Document new validation rules
 - [ ] Document business logic for delivery address (frontend responsibility)
-- [ ] Provide migration guidance for frontend applications
+- [ ] Provide breaking change migration guide for frontend applications
+- [ ] Document required frontend updates for new mandatory fields
 
 #### 6.3 Deployment Preparation
 - [ ] Create rollback plan for database migration
 - [ ] Document deployment steps
 - [ ] Prepare communication about breaking changes
 - [ ] Plan testing in staging environment
+
+## Breaking Changes and Migration Notes
+
+### ⚠️ **BREAKING CHANGES - Frontend Updates Required**
+
+This API expansion introduces **breaking changes** that require frontend updates:
+
+1. **New Required Fields**: 
+   - `delivery_type_id` is now **mandatory** for order creation
+   - `payment_method_id` is now **mandatory** for order creation
+   - Existing frontend code will receive 422 validation errors if these fields are missing
+
+2. **Schema Changes**:
+   - Order responses now include new fields that may not be handled by existing frontend code
+   - New validation rules may cause previously working requests to fail
+
+3. **Frontend Migration Requirements**:
+   - Update order creation forms to include delivery and payment method selection
+   - Update order display components to show new fields
+   - Handle new validation error messages
+   - Update any hardcoded order structures
+
+### Migration Strategy
+- **No backward compatibility**: This is a breaking change by design
+- **Frontend must be updated** before deploying backend changes
+- **Staging environment testing** required before production deployment
+- **Coordinated deployment** of frontend and backend changes
 
 ## Technical Details
 

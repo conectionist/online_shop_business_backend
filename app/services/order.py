@@ -250,6 +250,14 @@ def update_order(db: Session, order_id: int, order_update: OrderUpdate) -> Order
         if "delivery_type_id" in update_data:
             _validate_delivery_method_availability(db, order.liste_id, update_data["delivery_type_id"])
         
+        # Validate payment method changes
+        if "payment_method_id" in update_data:
+            if not db.query(ModalitatiPlata).filter(ModalitatiPlata.id == update_data["payment_method_id"]).first():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Payment method with ID {update_data['payment_method_id']} does not exist",
+                )
+        
         # Validate delivery address changes
         if "delivery_address" in update_data or "delivery_type_id" in update_data:
             delivery_type_id = update_data.get("delivery_type_id", order.delivery_type_id)

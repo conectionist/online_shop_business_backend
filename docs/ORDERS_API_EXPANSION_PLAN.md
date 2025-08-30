@@ -113,12 +113,12 @@ CREATE TABLE `comenzi` (
 - [x] Update foreign key validation logic
 - [x] Handle cases where delivery/payment methods are not specified
 
-#### 3.2 Update Order Update Logic
-- [ ] Update `update_order` function to handle new fields
-- [ ] Add validation for delivery method changes
-- [ ] Add validation for payment method changes
-- [ ] Add validation for delivery address updates
-- [ ] Ensure business logic constraints are maintained
+#### 3.2 Update Order Update Logic ✅
+- [x] Update `update_order` function to handle new fields
+- [x] Add validation for delivery method changes
+- [x] Add validation for payment method changes
+- [x] Add validation for delivery address updates
+- [x] Ensure business logic constraints are maintained
 
 #### 3.3 Update Order Filtering and Sorting
 - [ ] Update `_apply_order_filters` function to handle new filters

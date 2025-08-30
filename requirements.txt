@@ -3,7 +3,7 @@ uvicorn==0.35.0
 pydantic==2.11.7
 sqlalchemy==2.0.41
 mysql-connector-python==9.3.0
-PyMySQL==1.1.2w
+PyMySQL==1.1.2
 python-multipart==0.0.20
 Pillow==11.3.0
 PyJWT==2.10.1

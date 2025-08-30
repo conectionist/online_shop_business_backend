@@ -83,12 +83,12 @@ CREATE TABLE `comenzi` (
 
 ### Phase 2: Model and Schema Updates (1-2 days)
 
-#### 2.1 Update SQLAlchemy Models
-- [ ] Update `app/models/order.py` to include new fields
-- [ ] Add relationships to `DeliveryType` and `ModalitatiPlata` models
-- [ ] Add `delivery_address` field with appropriate validation
-- [ ] Update model validation and constraints
-- [ ] Add appropriate indexes in `__table_args__`
+#### 2.1 Update SQLAlchemy Models ✅
+- [x] Update `app/models/order.py` to include new fields
+- [x] Add relationships to `DeliveryType` and `ModalitatiPlata` models
+- [x] Add `delivery_address` field with appropriate validation
+- [x] Update model validation and constraints
+- [x] Add appropriate indexes in `__table_args__`
 
 #### 2.2 Update Pydantic Schemas
 - [ ] Update `app/schemas/order.py` to include new fields

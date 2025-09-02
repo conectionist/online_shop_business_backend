@@ -99,7 +99,8 @@ def create_business_details(db: Session, business_details: BusinessDetailsCreate
             logo_path=business_details.logo_path,
             motto=business_details.motto,
             list_not_available_msg=business_details.list_not_available_msg,
-            alte_detalii=business_details.alte_detalii
+            alte_detalii=business_details.alte_detalii,
+            delivery_tax=business_details.delivery_tax
         )
         db.add(db_business_details)
         db.commit()

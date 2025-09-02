@@ -41,6 +41,12 @@ class BusinessDetailsBase(BaseModel):
         description="Additional business details"
     )
     
+    delivery_tax: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Delivery tax in RON"
+    )
+    
     @field_validator('adresa', 'telefon', 'logo_path', 'motto', 'list_not_available_msg', 'alte_detalii')
     def strip_if_not_none(cls, v):
         """Strip whitespace from string fields if they're not None."""

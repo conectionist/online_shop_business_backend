@@ -14,6 +14,7 @@ class BusinessDetails(Base):
     motto = Column(String(256), nullable=True)
     list_not_available_msg = Column(String(200), nullable=True)
     alte_detalii = Column(String(500), nullable=True)
+    delivery_tax = Column(SmallInteger, nullable=True, server_default="0")
     
     # Table arguments for constraints
     __table_args__ = (

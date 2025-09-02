@@ -285,6 +285,7 @@ CREATE TABLE IF NOT EXISTS `online_shop`.`business_details` (
   `motto` VARCHAR(256) NULL,
   `list_not_available_msg` VARCHAR(200) NULL,
   `alte_detalii` VARCHAR(500) NULL,
+  `delivery_tax` SMALLINT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE INDEX `id_UNIQUE` (`id` ASC))
 ENGINE = InnoDB;

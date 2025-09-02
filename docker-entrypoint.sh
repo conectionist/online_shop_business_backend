@@ -63,6 +63,19 @@ run_migrations() {
     echo "Migrations completed successfully"
 }
 
+# Function to seed test data (only in test environment)
+seed_test_data() {
+    if [ "${ENVIRONMENT}" = "test" ]; then
+        echo "Seeding test data..."
+        if [ -f "test/test_data/seed_data_complete.sql" ]; then
+            mysql -h"${DB_HOST}" -P"${DB_PORT}" -u"${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" < test/test_data/seed_data_complete.sql || true
+            echo "Test data seeding completed"
+        else
+            echo "No test seed file found; skipping"
+        fi
+    fi
+}
+
 # Main execution
 echo "Environment: ${ENVIRONMENT:-development}"
 echo "Database: ${DB_HOST}:${DB_PORT}/${DB_NAME}"
@@ -78,6 +91,9 @@ configure_alembic
 
 # Run migrations
 run_migrations
+
+# Seed data in test environment
+seed_test_data
 
 # Start the application
 echo "Starting FastAPI application..."

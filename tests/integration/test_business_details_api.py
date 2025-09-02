@@ -11,7 +11,7 @@ class BusinessDetailsTestUtils(EntityTestUtils):
     def __init__(self):
         super().__init__(entity_name="Business Details", endpoint_path="detalii-business")
     
-    def create_entity(self, adresa=None, telefon=None, motto=None):
+    def create_entity(self, adresa=None, telefon=None, motto=None, delivery_tax=None):
         """
         Create a new business details record.
         
@@ -36,6 +36,8 @@ class BusinessDetailsTestUtils(EntityTestUtils):
             "telefon": telefon,
             "motto": motto
         }
+        if delivery_tax is not None:
+            create_data["delivery_tax"] = delivery_tax
         
         # Ensure we're authenticated
         if not auth_utils.access_token:
@@ -64,10 +66,12 @@ class BusinessDetailsTestUtils(EntityTestUtils):
         assert created_entity["adresa"] == adresa
         assert created_entity["telefon"] == telefon
         assert created_entity["motto"] == motto
+        if delivery_tax is not None:
+            assert created_entity.get("delivery_tax") == delivery_tax
         
         return created_entity, created_entity["id"]
     
-    def update_entity(self, entity_id, adresa=None, telefon=None, motto=None, alte_detalii=None):
+    def update_entity(self, entity_id, adresa=None, telefon=None, motto=None, alte_detalii=None, delivery_tax=None):
         """
         Update a business details record by ID.
         
@@ -90,6 +94,8 @@ class BusinessDetailsTestUtils(EntityTestUtils):
             update_data["motto"] = motto
         if alte_detalii is not None:
             update_data["alte_detalii"] = alte_detalii
+        if delivery_tax is not None:
+            update_data["delivery_tax"] = delivery_tax
             
         # Ensure we're authenticated
         if not auth_utils.access_token:
@@ -176,6 +182,18 @@ class BusinessDetailsTestUtils(EntityTestUtils):
             }
         )
         assert invalid_data_response.status_code == 422
+
+        # Test negative delivery_tax validation
+        invalid_tax_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{self.base_url}/",
+            json={
+                "adresa": "Valid Address",
+                "telefon": "0712345678",
+                "delivery_tax": -1
+            }
+        )
+        assert invalid_tax_response.status_code == 422
 
 
 # Create an instance of our test utilities
@@ -422,7 +440,8 @@ def test_put_with_complete_data_works():
         put_data = {
             "adresa": "PUT Updated Address",
             "telefon": "111222333",
-            "motto": "PUT Updated Motto"
+            "motto": "PUT Updated Motto",
+            "delivery_tax": 250
         }
         put_response = auth_utils.make_authenticated_request(
             "PUT",
@@ -436,7 +455,42 @@ def test_put_with_complete_data_works():
         assert final_entity["adresa"] == put_data["adresa"]
         assert final_entity["telefon"] == put_data["telefon"]
         assert final_entity["motto"] == put_data["motto"]
-        
+        assert final_entity["delivery_tax"] == put_data["delivery_tax"]
     finally:
         # Clean up
+        business_details_utils.delete_entity(entity_id)
+
+
+def test_create_with_delivery_tax_sets_value():
+    """
+    Ensure creating business details with delivery_tax sets the value.
+    """
+    created_entity, entity_id = business_details_utils.create_entity(delivery_tax=175)
+    try:
+        assert created_entity["delivery_tax"] == 175
+        retrieved = business_details_utils.get_entity(entity_id)
+        assert retrieved["delivery_tax"] == 175
+    finally:
+        business_details_utils.delete_entity(entity_id)
+
+
+def test_patch_delivery_tax_updates_value():
+    """
+    Ensure PATCH can update delivery_tax.
+    """
+    created_entity, entity_id = business_details_utils.create_entity()
+    try:
+        if not auth_utils.access_token:
+            auth_utils.login()
+        patch_response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{business_details_utils.base_url}/{entity_id}",
+            json={"delivery_tax": 300}
+        )
+        assert patch_response.status_code == 200
+        patched = patch_response.json()
+        assert patched["delivery_tax"] == 300
+        retrieved = business_details_utils.get_entity(entity_id)
+        assert retrieved["delivery_tax"] == 300
+    finally:
         business_details_utils.delete_entity(entity_id)

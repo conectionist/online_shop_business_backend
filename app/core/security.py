@@ -1,6 +1,6 @@
 """Security utilities for authentication"""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 import jwt
 from passlib.context import CryptContext
@@ -28,9 +28,9 @@ def create_access_token(
     to_encode = data.copy()
     
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
+        expire = datetime.now(timezone.utc) + timedelta(
             minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
         )
     
@@ -53,7 +53,7 @@ def create_refresh_token(
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
+        expire = datetime.now(timezone.utc) + timedelta(
             days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
         )
     
@@ -90,6 +90,7 @@ def is_token_expired(token: str) -> bool:
         exp = payload.get("exp")
         if exp is None:
             return True
-        return datetime.utcnow() > datetime.fromtimestamp(exp)
+        # Fix: Use UTC time for both creation and verification (modern approach)
+        return datetime.now(timezone.utc) > datetime.fromtimestamp(exp, tz=timezone.utc)
     except jwt.PyJWTError:
         return True 

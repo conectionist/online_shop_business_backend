@@ -100,7 +100,14 @@ def create_business_details(db: Session, business_details: BusinessDetailsCreate
             motto=business_details.motto,
             list_not_available_msg=business_details.list_not_available_msg,
             alte_detalii=business_details.alte_detalii,
-            delivery_tax=business_details.delivery_tax
+            delivery_tax=business_details.delivery_tax,
+            # Optional merchant identity fields
+            business_name=business_details.business_name,
+            registration_number=business_details.registration_number,
+            CUI=business_details.CUI,
+            email=business_details.email,
+            operating_hours=business_details.operating_hours,
+            representative=business_details.representative
         )
         db.add(db_business_details)
         db.commit()
@@ -145,7 +152,16 @@ def update_business_details(db: Session, business_details_id: int, business_deta
         )
     
     # Prepare update data
-    update_data = business_details.dict(exclude_unset=True)
+    # Extract only provided fields; Pydantic v2 prefers model_dump
+    try:
+        update_data = business_details.model_dump(exclude_unset=True)
+    except Exception:
+        update_data = business_details.dict(exclude_unset=True)
+
+    # Normalize any blank strings to None (defensive; validators already handle most cases)
+    for key, value in list(update_data.items()):
+        if isinstance(value, str) and value.strip() == "":
+            update_data[key] = None
     if not update_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

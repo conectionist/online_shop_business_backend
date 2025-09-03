@@ -11,7 +11,9 @@ class BusinessDetailsTestUtils(EntityTestUtils):
     def __init__(self):
         super().__init__(entity_name="Business Details", endpoint_path="detalii-business")
     
-    def create_entity(self, adresa=None, telefon=None, motto=None, delivery_tax=None):
+    def create_entity(self, adresa=None, telefon=None, motto=None, delivery_tax=None,
+                      business_name=None, registration_number=None, CUI=None, email=None,
+                      operating_hours=None, representative=None):
         """
         Create a new business details record.
         
@@ -38,6 +40,18 @@ class BusinessDetailsTestUtils(EntityTestUtils):
         }
         if delivery_tax is not None:
             create_data["delivery_tax"] = delivery_tax
+        if business_name is not None:
+            create_data["business_name"] = business_name
+        if registration_number is not None:
+            create_data["registration_number"] = registration_number
+        if CUI is not None:
+            create_data["CUI"] = CUI
+        if email is not None:
+            create_data["email"] = email
+        if operating_hours is not None:
+            create_data["operating_hours"] = operating_hours
+        if representative is not None:
+            create_data["representative"] = representative
         
         # Ensure we're authenticated
         if not auth_utils.access_token:
@@ -68,10 +82,24 @@ class BusinessDetailsTestUtils(EntityTestUtils):
         assert created_entity["motto"] == motto
         if delivery_tax is not None:
             assert created_entity.get("delivery_tax") == delivery_tax
+        if business_name is not None:
+            assert created_entity.get("business_name") == business_name
+        if registration_number is not None:
+            assert created_entity.get("registration_number") == registration_number
+        if CUI is not None:
+            assert created_entity.get("CUI") == CUI
+        if email is not None:
+            assert created_entity.get("email") == email
+        if operating_hours is not None:
+            assert created_entity.get("operating_hours") == operating_hours
+        if representative is not None:
+            assert created_entity.get("representative") == representative
         
         return created_entity, created_entity["id"]
     
-    def update_entity(self, entity_id, adresa=None, telefon=None, motto=None, alte_detalii=None, delivery_tax=None):
+    def update_entity(self, entity_id, adresa=None, telefon=None, motto=None, alte_detalii=None, delivery_tax=None,
+                      business_name=None, registration_number=None, CUI=None, email=None,
+                      operating_hours=None, representative=None):
         """
         Update a business details record by ID.
         
@@ -96,6 +124,18 @@ class BusinessDetailsTestUtils(EntityTestUtils):
             update_data["alte_detalii"] = alte_detalii
         if delivery_tax is not None:
             update_data["delivery_tax"] = delivery_tax
+        if business_name is not None:
+            update_data["business_name"] = business_name
+        if registration_number is not None:
+            update_data["registration_number"] = registration_number
+        if CUI is not None:
+            update_data["CUI"] = CUI
+        if email is not None:
+            update_data["email"] = email
+        if operating_hours is not None:
+            update_data["operating_hours"] = operating_hours
+        if representative is not None:
+            update_data["representative"] = representative
             
         # Ensure we're authenticated
         if not auth_utils.access_token:
@@ -129,7 +169,13 @@ class BusinessDetailsTestUtils(EntityTestUtils):
         created_entity, entity_id = self.create_entity(
             adresa=initial_adresa,
             telefon=initial_telefon,
-            motto=initial_motto
+            motto=initial_motto,
+            business_name="PCMA SRL",
+            registration_number="J22/1234/2020",
+            CUI="RO12345678",
+            email="contact@example.com",
+            operating_hours="L-V 9-17",
+            representative="John Doe - Administrator"
         )
         
         # 2. READ
@@ -143,10 +189,14 @@ class BusinessDetailsTestUtils(EntityTestUtils):
         updated_entity = self.update_entity(
             entity_id, 
             motto=updated_motto,
-            alte_detalii=updated_alte_detalii
+            alte_detalii=updated_alte_detalii,
+            business_name="New Name SRL",
+            email="office@example.com"
         )
         assert updated_entity["motto"] == updated_motto
         assert updated_entity["alte_detalii"] == updated_alte_detalii
+        assert updated_entity["business_name"] == "New Name SRL"
+        assert updated_entity["email"] == "office@example.com"
         assert updated_entity["adresa"] == initial_adresa  # Should remain unchanged
         assert updated_entity["telefon"] == initial_telefon  # Should remain unchanged
         
@@ -238,7 +288,7 @@ def test_patch_with_valid_data():
         patch_response = auth_utils.make_authenticated_request(
             "PATCH",
             f"{business_details_utils.base_url}/{entity_id}",
-            json={"adresa": new_adresa}
+            json={"adresa": new_adresa, "business_name": "Patched SRL"}
         )
         assert patch_response.status_code == 200, (
             f"PATCH should return 200, got {patch_response.status_code}: {patch_response.text}"
@@ -246,6 +296,7 @@ def test_patch_with_valid_data():
         
         patched_entity = patch_response.json()
         assert patched_entity["adresa"] == new_adresa
+        assert patched_entity.get("business_name") == "Patched SRL"
         assert patched_entity["id"] == entity_id
         
         # Verify the change persisted
@@ -311,19 +362,18 @@ def test_patch_with_invalid_data():
     created_entity, entity_id = business_details_utils.create_entity()
     
     try:
-        # PATCH with empty string (should work - schema allows empty strings)
+        # PATCH with empty strings should clear values to null (None)
         invalid_patch_response = auth_utils.make_authenticated_request(
             "PATCH",
             f"{business_details_utils.base_url}/{entity_id}",
-            json={"adresa": ""}
+            json={"adresa": "", "email": "   "}
         )
-        assert invalid_patch_response.status_code == 200, (
-            f"PATCH with empty string should return 200, got {invalid_patch_response.status_code}"
-        )
+        assert invalid_patch_response.status_code == 200
         
-        # Verify the empty string was set
+        # Verify the empty strings were normalized to null
         patched_entity = invalid_patch_response.json()
-        assert patched_entity["adresa"] == ""
+        assert patched_entity["adresa"] is None
+        assert patched_entity["email"] is None
         
     finally:
         # Clean up

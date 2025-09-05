@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # API version information
-API_VERSION = "2.1.1"
+API_VERSION = "2.1.2"
 API_TITLE = "Online Shop API"
 API_DESCRIPTION = "API for online shop business"
 
@@ -69,6 +69,10 @@ ADMIN_PASSWORD = get_required_env_var(
     "This is required for initial admin user creation. Set the default admin password in your environment."
 )
 
+# OpenAPI Documentation Configuration
+# Disable OpenAPI docs in production for security, enable in dev/test
+ENABLE_OPENAPI_DOCS = get_optional_env_var("ENABLE_OPENAPI_DOCS", "true", "Enable/disable OpenAPI documentation endpoints").lower() in ("true", "1", "yes")
+
 # For compatibility with the rest of the application
 class Settings:
     def __init__(self):
@@ -88,5 +92,8 @@ class Settings:
         # Admin Settings
         self.ADMIN_USERNAME = ADMIN_USERNAME
         self.ADMIN_PASSWORD = ADMIN_PASSWORD
+        
+        # OpenAPI Settings
+        self.ENABLE_OPENAPI_DOCS = ENABLE_OPENAPI_DOCS
 
 settings = Settings()

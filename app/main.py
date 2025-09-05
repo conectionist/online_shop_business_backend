@@ -23,7 +23,10 @@ from app.core.admin_init import initialize_default_admin
 app = FastAPI(
     title=API_TITLE,
     description=API_DESCRIPTION,
-    version=API_VERSION
+    version=API_VERSION,
+    docs_url="/docs" if settings.ENABLE_OPENAPI_DOCS else None,
+    redoc_url="/redoc" if settings.ENABLE_OPENAPI_DOCS else None,
+    openapi_url="/openapi.json" if settings.ENABLE_OPENAPI_DOCS else None
 )
 
 # Add TrustedHostMiddleware to handle proxy headers

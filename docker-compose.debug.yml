@@ -29,6 +29,8 @@ services:
       - JWT_REFRESH_TOKEN_EXPIRE_DAYS=${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
       - ADMIN_USERNAME=${ADMIN_USERNAME}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      # Enable OpenAPI docs in development environment
+      - ENABLE_OPENAPI_DOCS=true
     depends_on:
       db_debug:
         condition: service_healthy

@@ -50,6 +50,8 @@ services:
       - JWT_REFRESH_TOKEN_EXPIRE_DAYS=${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
       - ADMIN_USERNAME=${ADMIN_USERNAME}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      # Enable OpenAPI docs in test environment
+      - ENABLE_OPENAPI_DOCS=true
     depends_on:
       mysql_test:
         condition: service_healthy

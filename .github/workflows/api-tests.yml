@@ -78,6 +78,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract app version
+        if: success()  # Only extract version if tests passed
+        id: version
+        run: |
+          API_VERSION=$(grep -o 'API_VERSION = "[^"]*"' app/core/config.py | cut -d'"' -f2)
+          echo "version=$API_VERSION" >> $GITHUB_OUTPUT
+          echo "API version: $API_VERSION"
+
       - name: Extract metadata
         if: success()  # Only extract metadata if tests passed
         id: meta
@@ -89,6 +97,7 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value={{date 'YYYY-MM-DD-HH-mm'}},enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
 
       - name: Build and push Docker image
         if: success()  # Only build and push if tests passed
@@ -108,11 +117,11 @@ jobs:
           TAGS=$(gh api repos/${{ github.repository }}/packages/container/${{ env.IMAGE_NAME }}/versions --jq '.[].metadata.container.tags[]' 2>/dev/null || echo "")
           
           if [ -n "$TAGS" ]; then
-            # Filter out 'latest' and current commit, then sort by date and keep only 5 most recent
-            KEEP_TAGS=$(echo "$TAGS" | grep -v "latest" | grep -v "${{ github.sha }}" | sort -r | head -5)
+            # Filter out 'latest', current version, and current commit, then sort by date and keep only 5 most recent
+            KEEP_TAGS=$(echo "$TAGS" | grep -v "latest" | grep -v "${{ steps.version.outputs.version }}" | grep -v "${{ github.sha }}" | sort -r | head -5)
             
             # Delete older tags (this will delete the associated image versions)
-            echo "$TAGS" | grep -v "latest" | grep -v "${{ github.sha }}" | sort -r | tail -n +6 | while read tag; do
+            echo "$TAGS" | grep -v "latest" | grep -v "${{ steps.version.outputs.version }}" | grep -v "${{ github.sha }}" | sort -r | tail -n +6 | while read tag; do
               if [ -n "$tag" ]; then
                 echo "Deleting old image version: $tag"
                 gh api -X DELETE repos/${{ github.repository }}/packages/container/${{ env.IMAGE_NAME }}/versions/$(gh api repos/${{ github.repository }}/packages/container/${{ env.IMAGE_NAME }}/versions --jq ".[] | select(.metadata.container.tags[] | contains(\"$tag\")) | .id")

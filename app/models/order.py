@@ -18,6 +18,7 @@ class Order(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     nume_client = Column(String(50), nullable=False)
+    phone_number = Column(String(20), nullable=True)
     data_plasarii = Column(DateTime, nullable=False)
     liste_id = Column(Integer, ForeignKey("liste.id"), nullable=False)
     delivery_type_id = Column(TINYINT, ForeignKey("tipuri_livrare.id"), nullable=False)
@@ -45,6 +46,7 @@ class Order(Base):
         Index("fk_comenzi_liste1_idx", "liste_id"),
         Index("idx_comenzi_data_plasarii", "data_plasarii"),
         Index("idx_comenzi_nume_client", "nume_client"),
+        Index("idx_comenzi_phone_number", "phone_number"),
         Index("idx_comenzi_delivery_type", "delivery_type_id"),
         Index("idx_comenzi_payment_method", "payment_method_id"),
         Index("idx_comenzi_delivery_address", "delivery_address"),

@@ -23,6 +23,7 @@ class OrderCreate(BaseModel):
     """Schema for creating a new order"""
 
     nume_client: Annotated[str, Field(min_length=1, max_length=50, description="Customer name")]
+    phone_number: Optional[str] = Field(None, max_length=20, pattern=r'^\+?[1-9]\d{6,14}$', description="Optional customer phone number")
     data_plasarii: Annotated[datetime, Field(description="Order placement datetime")]
     liste_id: Annotated[int, Field(gt=0, description="Related list ID")]
     delivery_type_id: Annotated[int, Field(gt=0, description="Delivery type ID (required)")]
@@ -38,11 +39,24 @@ class OrderCreate(BaseModel):
             raise ValueError("nume_client cannot be empty or whitespace")
         return v.strip()
 
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v.strip() == "":
+            return None
+        if v is not None:
+            import re
+            v = v.strip()
+            if not re.match(r'^\+?[1-9]\d{6,14}$', v):
+                raise ValueError("phone_number must be a valid phone number (7-15 digits, optional + prefix, cannot start with 0)")
+        return v
+
 
 class OrderUpdate(BaseModel):
     """Schema for updating an existing order (limited fields)"""
 
     nume_client: Optional[str] = Field(default=None, min_length=1, max_length=50, description="Customer name")
+    phone_number: Optional[str] = Field(default=None, max_length=20, pattern=r'^\+?[1-9]\d{6,14}$', description="Optional customer phone number")
     delivery_type_id: Optional[int] = Field(default=None, gt=0, description="Delivery type ID")
     payment_method_id: Optional[int] = Field(default=None, gt=0, description="Payment method ID")
     delivery_address: Optional[str] = Field(default=None, max_length=150, description="Optional delivery address for home delivery")
@@ -55,12 +69,25 @@ class OrderUpdate(BaseModel):
             raise ValueError("nume_client cannot be empty or whitespace")
         return v.strip() if v is not None else v
 
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number_optional(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v.strip() == "":
+            return None
+        if v is not None:
+            import re
+            v = v.strip()
+            if not re.match(r'^\+?[1-9]\d{6,14}$', v):
+                raise ValueError("phone_number must be a valid phone number (7-15 digits, optional + prefix, cannot start with 0)")
+        return v
+
 
 class Order(BaseModel):
     """Schema for returning order data with items"""
 
     id: Annotated[int, Field(gt=0, description="Order ID")]
     nume_client: Annotated[str, Field(description="Customer name")]
+    phone_number: Optional[str] = Field(None, description="Optional customer phone number")
     data_plasarii: Annotated[datetime, Field(description="Order placement datetime")]
     liste_id: Annotated[int, Field(gt=0, description="Related list ID")]
     delivery_type_id: Annotated[int, Field(gt=0, description="Delivery type ID")]

@@ -170,6 +170,7 @@ def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
 
         db_order = OrderModel(
             nume_client=order_in.nume_client.strip(),
+            phone_number=order_in.phone_number,
             data_plasarii=order_in.data_plasarii,
             liste_id=order_in.liste_id,
             delivery_type_id=order_in.delivery_type_id,

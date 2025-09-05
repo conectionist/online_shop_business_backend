@@ -484,3 +484,199 @@ def test_orders_filter_by_delivery_and_payment_methods():
     orders = resp.json()
     delivery_ids = [o["delivery_type_id"] for o in orders]
     assert delivery_ids == sorted(delivery_ids)
+
+
+# ---------- Phone Number Validation Tests ----------
+
+def test_orders_phone_number_validation_valid_formats():
+    """Test that valid phone number formats are accepted"""
+    list_id = _get_any_list_id_or_skip()
+    
+    # Test valid phone number formats
+    valid_phones = [
+        "+40712345678",      # International format with +
+        "40712345678",       # International format without +
+        "0741234567",        # Romanian mobile starting with 0
+        "7123456789",        # 10 digits starting with 7
+        "1234567890",        # 10 digits starting with 1
+        "+1234567890",       # US format with +
+        "123456789012345",   # 15 digits (max length)
+    ]
+    
+    for phone in valid_phones:
+        payload = {
+            "nume_client": f"Test Customer {phone}",
+            "phone_number": phone,
+            "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "liste_id": list_id,
+            "delivery_type_id": 1,  # Ridicare de la sediu
+            "payment_method_id": 5,  # Cash
+        }
+        resp = requests.post(f"{API_V1}/orders/", json=payload)
+        assert resp.status_code == 201, f"Valid phone {phone} should be accepted, got {resp.status_code}: {resp.text}"
+        
+        # Verify phone number is stored correctly
+        order = resp.json()
+        assert order["phone_number"] == phone, f"Phone number {phone} not stored correctly"
+
+
+def test_orders_phone_number_validation_invalid_formats():
+    """Test that invalid phone number formats are rejected with 422"""
+    list_id = _get_any_list_id_or_skip()
+    
+    # Test invalid phone number formats
+    invalid_phones = [
+        "12345",             # Too short (5 digits)
+        "123456789012345678901",  # Too long (21 digits)
+        "abc123456789",      # Contains letters
+        "123-456-7890",      # Contains hyphens
+        "123 456 7890",      # Contains spaces
+        "(123) 456-7890",    # Contains parentheses and spaces
+        "00-123456789",      # Contains hyphens
+    ]
+    
+    for phone in invalid_phones:
+        payload = {
+            "nume_client": f"Test Customer {phone}",
+            "phone_number": phone,
+            "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "liste_id": list_id,
+            "delivery_type_id": 1,  # Ridicare de la sediu
+            "payment_method_id": 5,  # Cash
+        }
+        resp = requests.post(f"{API_V1}/orders/", json=payload)
+        assert resp.status_code == 422, f"Invalid phone {phone} should be rejected with 422, got {resp.status_code}: {resp.text}"
+        
+        # Verify error message mentions phone number validation
+        error_detail = resp.json().get("detail", [])
+        assert any("phone_number" in str(error) for error in error_detail), f"Error should mention phone_number for {phone}"
+
+
+def test_orders_phone_number_optional_field():
+    """Test that phone_number is truly optional"""
+    list_id = _get_any_list_id_or_skip()
+    
+    # Test without phone_number field
+    payload_no_phone = {
+        "nume_client": "Customer Without Phone",
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
+    }
+    resp = requests.post(f"{API_V1}/orders/", json=payload_no_phone)
+    assert resp.status_code == 201, f"Order without phone should be accepted, got {resp.status_code}: {resp.text}"
+    
+    order = resp.json()
+    assert order["phone_number"] is None, "Phone number should be None when not provided"
+    
+    # Test with phone_number as null
+    payload_null_phone = {
+        "nume_client": "Customer With Null Phone",
+        "phone_number": None,
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
+    }
+    resp = requests.post(f"{API_V1}/orders/", json=payload_null_phone)
+    assert resp.status_code == 201, f"Order with null phone should be accepted, got {resp.status_code}: {resp.text}"
+    
+    order = resp.json()
+    assert order["phone_number"] is None, "Phone number should be None when explicitly set to null"
+
+
+def test_orders_phone_number_update_validation():
+    """Test phone number validation in order updates"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    list_id = _get_any_list_id_or_skip()
+    
+    # Create order with valid phone number
+    payload = {
+        "nume_client": "Update Test Customer",
+        "phone_number": "+40712345678",
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
+    }
+    resp = requests.post(f"{API_V1}/orders/", json=payload)
+    assert resp.status_code == 201
+    order_id = resp.json()["id"]
+    
+    # Test updating with valid phone number
+    update_payload = {"phone_number": "40798765432"}
+    resp = auth_utils.make_authenticated_request("PATCH", f"{API_V1}/orders/{order_id}", json=update_payload)
+    assert resp.status_code == 200, f"Valid phone update should succeed, got {resp.status_code}: {resp.text}"
+    
+    order = resp.json()
+    assert order["phone_number"] == "40798765432", "Phone number should be updated correctly"
+    
+    # Test updating with invalid phone number
+    invalid_update_payload = {"phone_number": "12345"}  # Too short
+    resp = auth_utils.make_authenticated_request("PATCH", f"{API_V1}/orders/{order_id}", json=invalid_update_payload)
+    assert resp.status_code == 422, f"Invalid phone update should fail with 422, got {resp.status_code}: {resp.text}"
+    
+    # Test updating to null (should work)
+    null_update_payload = {"phone_number": None}
+    resp = auth_utils.make_authenticated_request("PATCH", f"{API_V1}/orders/{order_id}", json=null_update_payload)
+    assert resp.status_code == 200, f"Null phone update should succeed, got {resp.status_code}: {resp.text}"
+    
+    order = resp.json()
+    assert order["phone_number"] is None, "Phone number should be set to None"
+
+
+def test_orders_phone_number_max_length_validation():
+    """Test phone number maximum length validation"""
+    list_id = _get_any_list_id_or_skip()
+    
+    # Test exactly 20 characters (should work)
+    phone_20_chars = "12345678901234567890"  # 20 digits
+    payload = {
+        "nume_client": "Max Length Test",
+        "phone_number": phone_20_chars,
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
+    }
+    resp = requests.post(f"{API_V1}/orders/", json=payload)
+    assert resp.status_code == 201, f"20-character phone should be accepted, got {resp.status_code}: {resp.text}"
+    
+    # Test 21 characters (should fail)
+    phone_21_chars = "123456789012345678901"  # 21 digits
+    payload["phone_number"] = phone_21_chars
+    resp = requests.post(f"{API_V1}/orders/", json=payload)
+    assert resp.status_code == 422, f"21-character phone should be rejected with 422, got {resp.status_code}: {resp.text}"
+
+
+def test_orders_phone_number_whitespace_handling():
+    """Test that whitespace in phone numbers is handled correctly"""
+    list_id = _get_any_list_id_or_skip()
+    
+    # Test phone number with leading/trailing whitespace (should be trimmed)
+    payload = {
+        "nume_client": "Whitespace Test",
+        "phone_number": "  40712345678  ",  # With spaces
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
+    }
+    resp = requests.post(f"{API_V1}/orders/", json=payload)
+    assert resp.status_code == 201, f"Phone with whitespace should be accepted, got {resp.status_code}: {resp.text}"
+    
+    order = resp.json()
+    assert order["phone_number"] == "40712345678", "Whitespace should be trimmed from phone number"
+    
+    # Test empty string (should fail validation)
+    payload["phone_number"] = ""
+    resp = requests.post(f"{API_V1}/orders/", json=payload)
+    assert resp.status_code == 422, f"Empty string phone should be rejected with 422, got {resp.status_code}: {resp.text}"
+    
+    # Test whitespace-only string (should fail validation)
+    payload["phone_number"] = "   "
+    resp = requests.post(f"{API_V1}/orders/", json=payload)
+    assert resp.status_code == 422, f"Whitespace-only phone should be rejected with 422, got {resp.status_code}: {resp.text}"

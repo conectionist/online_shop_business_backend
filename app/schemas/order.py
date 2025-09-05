@@ -1,7 +1,38 @@
 from typing import Optional, Annotated, List, Literal
 from datetime import datetime
+import re
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
+
+
+def validate_phone_number_format(phone: str) -> str:
+    """
+    Validate phone number format and return cleaned version.
+    
+    Args:
+        phone: Phone number string to validate
+        
+    Returns:
+        Cleaned phone number string
+        
+    Raises:
+        ValueError: If phone number format is invalid
+    """
+    phone = phone.strip()
+    
+    # Empty string should be rejected
+    if phone == "":
+        raise ValueError("phone_number cannot be empty")
+    
+    # Check length (max 20 characters as per database field)
+    if len(phone) > 20:
+        raise ValueError("phone_number cannot exceed 20 characters")
+    
+    # Check format: 7-20 digits, optional + prefix
+    if not re.match(r'^\+?[0-9]\d{6,19}$', phone):
+        raise ValueError("phone_number must be a valid phone number (7-20 digits, optional + prefix)")
+    
+    return phone
 
 
 class OrderItemBase(BaseModel):
@@ -23,7 +54,7 @@ class OrderCreate(BaseModel):
     """Schema for creating a new order"""
 
     nume_client: Annotated[str, Field(min_length=1, max_length=50, description="Customer name")]
-    phone_number: Optional[str] = Field(None, max_length=20, pattern=r'^\+?[1-9]\d{6,14}$', description="Optional customer phone number")
+    phone_number: Optional[str] = Field(None, max_length=20, description="Optional customer phone number")
     data_plasarii: Annotated[datetime, Field(description="Order placement datetime")]
     liste_id: Annotated[int, Field(gt=0, description="Related list ID")]
     delivery_type_id: Annotated[int, Field(gt=0, description="Delivery type ID (required)")]
@@ -42,13 +73,8 @@ class OrderCreate(BaseModel):
     @field_validator('phone_number')
     @classmethod
     def validate_phone_number(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v.strip() == "":
-            return None
         if v is not None:
-            import re
-            v = v.strip()
-            if not re.match(r'^\+?[1-9]\d{6,14}$', v):
-                raise ValueError("phone_number must be a valid phone number (7-15 digits, optional + prefix, cannot start with 0)")
+            return validate_phone_number_format(v)
         return v
 
 
@@ -56,7 +82,7 @@ class OrderUpdate(BaseModel):
     """Schema for updating an existing order (limited fields)"""
 
     nume_client: Optional[str] = Field(default=None, min_length=1, max_length=50, description="Customer name")
-    phone_number: Optional[str] = Field(default=None, max_length=20, pattern=r'^\+?[1-9]\d{6,14}$', description="Optional customer phone number")
+    phone_number: Optional[str] = Field(default=None, max_length=20, description="Optional customer phone number")
     delivery_type_id: Optional[int] = Field(default=None, gt=0, description="Delivery type ID")
     payment_method_id: Optional[int] = Field(default=None, gt=0, description="Payment method ID")
     delivery_address: Optional[str] = Field(default=None, max_length=150, description="Optional delivery address for home delivery")
@@ -72,13 +98,8 @@ class OrderUpdate(BaseModel):
     @field_validator('phone_number')
     @classmethod
     def validate_phone_number_optional(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v.strip() == "":
-            return None
         if v is not None:
-            import re
-            v = v.strip()
-            if not re.match(r'^\+?[1-9]\d{6,14}$', v):
-                raise ValueError("phone_number must be a valid phone number (7-15 digits, optional + prefix, cannot start with 0)")
+            return validate_phone_number_format(v)
         return v
 
 

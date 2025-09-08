@@ -71,7 +71,6 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=experimental
-            type=ref,event=branch
             type=sha,prefix=experimental-
             type=raw,value={{date 'YYYY-MM-DD-HH-mm'}}
 

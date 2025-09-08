@@ -68,7 +68,10 @@ seed_test_data() {
     if [ "${ENVIRONMENT}" = "test" ]; then
         echo "Seeding test data..."
         if [ -f "test/test_data/seed_data_complete.sql" ]; then
-            mysql -h"${DB_HOST}" -P"${DB_PORT}" -u"${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" < test/test_data/seed_data_complete.sql || true
+            # Disable server certificate verification to avoid TLS errors in test environment
+            # Also make inserts idempotent to avoid duplicate key errors on existing DBs
+            sed -E 's/INSERT[[:space:]]+INTO/INSERT IGNORE INTO/I' test/test_data/seed_data_complete.sql \
+              | mysql --ssl-verify-server-cert=OFF -h"${DB_HOST}" -P"${DB_PORT}" -u"${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" || true
             echo "Test data seeding completed"
         else
             echo "No test seed file found; skipping"

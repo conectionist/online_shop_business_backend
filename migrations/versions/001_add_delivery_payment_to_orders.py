@@ -1,7 +1,7 @@
 """Add delivery and payment method fields to orders table
 
 Revision ID: 001
-Revises: 
+Revises: 000_initial_schema
 Create Date: 2025-01-XX 10:00:00.000000
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision = '001'
-down_revision = None
+down_revision = '000_initial_schema'
 branch_labels = None
 depends_on = None
 

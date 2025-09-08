@@ -11,9 +11,6 @@ services:
       - MYSQL_PASSWORD=${TEST_MYSQL_PASSWORD}
     ports:
       - "${TEST_MYSQL_PORT}:3306"
-    volumes:
-      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - ./test/test_data/seed_data_complete.sql:/docker-entrypoint-initdb.d/02-seed_data_complete.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 5s

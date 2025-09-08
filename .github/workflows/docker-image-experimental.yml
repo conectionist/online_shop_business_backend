@@ -72,7 +72,7 @@ jobs:
           tags: |
             type=raw,value=experimental
             type=ref,event=branch
-            type=sha,prefix={{branch}}-
+            type=sha,prefix=experimental-
             type=raw,value={{date 'YYYY-MM-DD-HH-mm'}}
 
       - name: Build and push Docker image (experimental)

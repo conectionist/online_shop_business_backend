@@ -287,3 +287,78 @@ def test_delivery_type_validation():
     Tests validation for delivery type endpoints.
     """
     delivery_type_utils.test_validation()
+
+
+def test_reorder_delivery_types_happy_path_moves_item_to_top():
+    """PUT /tipuri-livrare/reorder should atomically reorder by full ID list."""
+    import requests
+    # Create three new delivery types to work with
+    dt1, id1 = delivery_type_utils.create_entity("Reorder DT 1")
+    dt2, id2 = delivery_type_utils.create_entity("Reorder DT 2")
+    dt3, id3 = delivery_type_utils.create_entity("Reorder DT 3")
+
+    try:
+        # Build the full ordered ID list by taking current IDs and moving id3 to the top
+        current = requests.get(f"{delivery_type_utils.base_url}/").json()
+        all_ids = [x["id"] for x in current]
+        assert id1 in all_ids and id2 in all_ids and id3 in all_ids
+
+        new_order = [id3] + [i for i in all_ids if i != id3]
+
+        # Auth and call reorder
+        if not auth_utils.access_token:
+            auth_utils.login()
+        resp = auth_utils.make_authenticated_request(
+            "PUT", f"{delivery_type_utils.base_url}/reorder", json=new_order
+        )
+        assert resp.status_code == 200, f"Reorder failed: {resp.status_code} {resp.text}"
+
+        updated = resp.json()
+        assert isinstance(updated, list) and len(updated) == len(new_order)
+        # First element should now be id3
+        assert updated[0]["id"] == id3
+        # Order indices should match positions (1-based)
+        for pos, item in enumerate(updated, start=1):
+            assert item["order_index"] == pos
+
+        # GET should reflect the same order
+        listed = requests.get(f"{delivery_type_utils.base_url}/").json()
+        assert [x["id"] for x in listed] == [x["id"] for x in updated]
+    finally:
+        # Clean up created entities
+        delivery_type_utils.delete_entity(id3)
+        delivery_type_utils.delete_entity(id2)
+        delivery_type_utils.delete_entity(id1)
+
+
+def test_reorder_delivery_types_invalid_permutation_returns_422():
+    import requests
+    # Fetch current full list
+    current = requests.get(f"{delivery_type_utils.base_url}/").json()
+    ids = [x["id"] for x in current]
+    assert len(ids) >= 2, "Need at least two delivery types for this test"
+    # Duplicate the first ID and drop the last to keep length the same
+    bad_ids = ids[:-1] + [ids[0]]
+
+    if not auth_utils.access_token:
+        auth_utils.login()
+    resp = auth_utils.make_authenticated_request(
+        "PUT", f"{delivery_type_utils.base_url}/reorder", json=bad_ids
+    )
+    assert resp.status_code == 422, f"Expected 422 for invalid permutation, got {resp.status_code}"
+
+
+def test_reorder_delivery_types_with_unknown_id_returns_404():
+    import requests
+    current = requests.get(f"{delivery_type_utils.base_url}/").json()
+    ids = [x["id"] for x in current]
+    assert len(ids) >= 1
+    bad_ids = ids[:]
+    bad_ids[-1] = 99999999  # assume non-existent
+
+    if not auth_utils.access_token:
+        auth_utils.login()
+    resp = auth_utils.make_authenticated_request(
+        "PUT", f"{delivery_type_utils.base_url}/reorder", json=bad_ids
+    )
+    assert resp.status_code == 404, f"Expected 404 for unknown id, got {resp.status_code}"

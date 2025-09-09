@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Body, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -12,6 +12,7 @@ from app.services.delivery_type import (
     get_delivery_type_by_id,
     get_delivery_types,
     update_delivery_type,
+    reorder_delivery_types,
 )
 
 router = APIRouter()
@@ -53,6 +54,31 @@ def create_delivery_type_endpoint(
     """Create a new delivery type"""
     try:
         return create_delivery_type(db=db, delivery_type=delivery_type)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+
+@router.put("/reorder", response_model=List[DeliveryType], responses={
+    200: {"description": "Reordered successfully; returns the ordered list"},
+    400: {"description": "Bad request"},
+    401: {"description": "Unauthorized - Authentication required"},
+    404: {"description": "One or more delivery types not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def reorder_delivery_types_endpoint(
+    ordered_ids: List[int] = Body(..., min_items=1, description="Full ordered list of delivery type IDs"),
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Atomically reorder delivery types by providing the full ordered list of IDs."""
+    try:
+        return reorder_delivery_types(db=db, ordered_ids=ordered_ids)
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -157,6 +183,31 @@ def delete_delivery_type_endpoint(
                 detail=f"Delivery type with ID {delivery_type_id} not found"
             )
         return None
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+
+@router.put("/reorder", response_model=List[DeliveryType], responses={
+    200: {"description": "Reordered successfully; returns the ordered list"},
+    400: {"description": "Bad request"},
+    401: {"description": "Unauthorized - Authentication required"},
+    404: {"description": "One or more delivery types not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def reorder_delivery_types_endpoint(
+    ordered_ids: List[int] = Body(..., min_items=1, description="Full ordered list of delivery type IDs"),
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Atomically reorder delivery types by providing the full ordered list of IDs."""
+    try:
+        return reorder_delivery_types(db=db, ordered_ids=ordered_ids)
     except HTTPException as e:
         raise e
     except Exception as e:

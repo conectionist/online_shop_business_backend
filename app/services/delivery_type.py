@@ -1,6 +1,8 @@
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy import text
+from typing import List as TypeList
 
 from app.models.delivery_type import DeliveryType
 from app.schemas.delivery_type import DeliveryTypeCreate, DeliveryTypeUpdate
@@ -34,6 +36,60 @@ def get_delivery_types(db: Session, skip: int = 0, limit: int = 100):
             detail=f"Database error occurred: {str(e)}"
         )
 
+
+# REORDER delivery types atomically
+def reorder_delivery_types(db: Session, ordered_ids: TypeList[int]):
+    """Rewrite order_index based on the full ordered list of IDs.
+    Requires the provided IDs to be an exact permutation of all existing delivery types.
+    """
+    if not ordered_ids:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Ordered ID list must not be empty")
+
+    try:
+        # Fetch existing IDs
+        existing_ids = [row[0] for row in db.query(DeliveryType.id).all()]
+        total = len(existing_ids)
+
+        # Validate counts and uniqueness
+        if len(ordered_ids) != total:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="IDs list must include all delivery types")
+        if len(set(ordered_ids)) != len(ordered_ids):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="IDs list contains duplicates")
+
+        # Validate all IDs exist
+        missing = [i for i in ordered_ids if i not in existing_ids]
+        if missing:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Delivery type IDs not found: {missing}")
+
+        # 1) Temporarily negate order_index to avoid unique collisions during reassignment
+        db.execute(text("UPDATE tipuri_livrare SET order_index = -order_index"))
+
+        # 2) Assign new order_index using a CASE expression
+        # Build CASE ... WHEN id THEN position ... END
+        case_clauses = []
+        params = {}
+        for position, dt_id in enumerate(ordered_ids, start=1):
+            key_id = f"id_{position}"
+            case_clauses.append(f"WHEN id = :{key_id} THEN {position}")
+            params[key_id] = dt_id
+        case_sql = " ".join(case_clauses)
+        update_sql = f"UPDATE tipuri_livrare SET order_index = CASE {case_sql} ELSE order_index END"
+        db.execute(text(update_sql), params)
+
+        db.commit()
+
+        # Return updated list ordered by order_index, denumire
+        return (
+            db.query(DeliveryType)
+            .order_by(DeliveryType.order_index.asc(), DeliveryType.denumire.asc())
+            .all()
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database error occurred: {str(e)}")
 
 # GET delivery type by ID
 def get_delivery_type_by_id(db: Session, delivery_type_id: int):

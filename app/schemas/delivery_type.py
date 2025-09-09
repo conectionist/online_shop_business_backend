@@ -12,6 +12,11 @@ class DeliveryTypeBase(BaseModel):
         description="Delivery type name",
         examples=["Ridicare de la sediu"]
     )
+    description: Optional[str] = Field(
+        None,
+        max_length=150,
+        description="Optional description for the delivery type"
+    )
     
     @field_validator('denumire')
     def denumire_must_not_be_empty_or_whitespace(cls, v):
@@ -22,7 +27,10 @@ class DeliveryTypeBase(BaseModel):
 
 class DeliveryTypeCreate(DeliveryTypeBase):
     """Schema for creating a new delivery type."""
-    pass
+    order_index: int = Field(
+        ..., ge=1, le=127,
+        description="Manual ordering index (1-127), unique"
+    )
 
 
 class DeliveryTypeUpdate(BaseModel):
@@ -33,6 +41,15 @@ class DeliveryTypeUpdate(BaseModel):
         min_length=1, 
         max_length=100,
         description="Delivery type name"
+    )
+    description: Optional[str] = Field(
+        None,
+        max_length=150,
+        description="Optional description for the delivery type"
+    )
+    order_index: Optional[int] = Field(
+        None, ge=1, le=127,
+        description="Manual ordering index (1-127), unique"
     )
     
     @field_validator('denumire')
@@ -46,5 +63,6 @@ class DeliveryType(DeliveryTypeBase):
     """Schema for delivery type responses including the ID."""
     
     id: int = Field(gt=0, description="The delivery type ID")
+    order_index: int = Field(ge=1, le=127, description="Manual ordering index (1-127), unique")
     
     model_config = ConfigDict(from_attributes=True)

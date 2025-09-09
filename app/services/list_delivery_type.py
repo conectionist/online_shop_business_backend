@@ -32,8 +32,14 @@ def get_list_delivery_types(db: Session, list_id: int) -> TypeList[DeliveryType]
         )
     
     try:
-        # Get delivery types through the many-to-many relationship
-        delivery_types = db.query(DeliveryType).join(ListDeliveryType).filter(ListDeliveryType.liste_id == list_id).all()
+        # Get delivery types through the many-to-many relationship, ordered by order_index then denumire
+        delivery_types = (
+            db.query(DeliveryType)
+            .join(ListDeliveryType)
+            .filter(ListDeliveryType.liste_id == list_id)
+            .order_by(DeliveryType.order_index.asc(), DeliveryType.denumire.asc())
+            .all()
+        )
         return delivery_types
     except SQLAlchemyError as e:
         db.rollback()

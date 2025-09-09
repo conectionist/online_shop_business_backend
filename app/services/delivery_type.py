@@ -20,7 +20,13 @@ def get_delivery_types(db: Session, skip: int = 0, limit: int = 100):
         List of DeliveryType objects
     """
     try:
-        return db.query(DeliveryType).offset(skip).limit(limit).all()
+        return (
+            db.query(DeliveryType)
+            .order_by(DeliveryType.order_index.asc(), DeliveryType.denumire.asc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(
@@ -88,16 +94,27 @@ def create_delivery_type(db: Session, delivery_type: DeliveryTypeCreate):
             detail="Delivery type name cannot be empty"
         )
     
-    # Check for duplicates
+    # Check for duplicate name
     existing = db.query(DeliveryType).filter(DeliveryType.denumire == delivery_type.denumire).first()
     if existing:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_409_CONFLICT,
             detail=f"A delivery type with the name '{delivery_type.denumire}' already exists"
+        )
+    # Check for duplicate order_index
+    existing_idx = db.query(DeliveryType).filter(DeliveryType.order_index == delivery_type.order_index).first()
+    if existing_idx:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"order_index '{delivery_type.order_index}' is already used by another delivery type"
         )
     
     try:
-        db_delivery_type = DeliveryType(denumire=delivery_type.denumire)
+        db_delivery_type = DeliveryType(
+            denumire=delivery_type.denumire,
+            description=delivery_type.description,
+            order_index=delivery_type.order_index,
+        )
         db.add(db_delivery_type)
         db.commit()
         db.refresh(db_delivery_type)
@@ -105,8 +122,8 @@ def create_delivery_type(db: Session, delivery_type: DeliveryTypeCreate):
     except IntegrityError:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"A delivery type with the name '{delivery_type.denumire}' already exists"
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Duplicate delivery type (name or order_index)"
         )
     except SQLAlchemyError as e:
         db.rollback()
@@ -144,6 +161,10 @@ def update_delivery_type(db: Session, delivery_type_id: int, delivery_type: Deli
     update_data = {}
     if delivery_type.denumire is not None:
         update_data["denumire"] = delivery_type.denumire
+    if delivery_type.description is not None:
+        update_data["description"] = delivery_type.description
+    if delivery_type.order_index is not None:
+        update_data["order_index"] = delivery_type.order_index
     
     if not update_data:
         raise HTTPException(
@@ -168,8 +189,19 @@ def update_delivery_type(db: Session, delivery_type_id: int, delivery_type: Deli
             ).first()
             if existing:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status_code=status.HTTP_409_CONFLICT,
                     detail=f"A delivery type with the name '{update_data['denumire']}' already exists"
+                )
+        # Check for duplicate order_index if updating order_index
+        if "order_index" in update_data:
+            existing_idx = db.query(DeliveryType).filter(
+                DeliveryType.order_index == update_data["order_index"],
+                DeliveryType.id != delivery_type_id
+            ).first()
+            if existing_idx:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"order_index '{update_data['order_index']}' is already used by another delivery type"
                 )
         
         # Apply updates
@@ -182,7 +214,7 @@ def update_delivery_type(db: Session, delivery_type_id: int, delivery_type: Deli
     except IntegrityError:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_409_CONFLICT,
             detail="Duplicate delivery type name"
         )
     except SQLAlchemyError as e:

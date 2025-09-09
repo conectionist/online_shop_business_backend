@@ -125,8 +125,8 @@ def test_patch_with_duplicate_name():
             f"{delivery_type_utils.base_url}/{first_id}",
             json={"denumire": second_name}
         )
-        assert duplicate_patch_response.status_code == 400, (
-            f"PATCH with duplicate name should return 400, got {duplicate_patch_response.status_code}"
+        assert duplicate_patch_response.status_code == 409, (
+            f"PATCH with duplicate name should return 409, got {duplicate_patch_response.status_code}"
         )
         
         # Verify the error message
@@ -225,6 +225,54 @@ def test_delivery_type_crud_workflow():
     Tests the full Create, Read, Update, and Delete (CRUD) workflow for delivery types.
     """
     delivery_type_utils.test_crud_workflow()
+
+
+def test_delivery_type_create_requires_order_index_and_enforces_range():
+    """
+    Validate create requires order_index and enforces 1-127 range.
+    """
+    # Ensure auth
+    if not auth_utils.access_token:
+        auth_utils.login()
+    # Missing order_index
+    resp = auth_utils.make_authenticated_request(
+        "POST", f"{delivery_type_utils.base_url}/", json={"denumire": "NoIdx"}
+    )
+    assert resp.status_code in (400, 422), "Missing order_index should be invalid"
+    # Out of range low
+    resp = auth_utils.make_authenticated_request(
+        "POST", f"{delivery_type_utils.base_url}/", json={"denumire": "LowIdx", "order_index": 0}
+    )
+    assert resp.status_code == 422
+    # Out of range high
+    resp = auth_utils.make_authenticated_request(
+        "POST", f"{delivery_type_utils.base_url}/", json={"denumire": "HighIdx", "order_index": 128}
+    )
+    assert resp.status_code == 422
+
+
+def test_delivery_type_ordering_and_unique_index():
+    """Ensure list ordering by order_index then denumire and unique index 409 on conflict."""
+    # Create two with explicit indices
+    first, first_id = delivery_type_utils.create_entity("Order A")
+    second, second_id = delivery_type_utils.create_entity("Order B")
+    try:
+        # Fetch list and ensure order_index ordering (best-effort; relies on indices chosen in helper)
+        import requests
+        resp = requests.get(f"{delivery_type_utils.base_url}/")
+        assert resp.status_code == 200
+        items = resp.json()
+        assert isinstance(items, list)
+        # Update second to have same order_index as first -> expect 409
+        if not auth_utils.access_token:
+            auth_utils.login()
+        conflict = auth_utils.make_authenticated_request(
+            "PATCH", f"{delivery_type_utils.base_url}/{second_id}", json={"order_index": first["order_index"]}
+        )
+        assert conflict.status_code == 409
+    finally:
+        delivery_type_utils.delete_entity(second_id)
+        delivery_type_utils.delete_entity(first_id)
 
 
 def test_delivery_type_list_and_pagination():

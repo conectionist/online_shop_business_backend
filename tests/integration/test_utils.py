@@ -42,11 +42,40 @@ class EntityTestUtils:
         if not auth_utils.access_token:
             auth_utils.login()
             
-        create_response = auth_utils.make_authenticated_request(
-            "POST",
-            f"{self.base_url}/",
-            json={"denumire": name}
-        )
+        # Special-case payloads per entity
+        payload = {"denumire": name}
+        if self.endpoint_path == "tipuri-livrare":
+            # delivery types require unique order_index in [1,127]
+            import random
+            base_idx = random.randint(1, 127)
+            attempt = 0
+            status = None
+            response = None
+            while attempt < 127:
+                idx = ((base_idx + attempt - 1) % 127) + 1
+                payload_with_index = dict(payload)
+                payload_with_index["order_index"] = idx
+                response = auth_utils.make_authenticated_request(
+                    "POST",
+                    f"{self.base_url}/",
+                    json=payload_with_index
+                )
+                status = response.status_code
+                if status == 201:
+                    create_response = response
+                    break
+                if status == 409:
+                    attempt += 1
+                    continue
+                # any other error - break and assert below
+                create_response = response
+                break
+        else:
+            create_response = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/",
+                json=payload
+            )
         assert create_response.status_code == 201, (
             f"Failed to create {self.entity_name}. "
             f"Expected 201, got {create_response.status_code}: {create_response.text}"
@@ -181,9 +210,10 @@ class EntityTestUtils:
             duplicate_response = auth_utils.make_authenticated_request(
                 "POST",
                 f"{self.base_url}/",
-                json={"denumire": unique_name}
+                json={"denumire": unique_name, **({"order_index": 127} if self.endpoint_path == "tipuri-livrare" else {})}
             )
-            assert duplicate_response.status_code == 400, "Should not allow duplicate names"
+            expected_dup_status = 409 if self.endpoint_path == "tipuri-livrare" else 400
+            assert duplicate_response.status_code == expected_dup_status, "Should not allow duplicate names"
             
         finally:
             # Clean up

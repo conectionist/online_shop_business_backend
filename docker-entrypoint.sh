@@ -99,5 +99,5 @@ run_migrations
 seed_test_data
 
 # Start the application
-echo "Starting FastAPI application..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips "*"
+echo "Starting FastAPI application with 2 workers..."
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips "*"

@@ -1,0 +1,49 @@
+[mysqld]
+# Reduce InnoDB buffer pool size (default is often 128MB-256MB, but can be much higher)
+innodb_buffer_pool_size=64M
+
+# Limit connections to reduce per-connection memory overhead
+max_connections=100
+
+# Disable Performance Schema to save memory (if not needed for monitoring)
+performance_schema=OFF
+
+# Reduce per-thread buffer sizes
+sort_buffer_size=128K
+read_buffer_size=128K
+read_rnd_buffer_size=256K
+join_buffer_size=128K
+thread_stack=128K
+
+# Optimize table caching
+table_open_cache=64
+table_definition_cache=128
+
+# Query cache removed in MySQL 8; ensure not set
+
+# Optimize temporary table settings
+tmp_table_size=16M
+max_heap_table_size=16M
+
+# Reduce binary logging memory usage
+binlog_cache_size=32K
+
+# Optimize for small datasets
+innodb_log_buffer_size=8M
+# Use new redo log capacity variable instead of deprecated innodb_log_file_size
+innodb_redo_log_capacity=64M
+
+# Disable unused storage engines
+skip-federated
+skip-archive
+skip-blackhole
+
+# Character set optimization
+character-set-server=utf8mb4
+collation-server=utf8mb4_0900_ai_ci
+
+[mysql]
+default-character-set=utf8mb4
+
+[client]
+default-character-set=utf8mb4

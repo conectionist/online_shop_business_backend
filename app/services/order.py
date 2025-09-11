@@ -1,5 +1,6 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime
+import unicodedata
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, or_, asc, desc
@@ -235,6 +236,167 @@ def list_orders(db: Session, filters: Optional[OrderFilterParams] = None) -> Lis
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database error: {str(e)}")
 
+
+def _normalize_romanian(text: Optional[str]) -> str:
+    if text is None:
+        return ""
+    # Lowercase and strip diacritics via NFD decomposition
+    lowered = text.strip().lower()
+    normalized = unicodedata.normalize('NFD', lowered)
+    without_marks = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+    return without_marks
+
+
+def _merge_order_group(orders: List[OrderModel]) -> Dict[str, Any]:
+    # Determine oldest and newest with business-oriented semantics
+    # Oldest: by created_at (fallback to id)
+    oldest = min(
+        orders,
+        key=lambda o: (
+            (o.created_at or datetime.min),
+            o.id or 0,
+        )
+    )
+    # Newest: primarily by data_plasarii, then updated_at, then created_at, then id
+    newest = max(
+        orders,
+        key=lambda o: (
+            (o.data_plasarii or datetime.min),
+            (o.updated_at or datetime.min),
+            (o.created_at or datetime.min),
+            o.id or 0,
+        )
+    )
+
+    # Phone number rule
+    phone_candidates = [o.phone_number for o in orders if o.phone_number]
+    phone_number = None
+    if phone_candidates:
+        # Use newest non-empty phone (aligned with "if both, use the new one")
+        newest_with_phone = max(
+            (o for o in orders if o.phone_number),
+            key=lambda o: (
+                (o.data_plasarii or datetime.min),
+                (o.updated_at or datetime.min),
+                (o.created_at or datetime.min),
+                o.id or 0,
+            )
+        )
+        phone_number = newest_with_phone.phone_number
+
+    # Order notes merge per rules
+    def equals_notes(a: Optional[str], b: Optional[str]) -> bool:
+        return _normalize_romanian(a) == _normalize_romanian(b) and a is not None and b is not None
+
+    notes_present = [o for o in orders if o.order_notes]
+    if not notes_present:
+        order_notes = None
+    else:
+        # If multiple notes exist
+        # Check if all notes are equal ignoring diacritics/case
+        normalized_set = { _normalize_romanian(o.order_notes) for o in notes_present }
+        if len(normalized_set) == 1:
+            # Equal → use newest's note
+            newest_with_note = max(
+                notes_present,
+                key=lambda o: (
+                    (o.data_plasarii or datetime.min),
+                    (o.updated_at or datetime.min),
+                    (o.created_at or datetime.min),
+                    o.id or 0,
+                )
+            )
+            order_notes = newest_with_note.order_notes
+        else:
+            # Different → concatenate old first, new second (by created_at then updated_at then id)
+            ordered = sorted(
+                notes_present,
+                key=lambda o: (
+                    (o.created_at or datetime.min),
+                    (o.updated_at or datetime.min),
+                    o.id or 0,
+                )
+            )
+            order_notes = " | ".join([o.order_notes for o in ordered if o.order_notes])
+
+    # Items: concatenate items from all orders (do not dedupe to avoid unintended aggregation)
+    merged_items: List[Dict[str, Any]] = []
+    for o in orders:
+        for it in getattr(o, 'items', []) or []:
+            merged_items.append({
+                'produse_id': it.produse_id,
+                'pret_produs': it.pret_produs,
+                'cantitate_produs': it.cantitate_produs,
+                'unitati_id': it.unitati_id,
+            })
+
+    # Build merged dict matching Order schema
+    merged: Dict[str, Any] = {
+        'id': oldest.id,  # keep old one
+        'nume_client': oldest.nume_client,  # keep original name spelling
+        'phone_number': phone_number,
+        'data_plasarii': newest.data_plasarii,  # use new one
+        'liste_id': oldest.liste_id,  # same across group
+        'delivery_type_id': newest.delivery_type_id,  # use new one
+        'payment_method_id': newest.payment_method_id,  # use new one
+        'delivery_address': newest.delivery_address,  # use new one
+        'order_notes': order_notes,
+        'created_at': oldest.created_at,  # keep old one
+        'updated_at': newest.updated_at,  # use new one
+        'items': merged_items,
+    }
+    return merged
+
+
+def list_orders_merged(db: Session, filters: Optional[OrderFilterParams] = None) -> List[Dict[str, Any]]:
+    """List orders and merge similar ones by (liste_id, normalized nume_client).
+
+    Merging is performed only within the same list id to satisfy the caution requirement.
+    """
+    raw = list_orders(db=db, filters=filters)
+    if not raw:
+        return []
+
+    groups: Dict[Tuple[int, str], List[OrderModel]] = {}
+    for o in raw:
+        key = (o.liste_id, _normalize_romanian(o.nume_client))
+        groups.setdefault(key, []).append(o)
+
+    merged_results: List[Dict[str, Any]] = []
+    for _, group_orders in groups.items():
+        if len(group_orders) == 1:
+            # Return as-is; rely on ORM dict via Pydantic by returning the model instance
+            o = group_orders[0]
+            merged_results.append({
+                'id': o.id,
+                'nume_client': o.nume_client,
+                'phone_number': o.phone_number,
+                'data_plasarii': o.data_plasarii,
+                'liste_id': o.liste_id,
+                'delivery_type_id': o.delivery_type_id,
+                'payment_method_id': o.payment_method_id,
+                'delivery_address': o.delivery_address,
+                'order_notes': o.order_notes,
+                'created_at': o.created_at,
+                'updated_at': o.updated_at,
+                'items': [
+                    {
+                        'produse_id': it.produse_id,
+                        'pret_produs': it.pret_produs,
+                        'cantitate_produs': it.cantitate_produs,
+                        'unitati_id': it.unitati_id,
+                    } for it in getattr(o, 'items', []) or []
+                ],
+            })
+        else:
+            merged_results.append(_merge_order_group(group_orders))
+
+    # Sort final results similar to default: by data_plasarii desc
+    merged_results.sort(key=lambda d: d['data_plasarii'], reverse=True)
+    # Apply pagination semantics if provided
+    skip = filters.skip if filters else 0
+    limit = filters.limit if filters else 100
+    return merged_results[skip: skip + limit]
 
 def update_order(db: Session, order_id: int, order_update: OrderUpdate) -> OrderModel:
     if order_id <= 0:

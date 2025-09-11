@@ -17,6 +17,7 @@ from app.services.order import (
     create_order,
     get_order_by_id,
     list_orders,
+    list_orders_merged,
     update_order,
     delete_order,
     list_order_items,
@@ -74,6 +75,7 @@ def read_orders(
     limit: int = Query(100, ge=1, le=1000),
     sort_by: str = Query("data_plasarii", pattern="^(data_plasarii|nume_client|liste_id|delivery_type_id|payment_method_id)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+    merge_similar: bool = Query(False, description="If true, merge similar orders within the same list by customer name."),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -89,6 +91,8 @@ def read_orders(
         sort_by=sort_by,  # type: ignore
         sort_order=sort_order,  # type: ignore
     )
+    if merge_similar:
+        return list_orders_merged(db=db, filters=filters)
     return list_orders(db=db, filters=filters)
 
 

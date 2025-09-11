@@ -680,3 +680,129 @@ def test_orders_phone_number_whitespace_handling():
     payload["phone_number"] = "   "
     resp = requests.post(f"{API_V1}/orders/", json=payload)
     assert resp.status_code == 422, f"Whitespace-only phone should be rejected with 422, got {resp.status_code}: {resp.text}"
+
+
+# ---------- Merge similar orders tests ----------
+
+def test_orders_merge_similar_basic_merge():
+    """Merging two orders for same customer (case/diacritics-insensitive) within the same list."""
+    # Arrange
+    list_resp = requests.get(f"{API_V1}/liste")
+    assert list_resp.status_code == 200, list_resp.text
+    lists = list_resp.json()
+    if not lists:
+        pytest.skip("No lists available in test environment")
+    liste_id = lists[0]["id"]
+
+    produse_id, unitati_id, pret = _discover_product_and_unit_or_skip()
+    # Create oldest order
+    older_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    payload_old = {
+        "nume_client": "Ştefan Pop",
+        "phone_number": None,
+        "data_plasarii": older_iso,
+        "liste_id": liste_id,
+        "delivery_type_id": 1,
+        "payment_method_id": 5,
+        "order_notes": None,
+        "items": [
+            {
+                "produse_id": produse_id,
+                "pret_produs": pret,
+                "cantitate_produs": 1,
+                "unitati_id": unitati_id,
+            }
+        ],
+    }
+    r1 = requests.post(f"{API_V1}/orders/", json=payload_old)
+    assert r1.status_code == 201, r1.text
+    old_order = r1.json()
+
+    # Create newest order (different delivery/payment, has phone and note)
+    newer_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    payload_new = {
+        "nume_client": "stefan pop",
+        "phone_number": "+40123456789",
+        "data_plasarii": newer_iso,
+        "liste_id": liste_id,
+        "delivery_type_id": 2,
+        "payment_method_id": 6,
+        "order_notes": "new note",
+    }
+    r2 = requests.post(f"{API_V1}/orders/", json=payload_new)
+    assert r2.status_code == 201, r2.text
+    new_order = r2.json()
+
+    # Add a distinct item to the new order via items endpoint to cover items merge
+    if not auth_utils.access_token:
+        auth_utils.login()
+    add_item = {
+        "produse_id": produse_id,
+        "pret_produs": pret + 5,
+        "cantitate_produs": 2,
+        "unitati_id": unitati_id,
+    }
+    r_add = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/{new_order['id']}/products", json=add_item)
+    assert r_add.status_code == 201, r_add.text
+
+    # Act: fetch merged
+    resp = auth_utils.make_authenticated_request(
+        "GET",
+        f"{API_V1}/orders/?liste_id={liste_id}&merge_similar=true&limit=1000",
+    )
+    assert resp.status_code == 200, resp.text
+    orders = resp.json()
+    # Identify merged entry via newest phone/notes on same list (robust to collation/id ordering)
+    candidates = [
+        o for o in orders
+        if o["liste_id"] == liste_id and o.get("phone_number") == "+40123456789" and o.get("order_notes") == "new note"
+    ]
+    assert len(candidates) >= 1, "Merged entry not found by expected merged fields"
+    m = candidates[0]
+
+    # Assert merge rules
+    assert m["phone_number"] == "+40123456789"  # newest non-empty
+    assert m["data_plasarii"] >= old_order["data_plasarii"]
+    assert m["delivery_type_id"] == 2
+    assert m["payment_method_id"] == 6
+    assert m.get("order_notes") == "new note"
+    assert m["created_at"] == old_order["created_at"]
+    assert m["updated_at"] >= old_order["updated_at"]
+
+    # Items from both orders are present
+    assert isinstance(m.get("items", []), list)
+    assert len(m["items"]) >= 2
+
+
+def test_orders_merge_similar_different_lists_not_merged():
+    """Orders with same normalized name across different lists should not merge."""
+    # Arrange two distinct lists
+    list_resp = requests.get(f"{API_V1}/liste")
+    assert list_resp.status_code == 200, list_resp.text
+    lists = list_resp.json()
+    if len(lists) < 2:
+        pytest.skip("Need at least two lists to validate cross-list non-merge")
+    list_a = lists[0]["id"]
+    list_b = lists[1]["id"]
+
+    now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    base_payload = {
+        "nume_client": "Ștefan Same",
+        "data_plasarii": now_iso,
+        "delivery_type_id": 1,
+        "payment_method_id": 5,
+    }
+    r_a = requests.post(f"{API_V1}/orders/", json={**base_payload, "liste_id": list_a})
+    assert r_a.status_code == 201, r_a.text
+    r_b = requests.post(f"{API_V1}/orders/", json={**base_payload, "liste_id": list_b})
+    assert r_b.status_code == 201, r_b.text
+
+    if not auth_utils.access_token:
+        auth_utils.login()
+    resp = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/?merge_similar=true&nume_client=Stefan&limit=1000")
+    assert resp.status_code == 200
+    body = resp.json()
+    names = [(o["nume_client"], o["liste_id"]) for o in body if o["nume_client"].lower().startswith("ștefan") or o["nume_client"].lower().startswith("ştefan")]
+    # Expect two separate entries for the two lists
+    lists_seen = {lid for _, lid in names}
+    assert list_a in lists_seen and list_b in lists_seen

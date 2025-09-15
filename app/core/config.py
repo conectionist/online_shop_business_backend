@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # API version information
-API_VERSION = "3.1.1"
+API_VERSION = "3.1.2"
 API_TITLE = "Online Shop API"
 API_DESCRIPTION = "API for online shop business"
 

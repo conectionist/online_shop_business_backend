@@ -159,6 +159,56 @@ def _validate_delivery_address(db: Session, delivery_type_id: int, delivery_addr
         )
 
 
+def _items_to_quantity_map(items: Optional[List[OrderItemBase]]) -> Dict[int, int]:
+    """Build a product->quantity mapping from incoming order items.
+
+    - Ignores price and unit when determining duplicates.
+    - Treats None or empty list as an empty mapping.
+    """
+    quantity_by_product: Dict[int, int] = {}
+    if not items:
+        return quantity_by_product
+    for it in items:
+        # Sum quantities per product to be robust to potential duplicates in input
+        quantity_by_product[it.produse_id] = quantity_by_product.get(it.produse_id, 0) + int(it.cantitate_produs)
+    return quantity_by_product
+
+
+def _existing_order_items_quantity_map(db: Session, order_id: int) -> Dict[int, int]:
+    """Build a product->quantity mapping from an existing order's items."""
+    quantity_by_product: Dict[int, int] = {}
+    existing_items = db.query(OrderItemModel).filter(OrderItemModel.comenzi_id == order_id).all()
+    for it in existing_items:
+        quantity_by_product[it.produse_id] = quantity_by_product.get(it.produse_id, 0) + int(it.cantitate_produs)
+    return quantity_by_product
+
+
+def _is_duplicate_order(db: Session, order_in: OrderCreate) -> Optional[OrderModel]:
+    """Check if an order already exists with same nume_client, liste_id, and identical items (by product and quantity).
+
+    Returns the existing duplicate Order if found, otherwise None.
+    """
+    normalized_name = str(order_in.nume_client).strip()
+    incoming_items_map = _items_to_quantity_map(order_in.items)
+
+    candidates: List[OrderModel] = (
+        db.query(OrderModel)
+        .filter(
+            and_(
+                OrderModel.liste_id == order_in.liste_id,
+                OrderModel.nume_client == normalized_name,
+            )
+        )
+        .all()
+    )
+
+    for candidate in candidates:
+        existing_map = _existing_order_items_quantity_map(db, candidate.id)
+        if existing_map == incoming_items_map:
+            return candidate
+    return None
+
+
 def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
     try:
         _validate_foreign_keys(db, order_in)
@@ -168,6 +218,14 @@ def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
         
         # Validate delivery address based on delivery type
         _validate_delivery_address(db, order_in.delivery_type_id, order_in.delivery_address)
+
+        # Duplicate detection: same nume_client, same liste_id, and identical items (product and quantity)
+        duplicate = _is_duplicate_order(db, order_in)
+        if duplicate is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Duplicate order detected: an order with the same customer and items already exists (id={duplicate.id})",
+            )
 
         db_order = OrderModel(
             nume_client=order_in.nume_client.strip(),

@@ -23,7 +23,7 @@ def _get_any_list_id_or_skip():
 def test_orders_create_public_success():
     list_id = _get_any_list_id_or_skip()
     payload = {
-        "nume_client": "John Doe",
+        "nume_client": f"John Doe {int(datetime.utcnow().timestamp()*1000)}",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
@@ -34,7 +34,7 @@ def test_orders_create_public_success():
     # Order creation is now public - no auth required
     assert resp.status_code == 201, resp.text
     order = resp.json()
-    assert order["nume_client"] == "John Doe"
+    assert order["nume_client"].startswith("John Doe ")
     assert order["liste_id"] == list_id
     assert order["delivery_type_id"] == 1
     assert order["payment_method_id"] == 5
@@ -43,7 +43,7 @@ def test_orders_create_public_success():
 def test_orders_create_public_and_read_with_auth():
     list_id = _get_any_list_id_or_skip()
     payload = {
-        "nume_client": "John Doe",
+        "nume_client": f"John Doe Auth {int(datetime.utcnow().timestamp()*1000)}",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 2,  # Ridicare de la punct fix
@@ -73,7 +73,7 @@ def test_orders_list_and_get_require_auth():
     # Create an order without auth (public) to have an ID
     list_id = _get_any_list_id_or_skip()
     payload = {
-        "nume_client": "Jane Doe",
+        "nume_client": f"Jane Doe {int(datetime.utcnow().timestamp()*1000)}",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu (pickup)
@@ -127,7 +127,7 @@ def test_orders_create_with_items_success():
         auth_utils.login()
 
     payload = {
-        "nume_client": "Order With Items",
+        "nume_client": f"Order With Items {int(datetime.utcnow().timestamp()*1000)}",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": liste_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
@@ -146,7 +146,7 @@ def test_orders_create_with_items_success():
     assert create_resp.status_code == 201, create_resp.text
     created = create_resp.json()
     assert created["liste_id"] == liste_id
-    assert created["nume_client"] == "Order With Items"
+    assert created["nume_client"].startswith("Order With Items ")
     assert isinstance(created.get("items", []), list)
     assert len(created["items"]) == 1
 
@@ -160,7 +160,7 @@ def _create_minimal_order_and_return_id():
     liste_id = lists[0]["id"]
 
     payload = {
-        "nume_client": "Patch/Delete Target",
+        "nume_client": f"Patch/Delete Target {int(datetime.utcnow().timestamp()*1000)}",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": liste_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
@@ -261,7 +261,7 @@ def test_orders_filters_nume_client_list_id_date_range():
     now = datetime.utcnow()
     iso = now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     # Create two orders
-    for name in ["Filter Alice", "Filter Bob"]:
+    for name in [f"Filter Alice {int(datetime.utcnow().timestamp()*1000)}", f"Filter Bob {int(datetime.utcnow().timestamp()*1000)}"]:
         payload = {"nume_client": name, "data_plasarii": iso, "liste_id": list_id, "delivery_type_id": 1, "payment_method_id": 5}
         r = requests.post(f"{API_V1}/orders/", json=payload)
         assert r.status_code == 201, r.text
@@ -287,7 +287,7 @@ def test_orders_filters_nume_client_list_id_date_range():
 def test_orders_write_with_invalid_token_returns_401():
     list_id = _get_any_list_id_or_skip()
     payload = {
-        "nume_client": "Invalid Token Write",
+        "nume_client": f"Invalid Token Write {int(datetime.utcnow().timestamp()*1000)}",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
@@ -305,7 +305,7 @@ def test_orders_validation_errors():
     list_id = _get_any_list_id_or_skip()
     # Create order
     order_payload = {
-        "nume_client": "Validation Target",
+        "nume_client": f"Validation Target {int(datetime.utcnow().timestamp()*1000)}",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
@@ -340,7 +340,7 @@ def test_orders_attempt_change_liste_id_ignored():
     list_id = _get_any_list_id_or_skip()
     # Create
     payload = {
-        "nume_client": "Immutable List",
+        "nume_client": f"Immutable List {int(datetime.utcnow().timestamp()*1000)}",
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
@@ -454,7 +454,7 @@ def test_orders_filter_by_delivery_and_payment_methods():
     
     for i, (dt_id, pm_id) in enumerate(orders_data):
         payload = {
-            "nume_client": f"Filter Test {i+1}",
+            "nume_client": f"Filter Test {i+1} {int(datetime.utcnow().timestamp()*1000)}",
             "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "liste_id": list_id,
             "delivery_type_id": dt_id,
@@ -505,7 +505,7 @@ def test_orders_phone_number_validation_valid_formats():
     
     for phone in valid_phones:
         payload = {
-            "nume_client": f"Test Customer {phone}",
+            "nume_client": f"Test Customer {phone} {int(datetime.utcnow().timestamp()*1000)}",
             "phone_number": phone,
             "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "liste_id": list_id,
@@ -537,7 +537,7 @@ def test_orders_phone_number_validation_invalid_formats():
     
     for phone in invalid_phones:
         payload = {
-            "nume_client": f"Test Customer {phone}",
+            "nume_client": f"Test Customer {phone} {int(datetime.utcnow().timestamp()*1000)}",
             "phone_number": phone,
             "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "liste_id": list_id,
@@ -635,7 +635,7 @@ def test_orders_phone_number_max_length_validation():
     # Test exactly 20 characters (should work)
     phone_20_chars = "12345678901234567890"  # 20 digits
     payload = {
-        "nume_client": "Max Length Test",
+        "nume_client": f"Max Length Test {int(datetime.utcnow().timestamp()*1000)}",
         "phone_number": phone_20_chars,
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
@@ -658,7 +658,7 @@ def test_orders_phone_number_whitespace_handling():
     
     # Test phone number with leading/trailing whitespace (should be trimmed)
     payload = {
-        "nume_client": "Whitespace Test",
+        "nume_client": f"Whitespace Test {int(datetime.utcnow().timestamp()*1000)}",
         "phone_number": "  40712345678  ",  # With spaces
         "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
@@ -806,3 +806,124 @@ def test_orders_merge_similar_different_lists_not_merged():
     # Expect two separate entries for the two lists
     lists_seen = {lid for _, lid in names}
     assert list_a in lists_seen and list_b in lists_seen
+
+# ---------- Duplicate detection tests ----------
+
+def test_orders_create_duplicate_without_items_returns_409():
+    list_id = _get_any_list_id_or_skip()
+    name = f"Dup No Items {int(datetime.utcnow().timestamp()*1000)}"
+    payload = {
+        "nume_client": name,
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,
+        "payment_method_id": 5,
+    }
+    r1 = requests.post(f"{API_V1}/orders/", json=payload)
+    assert r1.status_code == 201, r1.text
+    r2 = requests.post(f"{API_V1}/orders/", json=payload)
+    assert r2.status_code == 409, f"Expected 409 duplicate, got {r2.status_code}: {r2.text}"
+
+
+def test_orders_create_duplicate_with_items_returns_409():
+    list_id = _get_any_list_id_or_skip()
+    # Discover a product
+    prod_resp = requests.get(f"{API_V1}/products")
+    assert prod_resp.status_code == 200, prod_resp.text
+    products = prod_resp.json()
+    if not products:
+        pytest.skip("No products available in test environment")
+    p = products[0]
+    produse_id = p["id"]
+    unitati_id = p["unitati_id"]
+    pret = p["pret"]
+
+    base = {
+        "nume_client": f"Dup With Items {int(datetime.utcnow().timestamp()*1000)}",
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,
+        "payment_method_id": 5,
+        "items": [
+            {"produse_id": produse_id, "pret_produs": pret, "cantitate_produs": 2, "unitati_id": unitati_id}
+        ],
+    }
+    r1 = requests.post(f"{API_V1}/orders/", json=base)
+    assert r1.status_code == 201, r1.text
+    r2 = requests.post(f"{API_V1}/orders/", json=base)
+    assert r2.status_code == 409, f"Expected 409 duplicate, got {r2.status_code}: {r2.text}"
+
+
+def test_orders_create_same_products_split_items_still_409():
+    list_id = _get_any_list_id_or_skip()
+    # Discover a product
+    prod_resp = requests.get(f"{API_V1}/products")
+    assert prod_resp.status_code == 200, prod_resp.text
+    products = prod_resp.json()
+    if not products:
+        pytest.skip("No products available in test environment")
+    p = products[0]
+    produse_id = p["id"]
+    unitati_id = p["unitati_id"]
+    pret = p["pret"]
+
+    name = f"Dup Split {int(datetime.utcnow().timestamp()*1000)}"
+    base_one_line = {
+        "nume_client": name,
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,
+        "payment_method_id": 5,
+        "items": [
+            {"produse_id": produse_id, "pret_produs": pret, "cantitate_produs": 2, "unitati_id": unitati_id}
+        ],
+    }
+    r1 = requests.post(f"{API_V1}/orders/", json=base_one_line)
+    assert r1.status_code == 201, r1.text
+
+    split_lines = {
+        **base_one_line,
+        "items": [
+            {"produse_id": produse_id, "pret_produs": pret, "cantitate_produs": 1, "unitati_id": unitati_id},
+            {"produse_id": produse_id, "pret_produs": pret, "cantitate_produs": 1, "unitati_id": unitati_id},
+        ],
+    }
+    r2 = requests.post(f"{API_V1}/orders/", json=split_lines)
+    assert r2.status_code == 409, f"Expected 409 for split duplicate, got {r2.status_code}: {r2.text}"
+
+
+def test_orders_create_different_quantities_returns_201():
+    list_id = _get_any_list_id_or_skip()
+    # Discover a product
+    prod_resp = requests.get(f"{API_V1}/products")
+    assert prod_resp.status_code == 200, prod_resp.text
+    products = prod_resp.json()
+    if not products:
+        pytest.skip("No products available in test environment")
+    p = products[0]
+    produse_id = p["id"]
+    unitati_id = p["unitati_id"]
+    pret = p["pret"]
+
+    name = f"Dup Different Qty {int(datetime.utcnow().timestamp()*1000)}"
+    base_qty2 = {
+        "nume_client": name,
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,
+        "payment_method_id": 5,
+        "items": [
+            {"produse_id": produse_id, "pret_produs": pret, "cantitate_produs": 2, "unitati_id": unitati_id}
+        ],
+    }
+    r1 = requests.post(f"{API_V1}/orders/", json=base_qty2)
+    assert r1.status_code == 201, r1.text
+
+    base_qty3 = {
+        **base_qty2,
+        "items": [
+            {"produse_id": produse_id, "pret_produs": pret, "cantitate_produs": 3, "unitati_id": unitati_id}
+        ],
+    }
+    r2 = requests.post(f"{API_V1}/orders/", json=base_qty3)
+    assert r2.status_code == 201, f"Expected 201 for different quantities, got {r2.status_code}: {r2.text}"

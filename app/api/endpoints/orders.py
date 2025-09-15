@@ -125,6 +125,7 @@ def read_orders(
         }
     },
     400: {"description": "Bad request - validation failed (e.g., delivery type not available for list, missing address for home delivery)"},
+    409: {"description": "Conflict - duplicate order detected (same customer, list, and items quantities)"},
     422: {"description": "Validation error - invalid input data"},
     500: {"description": "Internal server error"},
 })

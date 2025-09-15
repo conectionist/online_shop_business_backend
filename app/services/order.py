@@ -377,16 +377,23 @@ def _merge_order_group(orders: List[OrderModel]) -> Dict[str, Any]:
             )
             order_notes = " | ".join([o.order_notes for o in ordered if o.order_notes])
 
-    # Items: concatenate items from all orders (do not dedupe to avoid unintended aggregation)
-    merged_items: List[Dict[str, Any]] = []
+    # Items: aggregate identical items across orders by (produse_id, unitati_id, pret_produs)
+    # Sum quantities to avoid duplicated lines when merging similar orders
+    totals: Dict[Tuple[int, int, int], int] = {}
     for o in orders:
         for it in getattr(o, 'items', []) or []:
-            merged_items.append({
-                'produse_id': it.produse_id,
-                'pret_produs': it.pret_produs,
-                'cantitate_produs': it.cantitate_produs,
-                'unitati_id': it.unitati_id,
-            })
+            key = (it.produse_id, it.unitati_id, it.pret_produs)
+            totals[key] = totals.get(key, 0) + int(it.cantitate_produs)
+
+    merged_items: List[Dict[str, Any]] = [
+        {
+            'produse_id': produse_id,
+            'pret_produs': pret_produs,  # keep unit price
+            'cantitate_produs': qty,
+            'unitati_id': unitati_id,
+        }
+        for (produse_id, unitati_id, pret_produs), qty in totals.items()
+    ]
 
     # Build merged dict matching Order schema
     merged: Dict[str, Any] = {
@@ -440,7 +447,7 @@ def list_orders_merged(db: Session, filters: Optional[OrderFilterParams] = None)
                 'items': [
                     {
                         'produse_id': it.produse_id,
-                        'pret_produs': it.pret_produs,
+                        'pret_produs': it.pret_produs,  # keep unit price
                         'cantitate_produs': it.cantitate_produs,
                         'unitati_id': it.unitati_id,
                     } for it in getattr(o, 'items', []) or []

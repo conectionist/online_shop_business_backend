@@ -131,6 +131,7 @@ def read_orders(
 })
 def create_order_endpoint(
     order_in: OrderCreate,
+    source: Optional[str] = Query(None, max_length=50, description="Optional request source identifier (e.g., 'ProductPage', 'Cart', 'Admin')"),
     db: Session = Depends(get_db),
 ):
     """
@@ -174,7 +175,8 @@ def create_order_endpoint(
     }
     ```
     """
-    return create_order(db=db, order_in=order_in)
+    # Pass the query source directly to the service for logging
+    return create_order(db=db, order_in=order_in, source=source)
 
 
 @router.get("/{order_id}", response_model=OrderSchema, responses={

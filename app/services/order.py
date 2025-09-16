@@ -30,6 +30,7 @@ def _format_order_for_debug(
     db: Session,
     order: OrderModel,
     items_count: int,
+    source: Optional[str] = None,
 ) -> str:
     """Create a human-friendly multi-line representation of an order for debug logs.
 
@@ -84,26 +85,13 @@ def _format_order_for_debug(
         f"  Payment: {payment_friendly}\n"
         f"  Address: {address}\n"
         f"  Notes: {notes}\n"
+        f"  Source: {source or '-'}\n"
         f"  Items ({items_count}):\n"
         f"{items_block}"
     )
 
 
-def _format_order_request_summary(order_in: OrderCreate) -> str:
-    """Summarize key incoming order fields for logging."""
-    try:
-        items_count = len(order_in.items) if getattr(order_in, 'items', None) else 0
-    except Exception:
-        items_count = 0
-    customer = None
-    if getattr(order_in, 'nume_client', None) is not None:
-        customer = str(order_in.nume_client).strip()
-    return (
-        f"customer='{customer}', list_id={getattr(order_in, 'liste_id', None)}, "
-        f"delivery_type_id={getattr(order_in, 'delivery_type_id', None)}, "
-        f"payment_method_id={getattr(order_in, 'payment_method_id', None)}, "
-        f"items_count={items_count}"
-    )
+ 
 
 
 def _format_order_failure_for_debug(
@@ -111,6 +99,7 @@ def _format_order_failure_for_debug(
     order_in: OrderCreate,
     status_code: int,
     reason: str,
+    source: Optional[str] = None,
 ) -> str:
     """Create a human-friendly multi-line representation of a failed order creation attempt."""
     try:
@@ -174,25 +163,12 @@ def _format_order_failure_for_debug(
         f"  Payment: {payment_friendly}\n"
         f"  Address: {address}\n"
         f"  Notes: {notes}\n"
+        f"  Source: {source or '-'}\n"
         f"  Items ({items_count}):\n"
         f"{items_block}"
     )
 
-def _format_order_request_summary(order_in: OrderCreate) -> str:
-    """Summarize key incoming order fields for logging."""
-    try:
-        items_count = len(order_in.items) if getattr(order_in, 'items', None) else 0
-    except Exception:
-        items_count = 0
-    customer = None
-    if getattr(order_in, 'nume_client', None) is not None:
-        customer = str(order_in.nume_client).strip()
-    return (
-        f"customer='{customer}', list_id={getattr(order_in, 'liste_id', None)}, "
-        f"delivery_type_id={getattr(order_in, 'delivery_type_id', None)}, "
-        f"payment_method_id={getattr(order_in, 'payment_method_id', None)}, "
-        f"items_count={items_count}"
-    )
+ 
 
 def _apply_order_filters(query, filters: OrderFilterParams):
     if filters is None:
@@ -379,7 +355,7 @@ def _is_duplicate_order(db: Session, order_in: OrderCreate) -> Optional[OrderMod
     return None
 
 
-def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
+def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = None) -> OrderModel:
     try:
         # Prepare items count for pretty summary after creation
         try:
@@ -434,7 +410,7 @@ def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
         db.commit()
         db.refresh(db_order)
         # Pretty multi-line info log with friendly names
-        logger.info(_format_order_for_debug(db, db_order, items_count))
+        logger.info(_format_order_for_debug(db, db_order, items_count, source))
         return db_order
     except HTTPException as e:
         db.rollback()
@@ -447,6 +423,7 @@ def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
                 order_in,
                 status_code,
                 str(getattr(e, 'detail', '')),
+                source=source,
             ),
         )
         raise
@@ -458,6 +435,7 @@ def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
                 order_in,
                 status_code=400,
                 reason="Integrity error while creating order",
+                source=source,
             )
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Integrity error while creating order")
@@ -469,6 +447,7 @@ def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
                 order_in,
                 status_code=500,
                 reason=f"Database error: {str(e)}",
+                source=source,
             )
         )
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database error: {str(e)}")

@@ -10,6 +10,7 @@ services:
       - "5678:5678"  # debugpy port
     environment:
       - DEBUG=1
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - ENVIRONMENT=development
       - DB_HOST=db_debug
       - DB_PORT=3306

@@ -4,8 +4,11 @@ import sys
 import logging
 from typing import List
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging based on LOG_LEVEL env (defaults to INFO)
+_log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+_log_level = getattr(logging, _log_level_name, logging.INFO)
+logging.basicConfig(level=_log_level)
+logging.getLogger(__name__).setLevel(_log_level)
 logger = logging.getLogger(__name__)
 
 # API version information

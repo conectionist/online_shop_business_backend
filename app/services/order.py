@@ -1,6 +1,7 @@
 from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime
 import unicodedata
+import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, or_, asc, desc
@@ -22,6 +23,7 @@ from app.schemas.order import (
     OrderItemBase,
     OrderFilterParams,
 )
+logger = logging.getLogger(__name__)
 
 
 def _apply_order_filters(query, filters: OrderFilterParams):
@@ -211,6 +213,20 @@ def _is_duplicate_order(db: Session, order_in: OrderCreate) -> Optional[OrderMod
 
 def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
     try:
+        # Debug log: incoming order payload (sanitized)
+        try:
+            items_count = len(order_in.items) if order_in.items else 0
+        except Exception:
+            items_count = 0
+        logger.debug(
+            "Received new order request: nume_client='%s', liste_id=%s, delivery_type_id=%s, payment_method_id=%s, items_count=%s",
+            str(order_in.nume_client).strip() if getattr(order_in, 'nume_client', None) is not None else None,
+            getattr(order_in, 'liste_id', None),
+            getattr(order_in, 'delivery_type_id', None),
+            getattr(order_in, 'payment_method_id', None),
+            items_count,
+        )
+
         _validate_foreign_keys(db, order_in)
         
         # Validate delivery method availability for the selected list
@@ -257,6 +273,13 @@ def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
 
         db.commit()
         db.refresh(db_order)
+        logger.debug(
+            "Order created successfully: id=%s, liste_id=%s, customer='%s', total_items=%s",
+            db_order.id,
+            db_order.liste_id,
+            db_order.nume_client,
+            items_count,
+        )
         return db_order
     except HTTPException:
         db.rollback()

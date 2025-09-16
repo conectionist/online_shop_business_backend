@@ -100,4 +100,4 @@ seed_test_data
 
 # Start the application
 echo "Starting FastAPI application with 2 workers..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips "*"
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips "*" --log-config logging.ini

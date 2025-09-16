@@ -89,6 +89,111 @@ def _format_order_for_debug(
     )
 
 
+def _format_order_request_summary(order_in: OrderCreate) -> str:
+    """Summarize key incoming order fields for logging."""
+    try:
+        items_count = len(order_in.items) if getattr(order_in, 'items', None) else 0
+    except Exception:
+        items_count = 0
+    customer = None
+    if getattr(order_in, 'nume_client', None) is not None:
+        customer = str(order_in.nume_client).strip()
+    return (
+        f"customer='{customer}', list_id={getattr(order_in, 'liste_id', None)}, "
+        f"delivery_type_id={getattr(order_in, 'delivery_type_id', None)}, "
+        f"payment_method_id={getattr(order_in, 'payment_method_id', None)}, "
+        f"items_count={items_count}"
+    )
+
+
+def _format_order_failure_for_debug(
+    db: Session,
+    order_in: OrderCreate,
+    status_code: int,
+    reason: str,
+) -> str:
+    """Create a human-friendly multi-line representation of a failed order creation attempt."""
+    try:
+        items = getattr(order_in, 'items', None) or []
+        items_count = len(items)
+    except Exception:
+        items = []
+        items_count = 0
+
+    list_id = getattr(order_in, 'liste_id', None)
+    list_friendly = f"List (id={list_id})"
+    if list_id is not None:
+        list_obj = db.query(ListModel).filter(ListModel.id == list_id).first()
+        if list_obj:
+            try:
+                list_friendly = f"List {list_obj.data} (id={list_id})"
+            except Exception:
+                list_friendly = f"List (id={list_id})"
+
+    delivery_id = getattr(order_in, 'delivery_type_id', None)
+    delivery = db.query(DeliveryType).filter(DeliveryType.id == delivery_id).first() if delivery_id is not None else None
+    delivery_friendly = f"{getattr(delivery, 'denumire', 'Unknown')} (id={delivery_id})" if delivery_id is not None else "-"
+
+    payment_id = getattr(order_in, 'payment_method_id', None)
+    payment = db.query(ModalitatiPlata).filter(ModalitatiPlata.id == payment_id).first() if payment_id is not None else None
+    payment_friendly = f"{getattr(payment, 'name', 'Unknown')} (id={payment_id})" if payment_id is not None else "-"
+
+    items_lines: List[str] = []
+    for it in items:
+        try:
+            product = db.query(Product).filter(Product.id == it.produse_id).first()
+            unit = db.query(Unitati).filter(Unitati.id == it.unitati_id).first()
+            product_name = getattr(product, 'nume', 'Unknown')
+            unit_name = getattr(unit, 'denumire', '')
+            qty = int(it.cantitate_produs)
+            price = getattr(it, 'pret_produs', None)
+            price_str = f", price={price}" if price is not None else ""
+            items_lines.append(
+                f"- {product_name} x {qty} {unit_name} (product_id={it.produse_id}, unit_id={it.unitati_id}{price_str})"
+            )
+        except Exception:
+            items_lines.append("- (unreadable item)")
+
+    items_block = "\n".join(items_lines) if items_lines else "- (no items)"
+
+    customer = None
+    if getattr(order_in, 'nume_client', None) is not None:
+        customer = str(order_in.nume_client).strip()
+    phone = getattr(order_in, 'phone_number', None) or "-"
+    address = getattr(order_in, 'delivery_address', None) or "-"
+    notes = getattr(order_in, 'order_notes', None) or "-"
+
+    return (
+        "\n"
+        f"Order Create Failed ({status_code})\n"
+        f"  Reason: {reason}\n"
+        f"  Customer: {customer}\n"
+        f"  Phone: {phone}\n"
+        f"  List: {list_friendly}\n"
+        f"  Delivery: {delivery_friendly}\n"
+        f"  Payment: {payment_friendly}\n"
+        f"  Address: {address}\n"
+        f"  Notes: {notes}\n"
+        f"  Items ({items_count}):\n"
+        f"{items_block}"
+    )
+
+def _format_order_request_summary(order_in: OrderCreate) -> str:
+    """Summarize key incoming order fields for logging."""
+    try:
+        items_count = len(order_in.items) if getattr(order_in, 'items', None) else 0
+    except Exception:
+        items_count = 0
+    customer = None
+    if getattr(order_in, 'nume_client', None) is not None:
+        customer = str(order_in.nume_client).strip()
+    return (
+        f"customer='{customer}', list_id={getattr(order_in, 'liste_id', None)}, "
+        f"delivery_type_id={getattr(order_in, 'delivery_type_id', None)}, "
+        f"payment_method_id={getattr(order_in, 'payment_method_id', None)}, "
+        f"items_count={items_count}"
+    )
+
 def _apply_order_filters(query, filters: OrderFilterParams):
     if filters is None:
         return query
@@ -328,17 +433,44 @@ def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
 
         db.commit()
         db.refresh(db_order)
-        # Pretty multi-line debug log with friendly names
-        logger.debug(_format_order_for_debug(db, db_order, items_count))
+        # Pretty multi-line info log with friendly names
+        logger.info(_format_order_for_debug(db, db_order, items_count))
         return db_order
-    except HTTPException:
+    except HTTPException as e:
         db.rollback()
+        status_code = int(getattr(e, 'status_code', 500))
+        level = logging.ERROR if status_code >= 500 else logging.WARNING
+        logger.log(
+            level,
+            _format_order_failure_for_debug(
+                db,
+                order_in,
+                status_code,
+                str(getattr(e, 'detail', '')),
+            ),
+        )
         raise
     except IntegrityError as e:
         db.rollback()
+        logger.error(
+            _format_order_failure_for_debug(
+                db,
+                order_in,
+                status_code=400,
+                reason="Integrity error while creating order",
+            )
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Integrity error while creating order")
     except SQLAlchemyError as e:
         db.rollback()
+        logger.error(
+            _format_order_failure_for_debug(
+                db,
+                order_in,
+                status_code=500,
+                reason=f"Database error: {str(e)}",
+            )
+        )
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database error: {str(e)}")
 
 

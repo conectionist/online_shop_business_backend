@@ -26,6 +26,69 @@ from app.schemas.order import (
 logger = logging.getLogger(__name__)
 
 
+def _format_order_for_debug(
+    db: Session,
+    order: OrderModel,
+    items_count: int,
+) -> str:
+    """Create a human-friendly multi-line representation of an order for debug logs.
+
+    Includes names for related entities with their IDs in parentheses for traceability.
+    """
+    # Friendly names for related entities
+    list_obj = db.query(ListModel).filter(ListModel.id == order.liste_id).first()
+    list_friendly = None
+    if list_obj:
+        try:
+            list_friendly = f"List {list_obj.data} (id={order.liste_id})"
+        except Exception:
+            list_friendly = f"List (id={order.liste_id})"
+    else:
+        list_friendly = f"List (id={order.liste_id})"
+
+    delivery = db.query(DeliveryType).filter(DeliveryType.id == order.delivery_type_id).first()
+    delivery_friendly = f"{getattr(delivery, 'denumire', 'Unknown')} (id={order.delivery_type_id})"
+
+    payment = db.query(ModalitatiPlata).filter(ModalitatiPlata.id == order.payment_method_id).first()
+    payment_friendly = f"{getattr(payment, 'name', 'Unknown')} (id={order.payment_method_id})"
+
+    # Build items summary: "nume x qty unit (prod_id=X, unit_id=Y, price=Z)"
+    items_lines: List[str] = []
+    if getattr(order, 'items', None):
+        for it in order.items:
+            product = db.query(Product).filter(Product.id == it.produse_id).first()
+            unit = db.query(Unitati).filter(Unitati.id == it.unitati_id).first()
+            product_name = getattr(product, 'nume', 'Unknown')
+            unit_name = getattr(unit, 'denumire', '')
+            items_lines.append(
+                f"- {product_name} x {int(it.cantitate_produs)} {unit_name} "
+                f"(product_id={it.produse_id}, unit_id={it.unitati_id}, price={it.pret_produs})"
+            )
+
+    items_block = "\n".join(items_lines) if items_lines else "- (no items)"
+
+    phone = getattr(order, 'phone_number', None) or "-"
+    address = getattr(order, 'delivery_address', None) or "-"
+    notes = getattr(order, 'order_notes', None) or "-"
+
+    # Compose a readable block
+    return (
+        "\n"  # start on new line for nicer separation
+        "Order Created\n"
+        f"  ID: {order.id}\n"
+        f"  Customer: {order.nume_client}\n"
+        f"  Phone: {phone}\n"
+        f"  Placed At: {order.data_plasarii}\n"
+        f"  List: {list_friendly}\n"
+        f"  Delivery: {delivery_friendly}\n"
+        f"  Payment: {payment_friendly}\n"
+        f"  Address: {address}\n"
+        f"  Notes: {notes}\n"
+        f"  Items ({items_count}):\n"
+        f"{items_block}"
+    )
+
+
 def _apply_order_filters(query, filters: OrderFilterParams):
     if filters is None:
         return query
@@ -213,19 +276,11 @@ def _is_duplicate_order(db: Session, order_in: OrderCreate) -> Optional[OrderMod
 
 def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
     try:
-        # Debug log: incoming order payload (sanitized)
+        # Prepare items count for pretty summary after creation
         try:
             items_count = len(order_in.items) if order_in.items else 0
         except Exception:
             items_count = 0
-        logger.debug(
-            "Received new order request: nume_client='%s', liste_id=%s, delivery_type_id=%s, payment_method_id=%s, items_count=%s",
-            str(order_in.nume_client).strip() if getattr(order_in, 'nume_client', None) is not None else None,
-            getattr(order_in, 'liste_id', None),
-            getattr(order_in, 'delivery_type_id', None),
-            getattr(order_in, 'payment_method_id', None),
-            items_count,
-        )
 
         _validate_foreign_keys(db, order_in)
         
@@ -273,13 +328,8 @@ def create_order(db: Session, order_in: OrderCreate) -> OrderModel:
 
         db.commit()
         db.refresh(db_order)
-        logger.debug(
-            "Order created successfully: id=%s, liste_id=%s, customer='%s', total_items=%s",
-            db_order.id,
-            db_order.liste_id,
-            db_order.nume_client,
-            items_count,
-        )
+        # Pretty multi-line debug log with friendly names
+        logger.debug(_format_order_for_debug(db, db_order, items_count))
         return db_order
     except HTTPException:
         db.rollback()

@@ -5,14 +5,14 @@ import os
 import uuid
 from typing import Tuple, Optional, Dict, List
 
-from PIL import Image
+from PIL import Image, ImageOps
 from fastapi import UploadFile, HTTPException, status
 
 from app.core.file_upload import get_upload_dir
 
 
 def resize_image(
-    image_content: bytes, 
+    image_content: bytes,
     max_size: Tuple[int, int] = (1200, 1200),
     format: Optional[str] = None
 ) -> bytes:
@@ -31,8 +31,14 @@ def resize_image(
         # Open the image from bytes
         img = Image.open(io.BytesIO(image_content))
         
+        # Store original format before EXIF transpose (which may clear it)
+        original_format = img.format
+
+        # Normalize orientation using EXIF data so pixels are physically upright
+        img = ImageOps.exif_transpose(img)
+        
         # Keep original format if not specified
-        img_format = format or img.format
+        img_format = format or original_format
         
         # Only resize if image is larger than max_size
         if img.width > max_size[0] or img.height > max_size[1]:

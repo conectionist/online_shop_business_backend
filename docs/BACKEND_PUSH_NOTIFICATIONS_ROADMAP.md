@@ -28,11 +28,11 @@
 - [x] Add optional `SendNotificationRequest` (title, body, data?, icon?, tag?)
 
 ## Phase 4 — Service Layer
-- [ ] Implement `save_or_update_subscription(sub, user_id?)`
-- [ ] Implement `deactivate_subscription(endpoint)` / `delete_subscription(endpoint)`
-- [ ] Implement `send_to_subscription(subscription, payload)` using `pywebpush`
-- [ ] Handle `WebPushException` (410/404 → deactivate, record failure)
-- [ ] Implement broadcast helper with graceful degradation
+- [x] Implement `save_or_update_subscription(sub, user_id?)`
+- [x] Implement `deactivate_subscription(endpoint)` / `delete_subscription(endpoint)`
+- [x] Implement `send_to_subscription(subscription, payload)` using `pywebpush`
+- [x] Handle `WebPushException` (410/404 → deactivate, record failure)
+- [x] Implement broadcast helper with graceful degradation
 
 ## Phase 5 — API Endpoints
 - [ ] `POST /api/v1/push/subscribe` — create/update subscription (auth optional now)

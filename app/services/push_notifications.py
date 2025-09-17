@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, Iterable, List
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, text
 from pywebpush import webpush, WebPushException
 import logging
 import time
@@ -193,6 +193,32 @@ def broadcast_to_active_subscriptions(
 
     logger.info("Broadcast complete sent_or_skipped=%s deactivated=%s", sent, deactivated)
     return {"sent_or_skipped": sent, "deactivated": deactivated}
+
+
+def prune_inactive_subscriptions(db: Session, older_than_days: int = 30, batch_size: int = 1000) -> int:
+    """Hard-delete inactive subscriptions older than the retention window.
+
+    Returns number of rows deleted. Related notification logs are removed via FK cascade.
+    """
+    deletion_query = text(
+        """
+        DELETE wps
+        FROM web_push_subscription wps
+        WHERE wps.is_active = 0
+          AND wps.updated_at < (CURRENT_TIMESTAMP - INTERVAL :days DAY)
+        LIMIT :limit
+        """
+    )
+    total_deleted = 0
+    while True:
+        result = db.execute(deletion_query, {"days": older_than_days, "limit": batch_size})
+        db.commit()
+        deleted = result.rowcount if hasattr(result, "rowcount") else 0
+        total_deleted += max(0, deleted or 0)
+        logger.info("Prune pass deleted=%s (total=%s)", deleted, total_deleted)
+        if not deleted or deleted <= 0:
+            break
+    return total_deleted
 
 
 class PushSendError(Exception):

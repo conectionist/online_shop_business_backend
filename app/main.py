@@ -5,6 +5,8 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+import asyncio
+import logging
 
 # Initialize debugpy if DEBUG=1
 if os.getenv("DEBUG", "0") == "1":
@@ -15,10 +17,11 @@ if os.getenv("DEBUG", "0") == "1":
     # debugpy.wait_for_client()
 
 from app.core.config import API_VERSION, API_TITLE, API_DESCRIPTION, settings
-from app.core.database import get_db, Base, engine
+from app.core.database import get_db, Base, engine, SessionLocal
 from app.api.api import api_router
 from app.api.endpoints.system_config import mount_static_files
 from app.core.admin_init import initialize_default_admin
+from app.services.push_notifications import prune_inactive_subscriptions
 
 app = FastAPI(
     title=API_TITLE,
@@ -66,6 +69,26 @@ async def startup_event():
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"Failed to initialize application: {str(e)}")
+
+    # Start background prune task (non-blocking)
+    async def prune_loop():
+        logger = logging.getLogger(__name__)
+        while True:
+            try:
+                db = SessionLocal()
+                deleted = prune_inactive_subscriptions(db, older_than_days=7)
+                logger.info("Prune loop run complete deleted=%s", deleted)
+            except Exception as ex:
+                logger.error("Prune loop error: %s", str(ex))
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+            # sleep ~24h
+            await asyncio.sleep(60 * 60 * 24)
+
+    asyncio.create_task(prune_loop())
 
 
 class HealthResponse(BaseModel):

@@ -35,11 +35,11 @@
 - [x] Implement broadcast helper with graceful degradation
 
 ## Phase 5 — API Endpoints
-- [ ] `POST /api/v1/push/subscribe` — create/update subscription (auth optional now)
-- [ ] `DELETE /api/v1/push/subscribe` — unsubscribe by endpoint (or id)
-- [ ] `GET /api/v1/push/public-key` — return VAPID public key for the PWA
-- [ ] `POST /api/v1/push/test` — admin-only: send test payload
-- [ ] Input validation for endpoint/p256dh/auth
+- [x] `POST /api/v1/push/subscribe` — create/update subscription (auth optional now)
+- [x] `DELETE /api/v1/push/subscribe` — unsubscribe by endpoint (or id)
+- [x] `GET /api/v1/push/public-key` — return VAPID public key for the PWA
+- [x] `POST /api/v1/push/test` — admin-only: send test payload
+- [x] Input validation for endpoint/p256dh/auth
 
 ## Phase 6 — Background Execution & Reliability
 - [ ] Use FastAPI `BackgroundTasks` for non-blocking send

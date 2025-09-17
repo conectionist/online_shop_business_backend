@@ -66,11 +66,18 @@ def send_test_notification(
     if not sub:
         raise HTTPException(status_code=404, detail="No active subscriptions")
 
-    payload = {"title": req.title, "body": req.body, "data": req.data or {}, "icon": req.icon, "tag": req.tag}
+    # use event_id as tag when present to help client collapse duplicates
+    payload = {
+        "title": req.title,
+        "body": req.body,
+        "data": req.data or {},
+        "icon": req.icon,
+        "tag": req.event_id or req.tag,
+    }
 
     def _send():
         try:
-            send_to_subscription(sub, payload)
+            send_to_subscription(sub, payload, event_id=req.event_id, db=db)
         except PushSendError as ex:
             if ex.status_code in (404, 410):
                 sub.is_active = False

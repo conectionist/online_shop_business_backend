@@ -1,13 +1,15 @@
 from typing import Optional, Dict, Any, Iterable, List
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from pywebpush import webpush, WebPushException
 import logging
 import time
+import random
 
 from app.core.config import settings
 from app.models.web_push_subscription import WebPushSubscription
+from app.models.notification_log import NotificationLog
 from app.schemas.push_notifications import PushSubscriptionIn
 
 logger = logging.getLogger(__name__)
@@ -80,9 +82,27 @@ def delete_subscription(db: Session, endpoint: str) -> bool:
 def send_to_subscription(
     subscription: WebPushSubscription,
     payload: Dict[str, Any],
-    max_retries: int = 2,
-    backoff_seconds: float = 0.5,
-) -> None:
+    max_retries: int = 3,
+    base_backoff_seconds: float = 0.5,
+    event_id: Optional[str] = None,
+    db: Optional[Session] = None,
+) -> bool:
+    """Send a push. Returns True if delivered (or skipped due to dedupe), False if transient failure after retries.
+
+    - If event_id provided and db given: dedupe by (subscription_id, event_id)
+    - On success with event_id: insert NotificationLog
+    """
+    if event_id and db is not None:
+        # Dedupe check
+        existing_log = db.execute(
+            select(NotificationLog).where(
+                and_(NotificationLog.subscription_id == subscription.id, NotificationLog.event_key == event_id)
+            )
+        ).scalar_one_or_none()
+        if existing_log is not None:
+            logger.info("Deduped event_id=%s for subscription id=%s", event_id, subscription.id)
+            return True
+
     if not (settings.VAPID_PRIVATE_KEY and settings.VAPID_SUBJECT):
         raise RuntimeError("VAPID keys/subject not configured")
 
@@ -103,8 +123,12 @@ def send_to_subscription(
                 vapid_private_key=settings.VAPID_PRIVATE_KEY,
                 vapid_claims={"sub": settings.VAPID_SUBJECT},
             )
-            logger.info("Push sent endpoint=%s", subscription.endpoint)
-            return
+            logger.info("Push sent endpoint=%s event_id=%s", subscription.endpoint, event_id)
+            if event_id and db is not None:
+                # Log delivery for dedupe
+                db.add(NotificationLog(subscription_id=subscription.id, event_key=event_id))
+                db.commit()
+            return True
         except WebPushException as ex:
             status_code = getattr(ex.response, "status_code", None)
             logger.warning(
@@ -114,23 +138,27 @@ def send_to_subscription(
                 attempt + 1,
                 str(ex),
             )
-            # Do not retry on permanently invalid subscriptions
             if status_code in (404, 410):
                 raise PushSendError(message=str(ex), status_code=status_code) from ex
             attempt += 1
             if attempt > max_retries:
-                raise PushSendError(message=str(ex), status_code=status_code) from ex
-            time.sleep(backoff_seconds * attempt)
+                return False
+            # exponential backoff with jitter
+            delay = min(30.0, base_backoff_seconds * (2 ** (attempt - 1)))
+            jitter = random.uniform(0, delay / 2)
+            time.sleep(delay + jitter)
 
 
 def broadcast_to_active_subscriptions(
     db: Session,
     payload: Dict[str, Any],
     batch_size: int = 500,
+    event_id: Optional[str] = None,
 ) -> Dict[str, int]:
     offset = 0
     sent = 0
     deactivated = 0
+    skipped = 0
 
     while True:
         batch: List[WebPushSubscription] = (
@@ -146,8 +174,11 @@ def broadcast_to_active_subscriptions(
 
         for sub in batch:
             try:
-                send_to_subscription(sub, payload)
-                sent += 1
+                delivered_or_skipped = send_to_subscription(sub, payload, event_id=event_id, db=db)
+                if delivered_or_skipped:
+                    sent += 1
+                else:
+                    logger.error("Push transiently failed after retries endpoint=%s", sub.endpoint)
             except PushSendError as err:
                 if err.status_code in (404, 410):
                     sub.is_active = False
@@ -160,8 +191,8 @@ def broadcast_to_active_subscriptions(
         db.commit()
         offset += len(batch)
 
-    logger.info("Broadcast complete sent=%s deactivated=%s", sent, deactivated)
-    return {"sent": sent, "deactivated": deactivated}
+    logger.info("Broadcast complete sent_or_skipped=%s deactivated=%s", sent, deactivated)
+    return {"sent_or_skipped": sent, "deactivated": deactivated}
 
 
 class PushSendError(Exception):

@@ -43,7 +43,8 @@
 
 ## Phase 6 — Background Execution & Reliability
 - [x] Use FastAPI `BackgroundTasks` for non-blocking send
-- [x] Add retry/backoff for transient failures
+- [x] Add retry/backoff for transient failures (exponential with jitter)
+- [x] Add server-side dedupe: `event_id` + `(subscription_id,event_id)` unique log
 - [ ] Mark inactive on 410 Gone and prune stale subscriptions periodically
 
 ## Phase 7 — Security & Access Control

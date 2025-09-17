@@ -28,3 +28,4 @@ class SendNotificationRequest(BaseModel):
     data: Optional[Dict[str, Any]] = None
     icon: Optional[str] = None
     tag: Optional[str] = None
+    event_id: Optional[str] = Field(default=None, max_length=128)

@@ -23,9 +23,9 @@
 - [x] Rebuild containers and run migrations
 
 ## Phase 3 — Pydantic Schemas
-- [ ] Add `PushSubscriptionIn` (endpoint, keys.p256dh, keys.auth, user_agent?)
-- [ ] Add `PushSubscriptionOut` response schema
-- [ ] Add optional `SendNotificationRequest` (title, body, data?, icon?, tag?)
+- [x] Add `PushSubscriptionIn` (endpoint, keys.p256dh, keys.auth, user_agent?)
+- [x] Add `PushSubscriptionOut` response schema
+- [x] Add optional `SendNotificationRequest` (title, body, data?, icon?, tag?)
 
 ## Phase 4 — Service Layer
 - [ ] Implement `save_or_update_subscription(sub, user_id?)`

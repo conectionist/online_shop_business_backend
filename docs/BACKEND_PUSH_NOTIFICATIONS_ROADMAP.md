@@ -42,8 +42,8 @@
 - [x] Input validation for endpoint/p256dh/auth
 
 ## Phase 6 — Background Execution & Reliability
-- [ ] Use FastAPI `BackgroundTasks` for non-blocking send
-- [ ] Add retry/backoff for transient failures
+- [x] Use FastAPI `BackgroundTasks` for non-blocking send
+- [x] Add retry/backoff for transient failures
 - [ ] Mark inactive on 410 Gone and prune stale subscriptions periodically
 
 ## Phase 7 — Security & Access Control

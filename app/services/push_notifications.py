@@ -3,10 +3,14 @@ from typing import Optional, Dict, Any, Iterable, List
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from pywebpush import webpush, WebPushException
+import logging
+import time
 
 from app.core.config import settings
 from app.models.web_push_subscription import WebPushSubscription
 from app.schemas.push_notifications import PushSubscriptionIn
+
+logger = logging.getLogger(__name__)
 
 
 def save_or_update_subscription(
@@ -28,6 +32,7 @@ def save_or_update_subscription(
         db.add(existing)
         db.commit()
         db.refresh(existing)
+        logger.info("Updated subscription endpoint=%s id=%s active=%s", existing.endpoint, existing.id, existing.is_active)
         return existing
 
     new_sub = WebPushSubscription(
@@ -41,6 +46,7 @@ def save_or_update_subscription(
     db.add(new_sub)
     db.commit()
     db.refresh(new_sub)
+    logger.info("Created subscription endpoint=%s id=%s", new_sub.endpoint, new_sub.id)
     return new_sub
 
 
@@ -49,10 +55,12 @@ def deactivate_subscription(db: Session, endpoint: str) -> bool:
         select(WebPushSubscription).where(WebPushSubscription.endpoint == endpoint)
     ).scalar_one_or_none()
     if not sub:
+        logger.warning("Deactivate requested for missing endpoint=%s", endpoint)
         return False
     sub.is_active = False
     db.add(sub)
     db.commit()
+    logger.info("Deactivated subscription endpoint=%s id=%s", endpoint, sub.id)
     return True
 
 
@@ -61,15 +69,19 @@ def delete_subscription(db: Session, endpoint: str) -> bool:
         select(WebPushSubscription).where(WebPushSubscription.endpoint == endpoint)
     ).scalar_one_or_none()
     if not sub:
+        logger.warning("Delete requested for missing endpoint=%s", endpoint)
         return False
     db.delete(sub)
     db.commit()
+    logger.info("Deleted subscription endpoint=%s id=%s", endpoint, sub.id)
     return True
 
 
 def send_to_subscription(
     subscription: WebPushSubscription,
     payload: Dict[str, Any],
+    max_retries: int = 2,
+    backoff_seconds: float = 0.5,
 ) -> None:
     if not (settings.VAPID_PRIVATE_KEY and settings.VAPID_SUBJECT):
         raise RuntimeError("VAPID keys/subject not configured")
@@ -82,18 +94,33 @@ def send_to_subscription(
         },
     }
 
-    try:
-        webpush(
-            subscription_info=subscription_info,
-            data=json_dumps(payload),
-            vapid_private_key=settings.VAPID_PRIVATE_KEY,
-            vapid_claims={"sub": settings.VAPID_SUBJECT},
-        )
-    except WebPushException as ex:
-        # 404/410 indicate invalid/expired subscription — caller should deactivate
-        status_code = getattr(ex.response, "status_code", None)
-        message = str(ex)
-        raise PushSendError(message=message, status_code=status_code) from ex
+    attempt = 0
+    while True:
+        try:
+            webpush(
+                subscription_info=subscription_info,
+                data=json_dumps(payload),
+                vapid_private_key=settings.VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": settings.VAPID_SUBJECT},
+            )
+            logger.info("Push sent endpoint=%s", subscription.endpoint)
+            return
+        except WebPushException as ex:
+            status_code = getattr(ex.response, "status_code", None)
+            logger.warning(
+                "Push failed endpoint=%s status=%s attempt=%s error=%s",
+                subscription.endpoint,
+                status_code,
+                attempt + 1,
+                str(ex),
+            )
+            # Do not retry on permanently invalid subscriptions
+            if status_code in (404, 410):
+                raise PushSendError(message=str(ex), status_code=status_code) from ex
+            attempt += 1
+            if attempt > max_retries:
+                raise PushSendError(message=str(ex), status_code=status_code) from ex
+            time.sleep(backoff_seconds * attempt)
 
 
 def broadcast_to_active_subscriptions(
@@ -104,7 +131,6 @@ def broadcast_to_active_subscriptions(
     offset = 0
     sent = 0
     deactivated = 0
-    from sqlalchemy import and_
 
     while True:
         batch: List[WebPushSubscription] = (
@@ -123,14 +149,18 @@ def broadcast_to_active_subscriptions(
                 send_to_subscription(sub, payload)
                 sent += 1
             except PushSendError as err:
-                # Deactivate on 404/410; keep others for later retry
                 if err.status_code in (404, 410):
                     sub.is_active = False
                     db.add(sub)
                     deactivated += 1
+                else:
+                    logger.error(
+                        "Push permanently failed endpoint=%s status=%s", sub.endpoint, err.status_code
+                    )
         db.commit()
         offset += len(batch)
 
+    logger.info("Broadcast complete sent=%s deactivated=%s", sent, deactivated)
     return {"sent": sent, "deactivated": deactivated}
 
 

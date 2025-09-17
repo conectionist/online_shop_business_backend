@@ -8,12 +8,12 @@
 - [x] Choose initial send strategy: background tasks vs. queue (defer queue if unsure) — start with FastAPI `BackgroundTasks`
 
 ## Phase 1 — Dependencies & Config
-- [ ] Add `pywebpush` to `requirements.txt`
+- [x] Add `pywebpush` to `requirements.txt`
 - [ ] Generate VAPID keys (one-time): `npx web-push generate-vapid-keys`
 - [ ] Add env vars: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
-- [ ] Load new env vars in `app/core/config.py` → `settings`
-- [ ] Add VAPID envs to `docker-compose.yml` (`api.environment`)
-- [ ] Rebuild containers to pick up dependency/config changes
+- [x] Load new env vars in `app/core/config.py` → `settings`
+- [x] Add VAPID envs to `docker-compose.yml` (`api.environment`)
+- [x] Rebuild containers to pick up dependency/config changes
 
 ## Phase 2 — Data Model & Migration
 - [ ] Create SQLAlchemy model `WebPushSubscription` (utf8mb4, proper engine/table args)

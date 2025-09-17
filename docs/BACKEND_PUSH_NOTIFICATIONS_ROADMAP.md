@@ -16,11 +16,11 @@
 - [x] Rebuild containers to pick up dependency/config changes
 
 ## Phase 2 — Data Model & Migration
-- [ ] Create SQLAlchemy model `WebPushSubscription` (utf8mb4, proper engine/table args)
-- [ ] Fields: `id`, `user_id` (nullable), `endpoint` (unique), `p256dh_key`, `auth_key`, `user_agent`, `is_active`, `created_at`, `updated_at`, `last_success_at`, `last_failure_reason`
-- [ ] Create Alembic migration for the new table
+- [x] Create SQLAlchemy model `WebPushSubscription` (utf8mb4, proper engine/table args)
+- [x] Fields: `id`, `user_id` (nullable), `endpoint` (unique), `p256dh_key`, `auth_key`, `user_agent`, `is_active`, `created_at`, `updated_at`, `last_success_at`, `last_failure_reason`
+- [x] Create Alembic migration for the new table
 - [ ] Seed test data paths if needed for integration tests
-- [ ] Rebuild containers and run migrations
+- [x] Rebuild containers and run migrations
 
 ## Phase 3 — Pydantic Schemas
 - [ ] Add `PushSubscriptionIn` (endpoint, keys.p256dh, keys.auth, user_agent?)

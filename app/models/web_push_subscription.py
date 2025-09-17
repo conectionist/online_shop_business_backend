@@ -18,7 +18,7 @@ class WebPushSubscription(Base):
     user_id = Column(Integer, nullable=True, index=True)
 
     # Web Push endpoint and keys
-    endpoint = Column(String(1024), nullable=False, unique=True)
+    endpoint = Column(String(512), nullable=False, unique=True)
     p256dh_key = Column(String(255), nullable=False)
     auth_key = Column(String(255), nullable=False)
 

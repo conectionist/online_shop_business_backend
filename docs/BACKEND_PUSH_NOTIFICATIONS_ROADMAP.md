@@ -48,9 +48,8 @@
 - [x] Mark inactive on 410 Gone and prune stale subscriptions periodically
 
 ## Phase 7 — Security & Access Control
-- [ ] AuthN/AuthZ for send/test endpoints (admin-only)
+- [x] Admin-only manual send route; rate limiting at edge (Caddy), not in-app
 - [ ] Optional: tie subscriptions to `user_id` for authenticated clients
-- [ ] Rate-limit broadcast/test endpoints
 
 ## Phase 8 — CORS/Trusted Hosts & Config Review
 - [ ] Ensure PWA origins are present in `CORS_ORIGINS`

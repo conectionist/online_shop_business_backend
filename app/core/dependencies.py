@@ -7,10 +7,6 @@ different API endpoints.
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-
-from app.core.database import get_db
-from app.models.admin import Admin
 
 # Custom security scheme that returns 401 instead of 403
 class CustomHTTPBearer(HTTPBearer):

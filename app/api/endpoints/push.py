@@ -10,7 +10,7 @@ from app.services.push_notifications import (
     send_to_subscription,
     PushSendError,
 )
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin, Admin
 
 router = APIRouter()
 
@@ -53,11 +53,12 @@ def send_test_notification(
     req: SendNotificationRequest,
     background: BackgroundTasks,
     db: Session = Depends(get_db),
-    _: str = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin),
 ):
     """Admin-only: send a test notification to the most recent active subscription."""
     from sqlalchemy import select, desc
     from app.models.web_push_subscription import WebPushSubscription
+    from app.core.database import SessionLocal
 
     sub = db.execute(
         select(WebPushSubscription).where(WebPushSubscription.is_active == True).order_by(desc(WebPushSubscription.id)).limit(1)
@@ -66,7 +67,6 @@ def send_test_notification(
     if not sub:
         raise HTTPException(status_code=404, detail="No active subscriptions")
 
-    # use event_id as tag when present to help client collapse duplicates
     payload = {
         "title": req.title,
         "body": req.body,
@@ -75,14 +75,27 @@ def send_test_notification(
         "tag": req.event_id or req.tag,
     }
 
+    sub_id = sub.id
+
     def _send():
+        from sqlalchemy import select as _select
         try:
-            send_to_subscription(sub, payload, event_id=req.event_id, db=db)
-        except PushSendError as ex:
-            if ex.status_code in (404, 410):
-                sub.is_active = False
-                db.add(sub)
-                db.commit()
+            session = SessionLocal()
+            fresh = session.execute(_select(WebPushSubscription).where(WebPushSubscription.id == sub_id)).scalar_one_or_none()
+            if not fresh:
+                return
+            try:
+                send_to_subscription(fresh, payload, event_id=req.event_id, db=session)
+            except PushSendError as ex:
+                if ex.status_code in (404, 410):
+                    fresh.is_active = False
+                    session.add(fresh)
+                    session.commit()
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
 
     background.add_task(_send)
     return {"status": "queued"}

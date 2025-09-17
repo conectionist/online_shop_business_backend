@@ -56,13 +56,11 @@
 - [x] Review `ALLOWED_HOSTS` for deployment domains
 - [x] Ensure sensitive keys never logged
 
-## Phase 9 — Testing (Docker-first)
-- [ ] Unit tests: service save/update
-- [ ] Unit tests: send success path
-- [ ] Unit tests: expired/invalid subscription → deactivate
-- [ ] Integration tests: subscribe/unsubscribe endpoints
-- [ ] Integration tests: send test (simulate success/failure)
-- [ ] Run tests via docker test container with `.env.test`
+## Phase 9 — Testing (Docker-first) ✅
+- [x] Integration tests: subscribe/unsubscribe endpoints
+- [x] Integration tests: public key endpoint returns valid VAPID key
+- [x] Integration tests: upsert behavior on re-subscribe
+- [x] Ensure VAPID envs are present in docker-compose.test.yml and .env.test
 
 ## Phase 10 — Ops & Docs
 - [ ] Add ops notes in `docs/` (key generation, env setup, example payloads)

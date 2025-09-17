@@ -47,6 +47,10 @@ services:
       - JWT_REFRESH_TOKEN_EXPIRE_DAYS=${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
       - ADMIN_USERNAME=${ADMIN_USERNAME}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      # Web Push (VAPID) for tests
+      - VAPID_PUBLIC_KEY=${TEST_VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${TEST_VAPID_PRIVATE_KEY}
+      - VAPID_SUBJECT=${TEST_VAPID_SUBJECT}
       # Enable OpenAPI docs in test environment
       - ENABLE_OPENAPI_DOCS=true
     depends_on:

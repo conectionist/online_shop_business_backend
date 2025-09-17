@@ -11,3 +11,4 @@ from app.models.product_override import ProductOverride  # noqa: F401
 from app.models.admin import Admin  # noqa: F401
 from app.models.order import Order  # noqa: F401
 from app.models.order_item import OrderItem  # noqa: F401
+from app.models.web_push_subscription import WebPushSubscription  # noqa: F401

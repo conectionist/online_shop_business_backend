@@ -52,9 +52,9 @@
 - [ ] Optional: tie subscriptions to `user_id` for authenticated clients
 
 ## Phase 8 — CORS/Trusted Hosts & Config Review
-- [ ] Ensure PWA origins are present in `CORS_ORIGINS`
-- [ ] Review `ALLOWED_HOSTS` for deployment domains
-- [ ] Ensure sensitive keys never logged
+- [x] Ensure PWA origins are present in `CORS_ORIGINS`
+- [x] Review `ALLOWED_HOSTS` for deployment domains
+- [x] Ensure sensitive keys never logged
 
 ## Phase 9 — Testing (Docker-first)
 - [ ] Unit tests: service save/update

@@ -72,6 +72,7 @@ async def startup_event():
 
     # Start background prune task (non-blocking)
     async def prune_loop():
+        import logging
         logger = logging.getLogger(__name__)
         while True:
             try:

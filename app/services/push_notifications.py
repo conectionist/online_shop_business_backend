@@ -202,10 +202,9 @@ def prune_inactive_subscriptions(db: Session, older_than_days: int = 30, batch_s
     """
     deletion_query = text(
         """
-        DELETE wps
-        FROM web_push_subscription wps
-        WHERE wps.is_active = 0
-          AND wps.updated_at < (CURRENT_TIMESTAMP - INTERVAL :days DAY)
+        DELETE FROM web_push_subscription
+        WHERE is_active = 0
+          AND updated_at < (CURRENT_TIMESTAMP - INTERVAL :days DAY)
         LIMIT :limit
         """
     )

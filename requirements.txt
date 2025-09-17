@@ -10,3 +10,4 @@ PyJWT==2.10.1
 passlib[argon2]==1.7.4
 debugpy==1.8.16
 alembic==1.16.5
+pywebpush==2.0.3

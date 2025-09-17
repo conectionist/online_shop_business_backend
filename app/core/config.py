@@ -49,6 +49,7 @@ def get_required_env_var(var_name: str, description: str) -> str:
         sys.exit(1)
     return value
 
+
 def get_optional_env_var(var_name: str, default: str, description: str) -> str:
     """Get an optional environment variable with a default"""
     return os.getenv(var_name, default)
@@ -76,6 +77,23 @@ ADMIN_PASSWORD = get_required_env_var(
 # Disable OpenAPI docs in production for security, enable in dev/test
 ENABLE_OPENAPI_DOCS = get_optional_env_var("ENABLE_OPENAPI_DOCS", "true", "Enable/disable OpenAPI documentation endpoints").lower() in ("true", "1", "yes")
 
+# Web Push (VAPID) Configuration - optional for now; required when sending notifications
+VAPID_PUBLIC_KEY = get_optional_env_var(
+    "VAPID_PUBLIC_KEY",
+    "",
+    "Public VAPID key used by clients to subscribe"
+)
+VAPID_PRIVATE_KEY = get_optional_env_var(
+    "VAPID_PRIVATE_KEY",
+    "",
+    "Private VAPID key used to sign push messages"
+)
+VAPID_SUBJECT = get_optional_env_var(
+    "VAPID_SUBJECT",
+    "mailto:admin@example.com",
+    "Contact subject for VAPID (mailto or URL)"
+)
+
 # For compatibility with the rest of the application
 class Settings:
     def __init__(self):
@@ -98,5 +116,10 @@ class Settings:
         
         # OpenAPI Settings
         self.ENABLE_OPENAPI_DOCS = ENABLE_OPENAPI_DOCS
+
+        # Web Push (VAPID) Settings
+        self.VAPID_PUBLIC_KEY = VAPID_PUBLIC_KEY
+        self.VAPID_PRIVATE_KEY = VAPID_PRIVATE_KEY
+        self.VAPID_SUBJECT = VAPID_SUBJECT
 
 settings = Settings()

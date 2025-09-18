@@ -630,7 +630,7 @@ def list_orders_merged(db: Session, filters: Optional[OrderFilterParams] = None)
 
     groups: Dict[Tuple[int, str], List[OrderModel]] = {}
     for o in raw:
-        key = (o.liste_id, _normalize_romanian(o.nume_client))
+        key = (o.liste_id, _normalize_name_for_matching(o.nume_client))
         groups.setdefault(key, []).append(o)
 
     merged_results: List[Dict[str, Any]] = []

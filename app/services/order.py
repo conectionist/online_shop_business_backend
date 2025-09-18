@@ -1,6 +1,7 @@
 from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime
 import unicodedata
+import re
 import logging
 
 from fastapi import HTTPException, status
@@ -334,7 +335,7 @@ def _is_duplicate_order(db: Session, order_in: OrderCreate) -> Optional[OrderMod
 
     Returns the existing duplicate Order if found, otherwise None.
     """
-    normalized_name = str(order_in.nume_client).strip()
+    normalized_name = _normalize_name_for_matching(order_in.nume_client)
     incoming_items_map = _items_to_quantity_map(order_in.items)
 
     candidates: List[OrderModel] = (
@@ -342,13 +343,19 @@ def _is_duplicate_order(db: Session, order_in: OrderCreate) -> Optional[OrderMod
         .filter(
             and_(
                 OrderModel.liste_id == order_in.liste_id,
-                OrderModel.nume_client == normalized_name,
+                # Match by normalized key using SQL LIKE on collapsed/stripped version.
+                # Since we don't store a normalized column, fetch candidates by same list
+                # and filter in Python using the same normalization.
+                OrderModel.nume_client.isnot(None),
             )
         )
         .all()
     )
 
+    # Filter by normalized name equality in Python
     for candidate in candidates:
+        if _normalize_name_for_matching(candidate.nume_client) != normalized_name:
+            continue
         existing_map = _existing_order_items_quantity_map(db, candidate.id)
         if existing_map == incoming_items_map:
             return candidate
@@ -487,6 +494,21 @@ def _normalize_romanian(text: Optional[str]) -> str:
     normalized = unicodedata.normalize('NFD', lowered)
     without_marks = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
     return without_marks
+
+
+def _normalize_name_for_matching(text: Optional[str]) -> str:
+    """Normalize names for matching:
+
+    - Trim leading/trailing spaces
+    - Lowercase and remove diacritics (Romanian included)
+    - Collapse any internal whitespace runs to a single space
+    """
+    if text is None:
+        return ""
+    base = _normalize_romanian(text)
+    # Collapse all Unicode whitespace to single ASCII space
+    collapsed = re.sub(r"\s+", " ", base)
+    return collapsed.strip()
 
 
 def _merge_order_group(orders: List[OrderModel]) -> Dict[str, Any]:

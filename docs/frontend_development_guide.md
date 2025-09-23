@@ -2424,7 +2424,7 @@ curl -X POST "http://localhost:8001/api/v1/detalii-business/" \
 - `telefon` (string): Business phone number
 - `logo_path` (string): Path to business logo image
 - `motto` (string): Business motto or tagline
-- `list_not_available_msg` (string): Message to display when lists are not available
+ - `list_not_available_msg` (string): Message to display when lists are not available (max 1000 characters)
 - `alte_detalii` (string): Additional business details
 
 #### 4. Update Business Details (Full Replacement)
@@ -2465,7 +2465,7 @@ curl -X PUT "http://localhost:8001/api/v1/detalii-business/10" \
 - `telefon` (string): Business phone number
 - `logo_path` (string): Path to business logo image
 - `motto` (string): Business motto or tagline
-- `list_not_available_msg` (string): Message to display when lists are not available
+ - `list_not_available_msg` (string): Message to display when lists are not available (max 1000 characters)
 - `alte_detalii` (string): Additional business details
 
 #### 5. Partially Update Business Details
@@ -2502,7 +2502,7 @@ curl -X PATCH "http://localhost:8001/api/v1/detalii-business/10" \
 - `telefon` (string): Business phone number
 - `logo_path` (string): Path to business logo image
 - `motto` (string): Business motto or tagline
-- `list_not_available_msg` (string): Message to display when lists are not available
+ - `list_not_available_msg` (string): Message to display when lists are not available (max 1000 characters)
 - `alte_detalii` (string): Additional business details
 
 #### 6. Delete Business Details

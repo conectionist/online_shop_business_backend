@@ -31,7 +31,7 @@ class BusinessDetailsBase(BaseModel):
     
     list_not_available_msg: Optional[str] = Field(
         None,
-        max_length=200,
+        max_length=1000,
         description="Message displayed when product list is not available"
     )
     

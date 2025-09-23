@@ -12,7 +12,7 @@ class BusinessDetails(Base):
     telefon = Column(String(20), nullable=True)
     logo_path = Column(String(256), nullable=True)
     motto = Column(String(256), nullable=True)
-    list_not_available_msg = Column(String(200), nullable=True)
+    list_not_available_msg = Column(String(1000), nullable=True)
     alte_detalii = Column(String(500), nullable=True)
     delivery_tax = Column(SmallInteger, nullable=True, server_default="0")
     # Optional merchant identity fields

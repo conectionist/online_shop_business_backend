@@ -134,5 +134,10 @@ class BusinessDetails(BusinessDetailsBase):
     """Schema for business details responses including the ID."""
     
     id: int = Field(gt=0, description="The business details ID")
+    # Raw, unprocessed value of list_not_available_msg (read-only)
+    list_not_available_msg_raw: Optional[str] = Field(
+        None,
+        description="Raw, unprocessed list_not_available_msg"
+    )
     
     model_config = ConfigDict(from_attributes=True)

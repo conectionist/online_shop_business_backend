@@ -22,11 +22,13 @@ def get_business_details(db: Session, skip: int = 0, limit: int = 100):
     """
     try:
         records = db.query(BusinessDetails).offset(skip).limit(limit).all()
-        # Process macros in-place on list_not_available_msg for responses
+        # For each record, expose raw value and process macros in-place for the main field
         for rec in records:
             try:
-                if hasattr(rec, 'list_not_available_msg') and rec.list_not_available_msg:
-                    rec.list_not_available_msg = process_macros(rec.list_not_available_msg)
+                if hasattr(rec, 'list_not_available_msg'):
+                    rec.list_not_available_msg_raw = rec.list_not_available_msg
+                    if rec.list_not_available_msg:
+                        rec.list_not_available_msg = process_macros(rec.list_not_available_msg)
             except Exception:
                 # Fail-safe: if processing fails, leave the original text
                 pass
@@ -67,8 +69,9 @@ def get_business_details_by_id(db: Session, business_details_id: int):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Business details with ID {business_details_id} not found"
             )
-        # Process macros in-place on list_not_available_msg for response
+        # Expose raw and process macros in-place for response
         try:
+            business_details.list_not_available_msg_raw = business_details.list_not_available_msg
             if business_details.list_not_available_msg:
                 business_details.list_not_available_msg = process_macros(business_details.list_not_available_msg)
         except Exception:

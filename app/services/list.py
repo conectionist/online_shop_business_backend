@@ -108,7 +108,8 @@ def create_list(db: Session, list_data: ListCreate) -> List:
             mesaj_introducere=list_data.mesaj_introducere,
             alte_detalii=list_data.alte_detalii,
             numar_whatsapp=list_data.numar_whatsapp,
-            orare_livrari_id=list_data.orare_livrari_id
+            orare_livrari_id=list_data.orare_livrari_id,
+            expiration_date=list_data.expiration_date
         )
         
         db.add(db_list)
@@ -298,7 +299,8 @@ def clone_list(db: Session, source_list_id: int) -> List:
             mesaj_introducere=source_list.mesaj_introducere,
             alte_detalii=source_list.alte_detalii,
             numar_whatsapp=source_list.numar_whatsapp,
-            orare_livrari_id=source_list.orare_livrari_id
+            orare_livrari_id=source_list.orare_livrari_id,
+            expiration_date=source_list.expiration_date
         )
         
         db.add(new_list)

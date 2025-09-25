@@ -18,6 +18,7 @@ class List(Base):
     alte_detalii = Column(String(500), nullable=True)
     numar_whatsapp = Column(String(15), nullable=True)
     orare_livrari_id = Column(Integer, ForeignKey("orare_livrari.id"), nullable=False)
+    expiration_date = Column(Date, nullable=True)
     created_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     updated_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
     is_deleted = Column(SmallInteger, nullable=False, default=0, server_default=text("0"))  # Added for soft deletion consistency
@@ -38,5 +39,6 @@ class List(Base):
         Index("fk_liste_orare_livrari1_idx", "orare_livrari_id"),
         Index("idx_liste_data", "data"),
         Index("idx_liste_is_deleted", "is_deleted"),  # Added for soft deletion consistency
+        Index("idx_liste_expiration_date", "expiration_date"),  # Added for expiration date queries
         {"mysql_engine": "InnoDB"},
     )

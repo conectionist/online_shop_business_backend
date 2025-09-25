@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.business_details import BusinessDetails
 from app.schemas.business_details import BusinessDetailsCreate, BusinessDetailsUpdate
+from app.utils.macro_processor import process_macros
 
 
 # GET all business details with pagination
@@ -20,7 +21,16 @@ def get_business_details(db: Session, skip: int = 0, limit: int = 100):
         List of BusinessDetails objects
     """
     try:
-        return db.query(BusinessDetails).offset(skip).limit(limit).all()
+        records = db.query(BusinessDetails).offset(skip).limit(limit).all()
+        # Process macros in-place on list_not_available_msg for responses
+        for rec in records:
+            try:
+                if hasattr(rec, 'list_not_available_msg') and rec.list_not_available_msg:
+                    rec.list_not_available_msg = process_macros(rec.list_not_available_msg)
+            except Exception:
+                # Fail-safe: if processing fails, leave the original text
+                pass
+        return records
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(
@@ -57,6 +67,12 @@ def get_business_details_by_id(db: Session, business_details_id: int):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Business details with ID {business_details_id} not found"
             )
+        # Process macros in-place on list_not_available_msg for response
+        try:
+            if business_details.list_not_available_msg:
+                business_details.list_not_available_msg = process_macros(business_details.list_not_available_msg)
+        except Exception:
+            pass
         return business_details
     except SQLAlchemyError as e:
         db.rollback()

@@ -161,8 +161,11 @@ def update_list(
             detail=f"Invalid ID: {list_id} - must be positive"
         )
     
-    # Convert to dict and remove None values
-    update_data = {k: v for k, v in list_data.model_dump().items() if v is not None}
+    # Convert to dict and remove None values, but allow None for expiration_date when explicitly provided
+    update_data = {}
+    for k, v in list_data.model_dump(exclude_unset=True, exclude_none=False).items():
+        if v is not None or k == 'expiration_date':
+            update_data[k] = v
     
     if not update_data:
         raise HTTPException(

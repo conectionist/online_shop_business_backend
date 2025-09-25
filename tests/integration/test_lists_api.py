@@ -84,6 +84,63 @@ class ListTestUtils(EntityTestUtils):
         
         return created_entity, created_entity["id"]
     
+    def create_entity_with_expiration(self, expiration_date, orare_livrari_id=None, date=None, is_current=True, is_published=True):
+        """
+        Create a new list with expiration_date.
+        
+        Args:
+            expiration_date: Expiration date for the list
+            orare_livrari_id: ID of the delivery schedule, will create one if None
+            date: Date of the list, will use today if None
+            is_current: Flag indicating if this is the current list
+            is_published: Flag indicating if the list is published
+            
+        Returns:
+            Tuple of (entity_data, entity_id)
+        """
+        # Create a delivery schedule if needed
+        if orare_livrari_id is None:
+            _, orare_livrari_id = self.create_delivery_schedule()
+            
+        # Use today's date if none provided
+        if date is None:
+            date = self.generate_test_date()
+            
+        # Generate short intro message (under 100 chars)
+        mesaj_introducere = f"Test Message {str(uuid.uuid4())[:8]}"
+        
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+            
+        create_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{self.base_url}/",
+            json={
+                "data": date,
+                "is_current": is_current,
+                "is_published": is_published,
+                "mesaj_introducere": mesaj_introducere,
+                "alte_detalii": "Test details",  # Shortened to be safe
+                "numar_whatsapp": "+40712345678",
+                "orare_livrari_id": orare_livrari_id,
+                "expiration_date": expiration_date
+            }
+        )
+        assert create_response.status_code == 201, (
+            f"Failed to create {self.entity_name} with expiration date. "
+            f"Expected 201, got {create_response.status_code}: {create_response.text}"
+        )
+        
+        created_entity = create_response.json()
+        assert "id" in created_entity
+        assert created_entity["data"] == date
+        assert created_entity["is_current"] == is_current
+        assert created_entity["orare_livrari_id"] == orare_livrari_id
+        assert created_entity["expiration_date"] == expiration_date
+        
+        return created_entity, created_entity["id"]
+    
     def update_entity(self, entity_id, mesaj_introducere=None, is_published=None):
         """
         Update a list by ID.
@@ -968,3 +1025,138 @@ def test_clone_list_workflow():
     finally:
         # Clean up source list
         list_utils.delete_entity(source_id)
+
+
+def test_expiration_date_functionality():
+    """
+    Test expiration_date field functionality for lists.
+    """
+    list_utils = ListTestUtils()
+    
+    try:
+        # Test 1: Create list without expiration_date (should be null)
+        list_data, list_id = list_utils.create_entity()
+        
+        # Verify expiration_date is null in response
+        get_response = requests.get(f"{list_utils.base_url}/{list_id}")
+        assert get_response.status_code == 200
+        list_obj = get_response.json()
+        assert list_obj["expiration_date"] is None
+        
+        # Test 2: Create list with valid expiration_date
+        future_date = (datetime.date.today() + datetime.timedelta(days=7)).strftime("%Y-%m-%d")
+        list_data_with_exp, list_id_with_exp = list_utils.create_entity_with_expiration(future_date)
+        
+        # Verify expiration_date is set correctly
+        get_response = requests.get(f"{list_utils.base_url}/{list_id_with_exp}")
+        assert get_response.status_code == 200
+        list_obj = get_response.json()
+        assert list_obj["expiration_date"] == future_date
+        
+        # Test 3: Update list to add expiration_date
+        new_exp_date = (datetime.date.today() + datetime.timedelta(days=14)).strftime("%Y-%m-%d")
+        update_response = auth_utils.make_authenticated_request(
+            "PUT",
+            f"{list_utils.base_url}/{list_id}",
+            json={"expiration_date": new_exp_date}
+        )
+        assert update_response.status_code == 200
+        updated_list = update_response.json()
+        assert updated_list["expiration_date"] == new_exp_date
+        
+        # Test 4: Update list to remove expiration_date (set to null)
+        update_response = auth_utils.make_authenticated_request(
+            "PUT",
+            f"{list_utils.base_url}/{list_id}",
+            json={"expiration_date": None}
+        )
+        assert update_response.status_code == 200
+        updated_list = update_response.json()
+        assert updated_list["expiration_date"] is None
+        
+        # Test 5: Validation - expiration_date before list date should fail
+        past_date = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        invalid_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{list_utils.base_url}/",
+            json={
+                "data": datetime.date.today().strftime("%Y-%m-%d"),
+                "is_current": False,
+                "orare_livrari_id": list_utils.create_delivery_schedule()[1],
+                "expiration_date": past_date
+            }
+        )
+        assert invalid_response.status_code == 422
+        error_detail = invalid_response.json()
+        assert "expiration_date" in str(error_detail)
+        assert "must be after" in str(error_detail)
+        
+        # Test 6: Validation - expiration_date same as list date should fail
+        today = datetime.date.today().strftime("%Y-%m-%d")
+        invalid_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{list_utils.base_url}/",
+            json={
+                "data": today,
+                "is_current": False,
+                "orare_livrari_id": list_utils.create_delivery_schedule()[1],
+                "expiration_date": today
+            }
+        )
+        assert invalid_response.status_code == 422
+        
+        # Clean up
+        list_utils.delete_entity(list_id)
+        list_utils.delete_entity(list_id_with_exp)
+        
+    except Exception as e:
+        # Clean up on error
+        try:
+            list_utils.delete_entity(list_id)
+        except:
+            pass
+        try:
+            list_utils.delete_entity(list_id_with_exp)
+        except:
+            pass
+        raise e
+
+
+def test_expiration_date_in_cloning():
+    """
+    Test that expiration_date is properly copied when cloning lists.
+    """
+    list_utils = ListTestUtils()
+    
+    try:
+        # Create source list with expiration_date
+        future_date = (datetime.date.today() + datetime.timedelta(days=10)).strftime("%Y-%m-%d")
+        source_data, source_id = list_utils.create_entity_with_expiration(future_date)
+        
+        # Clone the list
+        clone_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{list_utils.base_url}/{source_id}/clone"
+        )
+        assert clone_response.status_code == 201
+        cloned_list = clone_response.json()
+        cloned_id = cloned_list["id"]
+        
+        # Verify expiration_date was copied
+        assert cloned_list["expiration_date"] == future_date
+        
+        # Clean up
+        list_utils.delete_entity(cloned_id)
+        list_utils.delete_entity(source_id)
+        
+    except Exception as e:
+        # Clean up on error
+        try:
+            list_utils.delete_entity(cloned_id)
+        except:
+            pass
+        try:
+            list_utils.delete_entity(source_id)
+        except:
+            pass
+        raise e

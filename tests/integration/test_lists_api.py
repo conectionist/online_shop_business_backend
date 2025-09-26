@@ -1098,8 +1098,28 @@ def test_expiration_date_functionality():
         assert "expiration_date" in str(error_detail)
         assert "must be after" in str(error_detail)
         
-        # Test 6: Validation - expiration_date same as list date should fail
+        # Test 6: Validation - expiration_date same as list date with time > 00:00 should succeed
         today = datetime.date.today().strftime("%Y-%m-%d")
+        today_with_time = f"{today}T20:00:00"
+        valid_response = auth_utils.make_authenticated_request(
+            "POST",
+            f"{list_utils.base_url}/",
+            json={
+                "data": today,
+                "is_current": False,
+                "orare_livrari_id": list_utils.create_delivery_schedule()[1],
+                "expiration_date": today_with_time
+            }
+        )
+        assert valid_response.status_code == 201
+        created_list = valid_response.json()
+        assert created_list["expiration_date"].startswith(today)
+        
+        # Clean up the created list
+        list_utils.delete_entity(created_list["id"])
+        
+        # Test 7: Validation - expiration_date exactly at 00:00 of list date should fail
+        today_at_midnight = f"{today}T00:00:00"
         invalid_response = auth_utils.make_authenticated_request(
             "POST",
             f"{list_utils.base_url}/",
@@ -1107,7 +1127,7 @@ def test_expiration_date_functionality():
                 "data": today,
                 "is_current": False,
                 "orare_livrari_id": list_utils.create_delivery_schedule()[1],
-                "expiration_date": today
+                "expiration_date": today_at_midnight
             }
         )
         assert invalid_response.status_code == 422

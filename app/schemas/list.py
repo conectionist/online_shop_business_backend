@@ -37,9 +37,11 @@ class ListBase(BaseModel):
     def validate_expiration_date(cls, v, info):
         if v is not None and 'data' in info.data:
             list_date = info.data['data']
-            # Compare date part of expiration with list date
-            if v.date() <= list_date:
-                raise ValueError('Expiration datetime must be after the list date')
+            # Convert list date to datetime at 00:00 for comparison
+            list_datetime = datetime.combine(list_date, datetime.min.time())
+            # Expiration must be after the start of the list date (00:00)
+            if v <= list_datetime:
+                raise ValueError('Expiration datetime must be after the start of the list date (00:00)')
         return v
 
 
@@ -80,8 +82,11 @@ class ListUpdate(BaseModel):
     def validate_expiration_date(cls, v, info):
         if v is not None and 'data' in info.data and info.data['data'] is not None:
             list_date = info.data['data']
-            if v.date() <= list_date:
-                raise ValueError('Expiration datetime must be after the list date')
+            # Convert list date to datetime at 00:00 for comparison
+            list_datetime = datetime.combine(list_date, datetime.min.time())
+            # Expiration must be after the start of the list date (00:00)
+            if v <= list_datetime:
+                raise ValueError('Expiration datetime must be after the start of the list date (00:00)')
         return v
 
 

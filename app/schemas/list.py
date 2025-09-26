@@ -25,7 +25,7 @@ class ListBase(BaseModel):
         description="WhatsApp number for contact"
     )
     orare_livrari_id: int = Field(..., gt=0, description="ID of the associated delivery schedule")
-    expiration_date: Optional[date] = Field(None, description="Date when the list expires (optional)")
+    expiration_date: Optional[datetime] = Field(None, description="Datetime when the list expires (optional)")
     
     @field_validator('numar_whatsapp')
     def validate_whatsapp_number(cls, v):
@@ -37,8 +37,9 @@ class ListBase(BaseModel):
     def validate_expiration_date(cls, v, info):
         if v is not None and 'data' in info.data:
             list_date = info.data['data']
-            if v <= list_date:
-                raise ValueError('Expiration date must be after the list date')
+            # Compare date part of expiration with list date
+            if v.date() <= list_date:
+                raise ValueError('Expiration datetime must be after the list date')
         return v
 
 
@@ -66,7 +67,7 @@ class ListUpdate(BaseModel):
         pattern=r'^\+?[0-9]{10,15}$',
     )
     orare_livrari_id: Optional[int] = Field(None, gt=0)
-    expiration_date: Optional[date] = Field(None, description="Date when the list expires (optional)")
+    expiration_date: Optional[datetime] = Field(None, description="Datetime when the list expires (optional)")
     is_deleted: Optional[bool] = None
     
     @field_validator('numar_whatsapp')
@@ -79,8 +80,8 @@ class ListUpdate(BaseModel):
     def validate_expiration_date(cls, v, info):
         if v is not None and 'data' in info.data and info.data['data'] is not None:
             list_date = info.data['data']
-            if v <= list_date:
-                raise ValueError('Expiration date must be after the list date')
+            if v.date() <= list_date:
+                raise ValueError('Expiration datetime must be after the list date')
         return v
 
 

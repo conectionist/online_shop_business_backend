@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, TIMESTAMP, Boolean, text, ForeignKey, Index, Date, SmallInteger
+from sqlalchemy import Column, Integer, String, TIMESTAMP, Boolean, text, ForeignKey, Index, Date, DateTime, SmallInteger
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -18,7 +18,7 @@ class List(Base):
     alte_detalii = Column(String(500), nullable=True)
     numar_whatsapp = Column(String(15), nullable=True)
     orare_livrari_id = Column(Integer, ForeignKey("orare_livrari.id"), nullable=False)
-    expiration_date = Column(Date, nullable=True)
+    expiration_date = Column(DateTime, nullable=True)
     created_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     updated_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
     is_deleted = Column(SmallInteger, nullable=False, default=0, server_default=text("0"))  # Added for soft deletion consistency

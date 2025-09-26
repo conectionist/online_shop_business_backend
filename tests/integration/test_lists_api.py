@@ -113,6 +113,11 @@ class ListTestUtils(EntityTestUtils):
         if not auth_utils.access_token:
             auth_utils.login()
             
+        # Normalize date-only expiration to ISO datetime (midnight) for API
+        normalized_expiration = (
+            f"{expiration_date}T00:00:00" if isinstance(expiration_date, str) and "T" not in expiration_date else expiration_date
+        )
+
         create_response = auth_utils.make_authenticated_request(
             "POST",
             f"{self.base_url}/",
@@ -124,7 +129,7 @@ class ListTestUtils(EntityTestUtils):
                 "alte_detalii": "Test details",  # Shortened to be safe
                 "numar_whatsapp": "+40712345678",
                 "orare_livrari_id": orare_livrari_id,
-                "expiration_date": expiration_date
+                "expiration_date": normalized_expiration
             }
         )
         assert create_response.status_code == 201, (
@@ -137,7 +142,9 @@ class ListTestUtils(EntityTestUtils):
         assert created_entity["data"] == date
         assert created_entity["is_current"] == is_current
         assert created_entity["orare_livrari_id"] == orare_livrari_id
-        assert created_entity["expiration_date"] == expiration_date
+        # Expect ISO datetime; if input was date-only, midnight time is appended
+        expected_exp = normalized_expiration
+        assert created_entity["expiration_date"] == expected_exp
         
         return created_entity, created_entity["id"]
     
@@ -1051,7 +1058,7 @@ def test_expiration_date_functionality():
         get_response = requests.get(f"{list_utils.base_url}/{list_id_with_exp}")
         assert get_response.status_code == 200
         list_obj = get_response.json()
-        assert list_obj["expiration_date"] == future_date
+        assert list_obj["expiration_date"].startswith(future_date)
         
         # Test 3: Update list to add expiration_date
         new_exp_date = (datetime.date.today() + datetime.timedelta(days=14)).strftime("%Y-%m-%d")
@@ -1062,7 +1069,7 @@ def test_expiration_date_functionality():
         )
         assert update_response.status_code == 200
         updated_list = update_response.json()
-        assert updated_list["expiration_date"] == new_exp_date
+        assert updated_list["expiration_date"].startswith(new_exp_date)
         
         # Test 4: Update list to remove expiration_date (set to null)
         update_response = auth_utils.make_authenticated_request(
@@ -1142,8 +1149,8 @@ def test_expiration_date_in_cloning():
         cloned_list = clone_response.json()
         cloned_id = cloned_list["id"]
         
-        # Verify expiration_date was copied
-        assert cloned_list["expiration_date"] == future_date
+        # Verify expiration_date was copied (ISO datetime starts with date)
+        assert cloned_list["expiration_date"].startswith(future_date)
         
         # Clean up
         list_utils.delete_entity(cloned_id)

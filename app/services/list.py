@@ -7,6 +7,34 @@ from app.models.list import List
 from app.schemas.list import ListCreate, ListUpdate
 
 
+def _ensure_single_published_list(db: Session, list_id: int = None):
+    """
+    Ensure only one list is published at a time.
+    Unpublishes all other lists when a new one is being published.
+    
+    Args:
+        db: Database session
+        list_id: ID of the list being published (optional, to exclude from unpublishing)
+    """
+    try:
+        # Unpublish all other published lists
+        query = db.query(List).filter(List.is_published == True)
+        if list_id is not None:
+            query = query.filter(List.id != list_id)
+        
+        published_lists = query.all()
+        for published_list in published_lists:
+            published_list.is_published = False
+        
+        db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error occurred while managing published lists: {str(e)}"
+        )
+
+
 def get_lists(
     db: Session, 
     skip: int = 0, 
@@ -115,6 +143,11 @@ def create_list(db: Session, list_data: ListCreate) -> List:
         db.add(db_list)
         db.commit()
         db.refresh(db_list)
+        
+        # If this list is being published, unpublish all others AFTER successful creation
+        if list_data.is_published:
+            _ensure_single_published_list(db, db_list.id)
+        
         return db_list
     except IntegrityError as e:
         db.rollback()
@@ -193,6 +226,11 @@ def update_list(
         
         db.commit()
         db.refresh(db_list)
+        
+        # If this list is being published, unpublish all others AFTER successful update
+        if 'is_published' in update_data and update_data['is_published'] is True:
+            _ensure_single_published_list(db, list_id)
+        
         return db_list
     except IntegrityError as e:
         db.rollback()

@@ -1167,3 +1167,141 @@ def test_expiration_date_in_cloning():
         except:
             pass
         raise e
+
+
+def test_single_published_list_constraint():
+    """
+    Test that only one list can be published at a time.
+    When a list is published, all other published lists should be unpublished.
+    """
+    list_utils = ListTestUtils()
+    
+    try:
+        # Create first published list
+        list1_data, list1_id = list_utils.create_entity(is_published=True)
+        assert list1_data["is_published"] == True
+        
+        # Create second published list - should unpublish the first one
+        list2_data, list2_id = list_utils.create_entity(is_published=True)
+        assert list2_data["is_published"] == True
+        
+        # Verify first list is now unpublished
+        list1_updated = list_utils.get_entity(list1_id)
+        assert list1_updated["is_published"] == False, "First list should be unpublished when second list is published"
+        
+        # Verify second list is still published
+        list2_updated = list_utils.get_entity(list2_id)
+        assert list2_updated["is_published"] == True, "Second list should remain published"
+        
+        # Create third list as unpublished - should not affect published list
+        list3_data, list3_id = list_utils.create_entity(is_published=False)
+        assert list3_data["is_published"] == False
+        
+        # Verify second list is still published
+        list2_updated = list_utils.get_entity(list2_id)
+        assert list2_updated["is_published"] == True, "Published list should remain published when creating unpublished list"
+        
+        # Clean up
+        list_utils.delete_entity(list1_id)
+        list_utils.delete_entity(list2_id)
+        list_utils.delete_entity(list3_id)
+        
+    except Exception as e:
+        # Clean up on error
+        try:
+            list_utils.delete_entity(list1_id)
+        except:
+            pass
+        try:
+            list_utils.delete_entity(list2_id)
+        except:
+            pass
+        try:
+            list_utils.delete_entity(list3_id)
+        except:
+            pass
+        raise e
+
+
+def test_single_published_list_constraint_on_update():
+    """
+    Test that updating a list to published unpublishes other published lists.
+    """
+    list_utils = ListTestUtils()
+    
+    try:
+        # Create first published list
+        list1_data, list1_id = list_utils.create_entity(is_published=True)
+        assert list1_data["is_published"] == True
+        
+        # Create second unpublished list
+        list2_data, list2_id = list_utils.create_entity(is_published=False)
+        assert list2_data["is_published"] == False
+        
+        # Update second list to published - should unpublish first list
+        updated_list2 = list_utils.update_entity(list2_id, is_published=True)
+        assert updated_list2["is_published"] == True
+        
+        # Verify first list is now unpublished
+        list1_updated = list_utils.get_entity(list1_id)
+        assert list1_updated["is_published"] == False, "First list should be unpublished when second list is updated to published"
+        
+        # Verify second list is published
+        list2_updated = list_utils.get_entity(list2_id)
+        assert list2_updated["is_published"] == True, "Second list should be published"
+        
+        # Clean up
+        list_utils.delete_entity(list1_id)
+        list_utils.delete_entity(list2_id)
+        
+    except Exception as e:
+        # Clean up on error
+        try:
+            list_utils.delete_entity(list1_id)
+        except:
+            pass
+        try:
+            list_utils.delete_entity(list2_id)
+        except:
+            pass
+        raise e
+
+
+def test_single_published_list_constraint_explicit_false():
+    """
+    Test that explicitly setting is_published to false does not unpublish other lists.
+    """
+    list_utils = ListTestUtils()
+    
+    try:
+        # Create first published list
+        list1_data, list1_id = list_utils.create_entity(is_published=True)
+        assert list1_data["is_published"] == True
+        
+        # Create second unpublished list
+        list2_data, list2_id = list_utils.create_entity(is_published=False)
+        assert list2_data["is_published"] == False
+        
+        # Update second list to explicitly set is_published to false
+        updated_list2 = list_utils.update_entity(list2_id, is_published=False)
+        assert updated_list2["is_published"] == False
+        
+        # Verify first list is still published (should not be affected)
+        list1_updated = list_utils.get_entity(list1_id)
+        assert list1_updated["is_published"] == True, "First list should remain published when second list is explicitly set to false"
+        
+        # Clean up
+        list_utils.delete_entity(list1_id)
+        list_utils.delete_entity(list2_id)
+        
+    except Exception as e:
+        # Clean up on error
+        try:
+            list_utils.delete_entity(list1_id)
+        except:
+            pass
+        try:
+            list_utils.delete_entity(list2_id)
+        except:
+            pass
+        raise e

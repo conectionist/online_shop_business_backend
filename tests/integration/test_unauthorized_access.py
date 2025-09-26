@@ -151,6 +151,7 @@ class TestPublicEndpoints:
     PUBLIC_ENDPOINTS = [
         # System Config (read-only)
         ("system/config", "GET"),
+        ("system/next-delivery-date", "GET"),
         
         # GET endpoints for entities (read-only)
         ("business-details", "GET"),

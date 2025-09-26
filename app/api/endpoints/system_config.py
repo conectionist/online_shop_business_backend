@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from typing import Dict
+from typing import Dict, Optional
+from datetime import datetime
 import os
 from pathlib import Path
 from app.core.constants import UNCATEGORIZED_CATEGORY_ID, UNCATEGORIZED_CATEGORY_NAME
+from app.utils.macro_processor import _compute_next_delivery_date, _format_date_ro_long
 
 router = APIRouter()
 
@@ -19,6 +21,11 @@ class SystemConfigResponse(BaseModel):
     default_category_id: int
     default_category_name: str
 
+class NextDeliveryDateResponse(BaseModel):
+    next_delivery_date: str
+    formatted_date_ro: str
+    reference_date: str
+
 @router.get("/config", response_model=SystemConfigResponse)
 async def get_system_config():
     """
@@ -32,6 +39,46 @@ async def get_system_config():
         "default_category_id": UNCATEGORIZED_CATEGORY_ID,
         "default_category_name": UNCATEGORIZED_CATEGORY_NAME
     }
+
+@router.get("/next-delivery-date", response_model=NextDeliveryDateResponse)
+async def get_next_delivery_date(
+    reference_date: Optional[str] = Query(None, description="Reference date in ISO format (YYYY-MM-DD). If not provided, uses current date. Example: 2025-09-26")
+):
+    """
+    Get the next delivery date (next Tuesday or Friday, whichever comes first).
+    
+    Returns the next delivery date in both ISO format and Romanian long format.
+    If no reference date is provided, uses the current date as reference.
+    
+    **Example Response:**
+    ```json
+    {
+        "next_delivery_date": "2025-09-30T00:00:00",
+        "formatted_date_ro": "marți, 30 septembrie 2025",
+        "reference_date": "2025-09-26T00:00:00"
+    }
+    ```
+    """
+    try:
+        # Parse reference date or use current date
+        if reference_date:
+            ref_date = datetime.fromisoformat(reference_date)
+        else:
+            ref_date = datetime.now()
+        
+        # Compute next delivery date
+        next_date = _compute_next_delivery_date(ref_date)
+        formatted_date_ro = _format_date_ro_long(next_date)
+        
+        return {
+            "next_delivery_date": next_date.isoformat(),
+            "formatted_date_ro": formatted_date_ro,
+            "reference_date": ref_date.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error computing next delivery date: {str(e)}")
 
 # Add a static file serving endpoint for the placeholders
 from fastapi.staticfiles import StaticFiles

@@ -27,12 +27,26 @@ def get_public_key():
 
 
 @router.post("/subscribe", response_model=PushSubscriptionOut, status_code=status.HTTP_201_CREATED)
-def subscribe(
+def subscribe_customer(
+    subscription: PushSubscriptionIn,
+    db: Session = Depends(get_db),
+):
+    """Subscribe to push notifications (customer - no authentication required)."""
+    try:
+        # Customer subscription - no user association
+        sub = save_or_update_subscription(db, subscription, user_id=None)
+        return PushSubscriptionOut(id=sub.id, endpoint=sub.endpoint, is_active=sub.is_active)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Subscribe failed: {str(e)}")
+
+
+@router.post("/admin/subscribe", response_model=PushSubscriptionOut, status_code=status.HTTP_201_CREATED)
+def subscribe_admin(
     subscription: PushSubscriptionIn,
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """Subscribe to push notifications (admin only)."""
+    """Subscribe to push notifications (admin - authentication required)."""
     try:
         # Associate subscription with current admin
         sub = save_or_update_subscription(db, subscription, user_id=current_admin.id)

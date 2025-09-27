@@ -226,6 +226,102 @@ class PushSendError(Exception):
         self.status_code = status_code
 
 
+def send_to_admin_subscriptions(
+    db: Session,
+    admin_id: int,
+    payload: Dict[str, Any],
+    event_id: Optional[str] = None,
+) -> Dict[str, int]:
+    """Send notification to all subscriptions of a specific admin.
+    
+    Args:
+        db: Database session
+        admin_id: Admin user ID
+        payload: Notification payload
+        event_id: Optional event ID for deduplication
+        
+    Returns:
+        Dict with 'sent' count
+    """
+    subscriptions = db.query(WebPushSubscription).filter(
+        WebPushSubscription.user_id == admin_id,
+        WebPushSubscription.is_active == True  # noqa: E712
+    ).all()
+    
+    sent = 0
+    deactivated = 0
+    
+    for sub in subscriptions:
+        try:
+            delivered_or_skipped = send_to_subscription(sub, payload, event_id=event_id, db=db)
+            if delivered_or_skipped:
+                sent += 1
+            else:
+                logger.error("Push transiently failed after retries endpoint=%s", sub.endpoint)
+        except PushSendError as err:
+            if err.status_code in (404, 410):
+                sub.is_active = False
+                db.add(sub)
+                deactivated += 1
+            else:
+                logger.error(
+                    "Push permanently failed endpoint=%s status=%s", sub.endpoint, err.status_code
+                )
+    
+    if deactivated > 0:
+        db.commit()
+    
+    logger.info("Admin notification sent to admin_id=%s sent=%s deactivated=%s", admin_id, sent, deactivated)
+    return {"sent": sent, "deactivated": deactivated}
+
+
+def send_to_all_admins(
+    db: Session,
+    payload: Dict[str, Any],
+    event_id: Optional[str] = None,
+) -> Dict[str, int]:
+    """Send notification to all admin subscriptions.
+    
+    Args:
+        db: Database session
+        payload: Notification payload
+        event_id: Optional event ID for deduplication
+        
+    Returns:
+        Dict with 'sent' and 'deactivated' counts
+    """
+    subscriptions = db.query(WebPushSubscription).filter(
+        WebPushSubscription.user_id.isnot(None),  # Only admin subscriptions
+        WebPushSubscription.is_active == True  # noqa: E712
+    ).all()
+    
+    sent = 0
+    deactivated = 0
+    
+    for sub in subscriptions:
+        try:
+            delivered_or_skipped = send_to_subscription(sub, payload, event_id=event_id, db=db)
+            if delivered_or_skipped:
+                sent += 1
+            else:
+                logger.error("Push transiently failed after retries endpoint=%s", sub.endpoint)
+        except PushSendError as err:
+            if err.status_code in (404, 410):
+                sub.is_active = False
+                db.add(sub)
+                deactivated += 1
+            else:
+                logger.error(
+                    "Push permanently failed endpoint=%s status=%s", sub.endpoint, err.status_code
+                )
+    
+    if deactivated > 0:
+        db.commit()
+    
+    logger.info("Admin broadcast sent=%s deactivated=%s", sent, deactivated)
+    return {"sent": sent, "deactivated": deactivated}
+
+
 def json_dumps(data: Dict[str, Any]) -> str:
     # Minimal wrapper to avoid adding extra deps here
     import json

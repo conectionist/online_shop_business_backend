@@ -1260,6 +1260,45 @@ curl -X POST "http://localhost:8001/api/v1/liste/19/products/1" \
 **Request Body** (optional):
 - `stoc_produs` (integer, optional): Available stock for this product in this list (must be >= 0)
 
+**API**: `PATCH /api/v1/liste/{list_id}/products/{product_id}`
+
+**Description**: Updates only the `stoc_produs` field on the list–product relationship. Does not change ordering, category, or other product fields. Accepts `null` or any integer `>= 0`.
+
+**cURL Examples**:
+
+Make product unavailable (stoc_produs = 0):
+```bash
+curl -X PATCH "http://localhost:8000/api/v1/liste/19/products/1" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -d '{"stoc_produs": 0}'
+```
+
+Make product available again (ignore stock):
+```bash
+curl -X PATCH "http://localhost:8000/api/v1/liste/19/products/1" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -d '{"stoc_produs": null}'
+```
+
+Set a numeric stock value (future use):
+```bash
+curl -X PATCH "http://localhost:8000/api/v1/liste/19/products/1" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -d '{"stoc_produs": 25}'
+```
+
+**Responses**:
+- `200 OK`: `{ "list_id": <int>, "product_id": <int>, "stoc_produs": <int|null> }`
+- `404 Not Found`: List or product-in-list not found
+- `401/403`: Auth issues
+- `422 Unprocessable Entity`: Invalid value (must be `null` or integer `>= 0`)
+
 **API**: `DELETE /api/v1/liste/{list_id}/products/{product_id}`
 
 **Description**: Removes a product from a specific list

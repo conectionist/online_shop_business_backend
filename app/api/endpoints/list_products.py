@@ -1,7 +1,7 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, status, Body
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.database import get_db
 from app.services.auth import get_current_admin
@@ -13,10 +13,21 @@ from app.services.list_product import (
     remove_product_from_list,
     replace_list_products,
     add_products_to_list,
+    update_product_availability,
 )
 
 class AddProductRequest(BaseModel):
     stoc_produs: Optional[int] = Field(None, ge=0, description="Available stock for this product in this list")
+
+
+class UpdateAvailabilityRequest(BaseModel):
+    stoc_produs: Optional[int] = Field(None, ge=0, description="Availability/stock for this product in this list (null or >=0)")
+
+    @field_validator("stoc_produs")
+    @classmethod
+    def validate_stoc_produs(cls, v):
+        # Accept None or any integer >= 0 (pydantic ge=0 enforces non-negative when not None)
+        return v
 
 router = APIRouter()
 
@@ -182,3 +193,41 @@ def add_products_to_list_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)}"
         ) 
+
+
+@router.patch("/{list_id}/products/{product_id}", response_model=dict, responses={
+    200: {"description": "Availability updated"},
+    400: {"description": "Bad request"},
+    401: {"description": "Unauthorized - Authentication required"},
+    403: {"description": "Forbidden - Not enough privileges"},
+    404: {"description": "List or product-in-list not found"},
+    422: {"description": "Validation error (stoc_produs must be null or >=0)"},
+    500: {"description": "Internal server error"},
+})
+def update_list_product_availability_endpoint(
+    list_id: int = Path(..., gt=0, description="The ID of the list"),
+    product_id: int = Path(..., gt=0, description="The ID of the product in the list"),
+    request: UpdateAvailabilityRequest = Body(...),
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        relationship = update_product_availability(
+            db=db,
+            list_id=list_id,
+            product_id=product_id,
+            stoc_produs=request.stoc_produs,
+        )
+        # Minimal, idempotent response; does not alter other fields
+        return {
+            "list_id": list_id,
+            "product_id": product_id,
+            "stoc_produs": relationship.stoc_produs,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )

@@ -1,4 +1,4 @@
-from typing import List as TypeList
+from typing import List as TypeList, Optional
 import os
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -197,6 +197,56 @@ def add_product_to_list(db: Session, list_id: int, product_id: int, stoc_produs:
             detail=f"Database error occurred: {str(e)}"
         )
 
+
+def update_product_availability(db: Session, list_id: int, product_id: int, stoc_produs: Optional[int]) -> ListProductOrdered:
+    """
+    Update only the stoc_produs field on the list–product relationship.
+
+    Accepts None or any non-negative integer (>= 0). Does not modify ordering,
+    category or any other fields.
+
+    Raises 404 if list or relationship does not exist.
+    """
+    # Validate allowed values (defensive, in addition to endpoint validation)
+    if stoc_produs is not None and stoc_produs < 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="stoc_produs must be null or an integer >= 0"
+        )
+
+    # Check if list exists
+    list_obj = db.query(List).filter(List.id == list_id).first()
+    if not list_obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"List with ID {list_id} not found"
+        )
+
+    # Find the existing relationship
+    relationship = db.query(ListProductOrdered).filter(
+        ListProductOrdered.liste_id == list_id,
+        ListProductOrdered.produse_id == product_id
+    ).first()
+
+    if not relationship:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product {product_id} is not in list {list_id}"
+        )
+
+    # Update only stoc_produs
+    relationship.stoc_produs = stoc_produs
+
+    try:
+        db.commit()
+        db.refresh(relationship)
+        return relationship
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error occurred: {str(e)}"
+        )
 
 def remove_product_from_list(db: Session, list_id: int, product_id: int) -> bool:
     """

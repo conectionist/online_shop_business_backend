@@ -70,6 +70,24 @@ class ListRelationshipTestUtils:
             f"Expected {expected_status}, got {response.status_code}: {response.text}"
         )
         return response.json() if expected_status == 201 else None
+
+    def patch_product_availability(self, list_id, product_id, stoc_value, expected_status=200):
+        """PATCH only the stoc_produs field for a product in a list."""
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+
+        payload = {"stoc_produs": stoc_value}
+        response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{self.base_url}/{list_id}/products/{product_id}",
+            json=payload
+        )
+        assert response.status_code == expected_status, (
+            f"Failed to patch availability for product {product_id} in list {list_id}. "
+            f"Expected {expected_status}, got {response.status_code}: {response.text}"
+        )
+        return response.json() if expected_status == 200 else None
     
     def add_delivery_type_to_list(self, list_id, delivery_type_id, expected_status=201):
         """Add a delivery type to a list."""
@@ -456,6 +474,63 @@ def test_list_products_stoc_produs_functionality():
     assert len(products) == 2, "List should have two products"
     product2 = next(p for p in products if p["id"] == product2_id)
     assert product2["stoc_produs"] is None, "Second product should have no stoc_produs"
+
+
+def test_list_product_patch_availability_variants():
+    """
+    Test PATCH endpoint for list–product availability (stoc_produs) supports:
+    - null (available/ignore stock)
+    - 0 (unavailable)
+    - positive integer (future stock usage)
+    """
+    utils = ListRelationshipTestUtils()
+
+    # Create test entities
+    list_data, list_id = utils.create_test_list()
+    product_data, product_id = utils.create_test_product()
+
+    try:
+        # Add product to list with no stock (stoc_produs=None)
+        utils.add_product_to_list(list_id, product_id)
+
+        # 1) Set to 0 (unavailable)
+        resp = utils.patch_product_availability(list_id, product_id, 0)
+        assert resp["list_id"] == list_id
+        assert resp["product_id"] == product_id
+        assert resp["stoc_produs"] == 0
+
+        products = utils.get_list_products(list_id)
+        row = next(p for p in products if p["id"] == product_id)
+        assert row["stoc_produs"] == 0
+
+        # 2) Set to null (available/ignore stock)
+        resp = utils.patch_product_availability(list_id, product_id, None)
+        assert resp["stoc_produs"] is None
+        products = utils.get_list_products(list_id)
+        row = next(p for p in products if p["id"] == product_id)
+        assert row["stoc_produs"] is None
+
+        # 3) Set to a positive integer (e.g., 25)
+        resp = utils.patch_product_availability(list_id, product_id, 25)
+        assert resp["stoc_produs"] == 25
+        products = utils.get_list_products(list_id)
+        row = next(p for p in products if p["id"] == product_id)
+        assert row["stoc_produs"] == 25
+
+        # 4) Validation: negative value should fail with 422
+        # Ensure we're authenticated
+        if not auth_utils.access_token:
+            auth_utils.login()
+        response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{utils.base_url}/{list_id}/products/{product_id}",
+            json={"stoc_produs": -1}
+        )
+        assert response.status_code == 422
+
+    finally:
+        # Clean up - soft delete list
+        utils.list_utils.delete_entity(list_id, hard_delete=False)
 
 
 def test_list_products_stoc_produs_validation():

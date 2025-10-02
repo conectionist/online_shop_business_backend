@@ -11,7 +11,7 @@ class CategoryBase(BaseModel):
     name: Annotated[str, Field(
         description="The name of the category",
         min_length=1,
-        max_length=45,
+        max_length=200,
         examples=["Fruits", "Vegetables", "Dairy"]
     )]
     
@@ -43,7 +43,7 @@ class CategoryUpdate(BaseModel):
         None,
         description="The name of the category",
         min_length=1,
-        max_length=45
+        max_length=200
     )
     
     image_path: Optional[str] = Field(

@@ -35,6 +35,8 @@ services:
       - DB_NAME=${TEST_MYSQL_DATABASE}
       - ENVIRONMENT=test
       - UPLOAD_FOLDER=/app/uploads
+      # Allow public subscribe in test environment to satisfy push_api tests
+      - ALLOW_PUBLIC_PUSH_SUBSCRIBE=true
       # Trusted Hosts for FastAPI TrustedHostMiddleware
       - ALLOWED_HOSTS=${ALLOWED_HOSTS}
       # CORS Configuration

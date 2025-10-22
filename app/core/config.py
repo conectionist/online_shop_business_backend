@@ -94,6 +94,13 @@ VAPID_SUBJECT = get_optional_env_var(
     "Contact subject for VAPID (mailto or URL)"
 )
 
+# Feature flags / guards
+ALLOW_PUBLIC_PUSH_SUBSCRIBE = get_optional_env_var(
+    "ALLOW_PUBLIC_PUSH_SUBSCRIBE",
+    "false",
+    "Allow unauthenticated public push subscriptions"
+).lower() in ("true", "1", "yes")
+
 # For compatibility with the rest of the application
 class Settings:
     def __init__(self):
@@ -121,5 +128,8 @@ class Settings:
         self.VAPID_PUBLIC_KEY = VAPID_PUBLIC_KEY
         self.VAPID_PRIVATE_KEY = VAPID_PRIVATE_KEY
         self.VAPID_SUBJECT = VAPID_SUBJECT
+
+        # Feature flags
+        self.ALLOW_PUBLIC_PUSH_SUBSCRIBE = ALLOW_PUBLIC_PUSH_SUBSCRIBE
 
 settings = Settings()

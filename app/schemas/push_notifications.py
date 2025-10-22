@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from pydantic import BaseModel, Field, conlist
+from typing import Optional, Dict, Any, List
 
 
 class PushSubscriptionKeys(BaseModel):
@@ -29,3 +29,23 @@ class SendNotificationRequest(BaseModel):
     icon: Optional[str] = None
     tag: Optional[str] = None
     event_id: Optional[str] = Field(default=None, max_length=128)
+    ttl_seconds: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=86400,
+        description="Time-to-live in seconds for the push message (1..86400)"
+    )
+
+
+class TopicOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SubscriptionTopicsRequest(BaseModel):
+    subscription_id: int = Field(..., gt=0)
+    topic_ids: conlist(int, min_length=1)

@@ -10,6 +10,8 @@ import random
 from app.core.config import settings
 from app.models.web_push_subscription import WebPushSubscription
 from app.models.notification_log import NotificationLog
+from app.models.notification_topic import NotificationTopic
+from app.models.subscription_topic import SubscriptionTopic
 from app.schemas.push_notifications import PushSubscriptionIn
 
 logger = logging.getLogger(__name__)
@@ -122,6 +124,7 @@ def send_to_subscription(
                 data=json_dumps(payload),
                 vapid_private_key=settings.VAPID_PRIVATE_KEY,
                 vapid_claims={"sub": settings.VAPID_SUBJECT},
+                ttl=payload.get("ttl_seconds") if isinstance(payload, dict) else None,
             )
             logger.info("Push sent endpoint=%s event_id=%s", subscription.endpoint, event_id)
             if event_id and db is not None:
@@ -327,3 +330,125 @@ def json_dumps(data: Dict[str, Any]) -> str:
     import json
 
     return json.dumps(data, separators=(",", ":"))
+
+
+# ---- Topic subscription and routing services ----
+
+def list_notification_topics(db: Session) -> List[NotificationTopic]:
+    """Return all available notification topics."""
+    return db.query(NotificationTopic).order_by(NotificationTopic.id.asc()).all()
+
+
+def subscribe_subscription_to_topics(
+    db: Session,
+    subscription_id: int,
+    topic_ids: List[int],
+) -> int:
+    """Subscribe a WebPush subscription to the given topic IDs.
+
+    Returns number of new mappings created (idempotent - existing pairs are ignored).
+    """
+    if not topic_ids:
+        return 0
+
+    created = 0
+    for topic_id in topic_ids:
+        # Check if mapping exists
+        existing = (
+            db.query(SubscriptionTopic)
+            .filter(
+                SubscriptionTopic.subscription_id == subscription_id,
+                SubscriptionTopic.topic_id == topic_id,
+            )
+            .first()
+        )
+        if existing is None:
+            db.add(SubscriptionTopic(subscription_id=subscription_id, topic_id=topic_id))
+            created += 1
+    if created:
+        db.commit()
+    return created
+
+
+def unsubscribe_subscription_from_topics(
+    db: Session,
+    subscription_id: int,
+    topic_ids: List[int],
+) -> int:
+    """Unsubscribe a subscription from given topic IDs.
+
+    Returns number of mappings removed.
+    """
+    if not topic_ids:
+        return 0
+
+    deleted = (
+        db.query(SubscriptionTopic)
+        .filter(
+            SubscriptionTopic.subscription_id == subscription_id,
+            SubscriptionTopic.topic_id.in_(topic_ids),
+        )
+        .delete(synchronize_session=False)
+    )
+    if deleted:
+        db.commit()
+    return int(deleted or 0)
+
+
+def send_to_subscriptions_by_topic(
+    db: Session,
+    topic_name: str,
+    payload: Dict[str, Any],
+    event_id: Optional[str] = None,
+) -> Dict[str, int]:
+    """Send a notification to all active subscriptions that subscribed to the topic."""
+    topic: Optional[NotificationTopic] = (
+        db.query(NotificationTopic).filter(NotificationTopic.name == topic_name).first()
+    )
+    if not topic:
+        logger.warning("Topic '%s' not found", topic_name)
+        return {"sent": 0, "deactivated": 0}
+
+    # Get subscription IDs subscribed to the topic
+    sub_topic_rows: List[SubscriptionTopic] = (
+        db.query(SubscriptionTopic).filter(SubscriptionTopic.topic_id == topic.id).all()
+    )
+    if not sub_topic_rows:
+        return {"sent": 0, "deactivated": 0}
+
+    subscription_ids = [row.subscription_id for row in sub_topic_rows]
+    subscriptions: List[WebPushSubscription] = (
+        db.query(WebPushSubscription)
+        .filter(
+            WebPushSubscription.id.in_(subscription_ids),
+            WebPushSubscription.is_active == True,  # noqa: E712
+        )
+        .all()
+    )
+
+    sent = 0
+    deactivated = 0
+    for sub in subscriptions:
+        try:
+            delivered_or_skipped = send_to_subscription(sub, payload, event_id=event_id, db=db)
+            if delivered_or_skipped:
+                sent += 1
+            else:
+                logger.error("Push transiently failed after retries endpoint=%s", sub.endpoint)
+        except PushSendError as err:
+            if err.status_code in (404, 410):
+                sub.is_active = False
+                db.add(sub)
+                deactivated += 1
+            else:
+                logger.error(
+                    "Push permanently failed endpoint=%s status=%s", sub.endpoint, err.status_code
+                )
+
+    if deactivated > 0:
+        db.commit()
+
+    logger.info(
+        "Topic send complete topic=%s sent=%s deactivated=%s", topic_name, sent, deactivated
+    )
+    return {"sent": sent, "deactivated": deactivated}

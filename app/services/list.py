@@ -1,4 +1,4 @@
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from typing import List as TypeList, Optional
@@ -114,7 +114,7 @@ def get_list_by_id(
         )
 
 
-def create_list(db: Session, list_data: ListCreate) -> List:
+def create_list(db: Session, list_data: ListCreate, background: BackgroundTasks | None = None) -> List:
     """
     Create a new list.
     
@@ -147,6 +147,32 @@ def create_list(db: Session, list_data: ListCreate) -> List:
         # If this list is being published, unpublish all others AFTER successful creation
         if list_data.is_published:
             _ensure_single_published_list(db, db_list.id)
+            # Notify topic subscribers (fire-and-forget)
+            if background is not None:
+                def _notify_list_published(list_id: int, list_date_str: str):
+                    try:
+                        from app.core.database import SessionLocal
+                        from app.services.push_notifications import send_to_subscriptions_by_topic
+                        session = SessionLocal()
+                        try:
+                            payload = {
+                                "title": "New List Available",
+                                "body": f"List for {list_date_str} is now available",
+                                "data": {"type": "list_published", "list_id": list_id},
+                                "tag": f"list_published_{list_id}",
+                            }
+                            send_to_subscriptions_by_topic(
+                                session,
+                                "list_published",
+                                payload,
+                                event_id=f"list_published_{list_id}"
+                            )
+                        finally:
+                            session.close()
+                    except Exception:
+                        pass
+
+                background.add_task(_notify_list_published, db_list.id, db_list.data.isoformat())
         
         return db_list
     except IntegrityError as e:
@@ -172,7 +198,8 @@ def create_list(db: Session, list_data: ListCreate) -> List:
 def update_list(
     db: Session, 
     list_id: int, 
-    list_data: ListUpdate
+    list_data: ListUpdate,
+    background: BackgroundTasks | None = None,
 ) -> List:
     """
     Update an existing list.
@@ -230,6 +257,32 @@ def update_list(
         # If this list is being published, unpublish all others AFTER successful update
         if 'is_published' in update_data and update_data['is_published'] is True:
             _ensure_single_published_list(db, list_id)
+            # Notify topic subscribers (fire-and-forget)
+            if background is not None:
+                def _notify_list_published(list_id_inner: int, list_date_str: str):
+                    try:
+                        from app.core.database import SessionLocal
+                        from app.services.push_notifications import send_to_subscriptions_by_topic
+                        session = SessionLocal()
+                        try:
+                            payload = {
+                                "title": "New List Available",
+                                "body": f"List for {list_date_str} is now available",
+                                "data": {"type": "list_published", "list_id": list_id_inner},
+                                "tag": f"list_published_{list_id_inner}",
+                            }
+                            send_to_subscriptions_by_topic(
+                                session,
+                                "list_published",
+                                payload,
+                                event_id=f"list_published_{list_id_inner}"
+                            )
+                        finally:
+                            session.close()
+                    except Exception:
+                        pass
+
+                background.add_task(_notify_list_published, db_list.id, db_list.data.isoformat())
         
         return db_list
     except IntegrityError as e:

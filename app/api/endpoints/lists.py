@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status, Path
+from fastapi import APIRouter, Depends, Query, status, Path, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 
@@ -57,11 +57,12 @@ def read_list(
 })
 def create_list_endpoint(
     list_data: ListCreate,
+    background: BackgroundTasks,
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new list"""
-    return create_list(db=db, list_data=list_data)
+    return create_list(db=db, list_data=list_data, background=background)
 
 
 @router.put("/{list_id}", response_model=ListSchema, responses={
@@ -75,11 +76,12 @@ def create_list_endpoint(
 def update_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list to update"),
     list_data: ListUpdate = ...,
+    background: BackgroundTasks = None,
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Update an existing list (PUT - full replacement)"""
-    return update_list(db=db, list_id=list_id, list_data=list_data)
+    return update_list(db=db, list_id=list_id, list_data=list_data, background=background)
 
 
 @router.patch("/{list_id}", response_model=ListSchema, responses={
@@ -93,11 +95,12 @@ def update_list_endpoint(
 def patch_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list to update"),
     list_data: ListUpdate = ...,
+    background: BackgroundTasks = None,
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Partially update an existing list (PATCH - only update provided fields)"""
-    return update_list(db=db, list_id=list_id, list_data=list_data)
+    return update_list(db=db, list_id=list_id, list_data=list_data, background=background)
 
 
 @router.delete("/{list_id}", response_model=Dict[str, str], responses={

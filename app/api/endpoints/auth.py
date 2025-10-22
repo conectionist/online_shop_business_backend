@@ -1,6 +1,6 @@
 """Authentication endpoints for admin login and token management"""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -51,6 +51,7 @@ router = APIRouter()
 })
 def login(
     login_data: LoginRequest,
+    background: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
@@ -77,6 +78,37 @@ def login(
         
         # Create tokens
         tokens = create_admin_tokens(admin)
+
+        # Fire-and-forget: notify admins subscribed to admin_login topic
+        def _notify_admin_login(admin_id: int, admin_username: str):
+            try:
+                from app.core.database import SessionLocal
+                from app.services.push_notifications import send_to_subscriptions_by_topic
+                session = SessionLocal()
+                try:
+                    payload = {
+                        "title": "Admin Login",
+                        "body": f"Admin '{admin_username}' has logged in",
+                        "data": {
+                            "type": "admin_login",
+                            "admin_id": admin_id,
+                            "admin_username": admin_username
+                        },
+                        "tag": f"admin_login_{admin_id}"
+                    }
+                    send_to_subscriptions_by_topic(
+                        session,
+                        "admin_login",
+                        payload,
+                        event_id=f"admin_login_{admin_id}"
+                    )
+                finally:
+                    session.close()
+            except Exception:
+                # Best-effort; do not fail login on notification issues
+                pass
+
+        background.add_task(_notify_admin_login, admin.id, admin.username)
         
         return LoginResponse(
             access_token=tokens["access_token"],

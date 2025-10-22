@@ -94,7 +94,10 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=sha,prefix={{branch}}-
+            # Add PR ref tags like pr-123
+            type=ref,event=pr
+            # Only add branch-prefixed sha on default branch to avoid empty prefix on PR builds
+            type=sha,format=short,prefix={{branch}}-,enable={{is_default_branch}}
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value={{date 'YYYY-MM-DD-HH-mm'}},enable={{is_default_branch}}
             type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}

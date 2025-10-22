@@ -156,8 +156,8 @@ def create_list(db: Session, list_data: ListCreate, background: BackgroundTasks 
                         session = SessionLocal()
                         try:
                             payload = {
-                                "title": "New List Available",
-                                "body": f"List for {list_date_str} is now available",
+                                "title": "Lista noua disponibila!",
+                                "body": f"A fost publicata lista pentru {list_date_str}",
                                 "data": {"type": "list_published", "list_id": list_id},
                                 "tag": f"list_published_{list_id}",
                             }

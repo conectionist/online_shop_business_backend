@@ -4,7 +4,7 @@ import unicodedata
 import re
 import logging
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, BackgroundTasks
 from sqlalchemy import and_, or_, asc, desc
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -362,7 +362,7 @@ def _is_duplicate_order(db: Session, order_in: OrderCreate) -> Optional[OrderMod
     return None
 
 
-def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = None) -> OrderModel:
+def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = None, background: BackgroundTasks | None = None) -> OrderModel:
     try:
         # Prepare items count for pretty summary after creation
         try:
@@ -416,6 +416,34 @@ def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = Non
 
         db.commit()
         db.refresh(db_order)
+
+        # Fire-and-forget: notify admins subscribed to 'new_order' topic
+        if background is not None:
+            def _notify_new_order(order_id: int, items_count_inner: int):
+                try:
+                    from app.core.database import SessionLocal
+                    from app.services.push_notifications import send_to_subscriptions_by_topic
+                    session = SessionLocal()
+                    try:
+                        payload = {
+                            "title": "New Order Received",
+                            "body": f"Order #{order_id} with {items_count_inner} item(s)",
+                            "data": {"type": "new_order", "order_id": order_id},
+                            "tag": f"new_order_{order_id}",
+                        }
+                        send_to_subscriptions_by_topic(
+                            session,
+                            "new_order",
+                            payload,
+                            event_id=f"new_order_{order_id}"
+                        )
+                    finally:
+                        session.close()
+                except Exception:
+                    # Best-effort; do not impact order creation
+                    pass
+
+            background.add_task(_notify_new_order, db_order.id, items_count)
         # Pretty multi-line info log with friendly names
         logger.info(_format_order_for_debug(db, db_order, items_count, source))
         return db_order

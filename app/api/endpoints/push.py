@@ -14,6 +14,7 @@ from app.services.push_notifications import (
     PushSendError,
 )
 from app.services.auth import get_current_admin, Admin
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -32,6 +33,8 @@ def subscribe_customer(
     db: Session = Depends(get_db),
 ):
     """Subscribe to push notifications (customer - no authentication required)."""
+    if not settings.ALLOW_PUBLIC_PUSH_SUBSCRIBE:
+        raise HTTPException(status_code=403, detail="Public subscribe is disabled")
     try:
         # Customer subscription - no user association
         sub = save_or_update_subscription(db, subscription, user_id=None)
@@ -205,3 +208,94 @@ def notify_specific_admin(
     
     background.add_task(_send)
     return {"status": "queued"}
+
+
+# ---- Topic-aware broadcast endpoint (admin only) ----
+from app.services.push_notifications import (
+    send_to_subscriptions_by_topic,
+    broadcast_to_active_subscriptions,
+)
+
+
+@router.post("/broadcast", response_model=dict)
+def broadcast_notification(
+    req: SendNotificationRequest,
+    topic: Optional[str] = None,
+    background: BackgroundTasks = None,
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    payload = {
+        "title": req.title,
+        "body": req.body,
+        "data": req.data or {},
+        "icon": req.icon,
+        "tag": req.event_id or req.tag,
+        "ttl_seconds": req.ttl_seconds,
+    }
+
+    def _send():
+        try:
+            if topic:
+                send_to_subscriptions_by_topic(db, topic, payload, event_id=req.event_id)
+            else:
+                broadcast_to_active_subscriptions(db, payload, event_id=req.event_id)
+        except Exception as e:
+            logger.error("Broadcast failed: %s", str(e))
+
+    background.add_task(_send)
+    return {"status": "queued"}
+
+# ---- Admin-only Topics Management ----
+from app.schemas.push_notifications import TopicOut, SubscriptionTopicsRequest
+from app.services.push_notifications import (
+    list_notification_topics,
+    subscribe_subscription_to_topics,
+    unsubscribe_subscription_from_topics,
+)
+from app.models.web_push_subscription import WebPushSubscription
+
+
+@router.get("/topics", response_model=list[TopicOut])
+def get_topics(
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    topics = list_notification_topics(db)
+    return [TopicOut.model_validate(t) for t in topics]
+
+
+@router.post("/topics/subscribe", response_model=dict)
+def subscribe_topics(
+    body: SubscriptionTopicsRequest,
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    # Ownership check
+    sub = db.query(WebPushSubscription).filter(
+        WebPushSubscription.id == body.subscription_id,
+        WebPushSubscription.user_id == current_admin.id,
+    ).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscription not found for current admin")
+
+    created = subscribe_subscription_to_topics(db, body.subscription_id, body.topic_ids)
+    return {"created": created}
+
+
+@router.delete("/topics/subscribe", response_model=dict)
+def unsubscribe_topics(
+    body: SubscriptionTopicsRequest,
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    # Ownership check
+    sub = db.query(WebPushSubscription).filter(
+        WebPushSubscription.id == body.subscription_id,
+        WebPushSubscription.user_id == current_admin.id,
+    ).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscription not found for current admin")
+
+    removed = unsubscribe_subscription_from_topics(db, body.subscription_id, body.topic_ids)
+    return {"removed": removed}

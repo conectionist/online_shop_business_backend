@@ -1,6 +1,7 @@
 """Authentication endpoints for admin login and token management"""
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -86,6 +87,7 @@ def login(
                 from app.services.push_notifications import send_to_subscriptions_by_topic
                 session = SessionLocal()
                 try:
+                    login_uid = uuid4().hex
                     payload = {
                         "title": "Admin Login",
                         "body": f"Admin '{admin_username}' has logged in",
@@ -94,13 +96,13 @@ def login(
                             "admin_id": admin_id,
                             "admin_username": admin_username
                         },
-                        "tag": f"admin_login_{admin_id}"
+                        "tag": f"admin_login_{admin_id}_{login_uid}"
                     }
                     send_to_subscriptions_by_topic(
                         session,
                         "admin_login",
                         payload,
-                        event_id=f"admin_login_{admin_id}"
+                        event_id=f"admin_login_{admin_id}_{login_uid}"
                     )
                 finally:
                     session.close()

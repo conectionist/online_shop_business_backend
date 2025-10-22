@@ -17,6 +17,7 @@ from app.models.list_product_ordered import ListProductOrdered
 from app.models.unitati import Unitati
 from app.models.delivery_type import DeliveryType
 from app.models.modalitati_plata import ModalitatiPlata
+from app.models.business_details import BusinessDetails
 from app.schemas.order import (
     Order as OrderSchema,
     OrderCreate,
@@ -93,6 +94,133 @@ def _format_order_for_debug(
 
 
  
+
+def _compose_order_push_message_ro(
+    db: Session,
+    order: OrderModel,
+    items_count: int,
+) -> Dict[str, str]:
+    """Compose a Romanian multi-line body similar to WhatsApp/UI order summary.
+
+    Format example:
+    John Doe
+    3 x Gogoasa (21 RON)
+    1 x Briose duble (10 RON)
+    =======================
+    Total: 31 RON
+    Plata cash.
+    Ridicare de la brutărie.
+    28 octombrie 2025
+    """
+    def _format_price_ron(amount_bani: int) -> str:
+        try:
+            # Frontend expects whole-number RON values (no implicit cents scaling here)
+            return f"{amount_bani} RON"
+        except Exception:
+            return "- RON"
+
+    def _format_date_ro(d: datetime) -> str:
+        luni = [
+            "ianuarie", "februarie", "martie", "aprilie", "mai", "iunie",
+            "iulie", "august", "septembrie", "octombrie", "noiembrie", "decembrie",
+        ]
+        try:
+            return f"{d.day} {luni[d.month - 1]} {d.year}"
+        except Exception:
+            return d.strftime("%d.%m.%Y")
+
+    # Header: client name
+    nume_client = (getattr(order, "nume_client", None) or "-").strip()
+
+    # Items lines (line total in RON per item)
+    items_lines: List[str] = []
+    subtotal_ron = 0
+    try:
+        items = db.query(OrderItemModel).filter(OrderItemModel.comenzi_id == order.id).all()
+        for it in items:
+            product = db.query(Product).filter(Product.id == it.produse_id).first()
+            product_name = getattr(product, 'nume', 'Produs')
+            qty = int(getattr(it, 'cantitate_produs', 0) or 0)
+            unit_price_ron = int(getattr(it, 'pret_produs', 0) or 0)
+            line_total_ron = unit_price_ron * qty
+            items_lines.append(f"{qty} x {product_name} ({_format_price_ron(line_total_ron)})")
+            subtotal_ron += line_total_ron
+    except Exception:
+        pass
+
+    separator = "======================="
+
+    # Total line computed with optional delivery tax (added below)
+
+    # Delivery tax from business details (RON)
+    try:
+        business = db.query(BusinessDetails).first()
+        delivery_tax_ron = int(getattr(business, 'delivery_tax', 0) or 0)
+    except Exception:
+        delivery_tax_ron = 0
+
+    # Apply delivery tax ONLY when an address is provided
+    addr_for_tax = (getattr(order, 'delivery_address', None) or '').strip()
+    apply_tax = bool(addr_for_tax)
+    total_ron = subtotal_ron + (delivery_tax_ron if apply_tax else 0)
+
+    # Payment line
+    try:
+        payment = db.query(ModalitatiPlata).filter(ModalitatiPlata.id == order.payment_method_id).first()
+        payment_name = (getattr(payment, 'name', '') or '').strip()
+        payment_line = f"Plata {payment_name.lower()}." if payment_name else "Plata -."
+    except Exception:
+        payment_line = "Plata -."
+
+    # Delivery line
+    try:
+        delivery = db.query(DeliveryType).filter(DeliveryType.id == order.delivery_type_id).first()
+        delivery_name = (getattr(delivery, 'denumire', '') or '').strip()
+        addr = (getattr(order, 'delivery_address', None) or '').strip()
+        if addr:
+            delivery_line = f"Livrare la adresa: {addr}"
+        else:
+            delivery_line = f"{delivery_name}." if delivery_name else "-"
+    except Exception:
+        delivery_line = "-"
+
+    # Date line (list date only; no fallback)
+    date_line = None
+    try:
+        list_obj = db.query(ListModel).filter(ListModel.id == order.liste_id).first()
+        list_date = getattr(list_obj, 'data', None)
+        if isinstance(list_date, datetime):
+            date_line = _format_date_ro(list_date)
+        elif list_date:
+            parsed = datetime.fromisoformat(str(list_date))
+            date_line = _format_date_ro(parsed)
+    except Exception:
+        date_line = None
+
+    # Build body
+    phone_number = getattr(order, 'phone_number', None)
+    notes = getattr(order, 'order_notes', None)
+
+    body_lines: List[str] = [nume_client]
+    body_lines.extend(items_lines)
+    body_lines.append(separator)
+    if apply_tax and delivery_tax_ron > 0:
+        body_lines.append(f"Subtotal: {_format_price_ron(subtotal_ron)}")
+        body_lines.append(f"Taxă livrare: {_format_price_ron(delivery_tax_ron)}")
+    body_lines.append(f"Total: {_format_price_ron(total_ron)}")
+    body_lines.append(payment_line)
+    body_lines.append(delivery_line)
+    if phone_number:
+        body_lines.append(f"Telefon: {phone_number}")
+    if notes:
+        body_lines.append(f"Observații: {notes}")
+    if date_line:
+        body_lines.append(date_line)
+
+    title = "Comandă nouă"
+    body = "\n".join([line for line in body_lines if line])
+    return {"title": title, "body": body}
+
 
 
 def _format_order_failure_for_debug(
@@ -425,9 +553,20 @@ def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = Non
                     from app.services.push_notifications import send_to_subscriptions_by_topic
                     session = SessionLocal()
                     try:
+                        # Fetch order for summary details
+                        order_obj = session.query(OrderModel).filter(OrderModel.id == order_id).first()
+                        if order_obj is not None:
+                            msg = _compose_order_push_message_ro(session, order_obj, items_count_inner)
+                            title = msg["title"]
+                            body = msg["body"]
+                        else:
+                            # Fallback minimal message
+                            title = "Comandă nouă"
+                            body = f"Comandă #{order_id} · {int(items_count_inner or 0)} produse"
+
                         payload = {
-                            "title": "New Order Received",
-                            "body": f"Order #{order_id} with {items_count_inner} item(s)",
+                            "title": title,
+                            "body": body,
                             "data": {"type": "new_order", "order_id": order_id},
                             "tag": f"new_order_{order_id}",
                         }

@@ -23,6 +23,7 @@ This guide explains how a frontend (admin UI) can integrate with the backend pus
 - GET `/api/v1/push/public-key` → VAPID public key
 - POST `/api/v1/push/admin/subscribe` → create admin subscription
 - GET `/api/v1/push/topics` → list topics (admin only)
+- GET `/api/v1/push/admin/topics` → list topics the current admin is subscribed to (aggregated across active subscriptions)
 - POST `/api/v1/push/topics/subscribe` → subscribe a `subscription_id` to topics (admin only)
 - DELETE `/api/v1/push/topics/subscribe` → unsubscribe (admin only)
 - POST `/api/v1/push/broadcast?topic=optional` → topic-aware broadcast (admin only)
@@ -180,6 +181,31 @@ async function subscribeToTopics(adminToken, subscriptionId, topicIds) {
   });
   if (!res.ok) throw new Error('Topic subscribe failed');
   return await res.json(); // { created: n }
+}
+```
+
+### 5) Get Admin's Active Topics (Aggregated)
+
+```bash
+curl -sS -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8000/api/v1/push/admin/topics | jq
+# Example: [ { "id": 1, "name": "admin_login" }, { "id": 3, "name": "list_published" } ]
+```
+
+### 6) Logout Flow: Stop Notifications from This Browser
+
+On logout, deactivate the current browser's subscription so it stops receiving notifications.
+
+```javascript
+const reg = await navigator.serviceWorker.getRegistration();
+const sub = await reg?.pushManager.getSubscription();
+if (sub) {
+  const endpoint = sub.endpoint;
+  await fetch(`/api/v1/push/subscribe?endpoint=${encodeURIComponent(endpoint)}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${adminToken}` },
+    credentials: 'include'
+  });
 }
 ```
 

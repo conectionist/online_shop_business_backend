@@ -339,6 +339,29 @@ def list_notification_topics(db: Session) -> List[NotificationTopic]:
     return db.query(NotificationTopic).order_by(NotificationTopic.id.asc()).all()
 
 
+def list_topics_for_admin(db: Session, admin_id: int) -> List[NotificationTopic]:
+    """Return distinct topics the admin is subscribed to across active subscriptions.
+
+    A topic is included if at least one active WebPush subscription of the admin
+    is subscribed to it via the subscription_topics mapping.
+    """
+    return (
+        db.query(NotificationTopic)
+        .join(SubscriptionTopic, SubscriptionTopic.topic_id == NotificationTopic.id)
+        .join(
+            WebPushSubscription,
+            WebPushSubscription.id == SubscriptionTopic.subscription_id,
+        )
+        .filter(
+            WebPushSubscription.user_id == admin_id,
+            WebPushSubscription.is_active == True,  # noqa: E712
+        )
+        .distinct(NotificationTopic.id)
+        .order_by(NotificationTopic.id.asc())
+        .all()
+    )
+
+
 def subscribe_subscription_to_topics(
     db: Session,
     subscription_id: int,
@@ -394,6 +417,84 @@ def unsubscribe_subscription_from_topics(
         db.commit()
     return int(deleted or 0)
 
+
+def subscribe_admin_to_topics_fanout(
+    db: Session,
+    admin_id: int,
+    topic_ids: List[int],
+) -> int:
+    """Subscribe all ACTIVE subscriptions of the admin to the given topics.
+
+    Returns number of new SubscriptionTopic mappings created (idempotent).
+    """
+    if not topic_ids:
+        return 0
+
+    subscriptions: List[WebPushSubscription] = (
+        db.query(WebPushSubscription)
+        .filter(
+            WebPushSubscription.user_id == admin_id,
+            WebPushSubscription.is_active == True,  # noqa: E712
+        )
+        .all()
+    )
+    if not subscriptions:
+        return 0
+
+    created_total = 0
+    for sub in subscriptions:
+        for topic_id in topic_ids:
+            existing = (
+                db.query(SubscriptionTopic)
+                .filter(
+                    SubscriptionTopic.subscription_id == sub.id,
+                    SubscriptionTopic.topic_id == topic_id,
+                )
+                .first()
+            )
+            if existing is None:
+                db.add(SubscriptionTopic(subscription_id=sub.id, topic_id=topic_id))
+                created_total += 1
+    if created_total:
+        db.commit()
+    return created_total
+
+
+def unsubscribe_admin_from_topics_fanout(
+    db: Session,
+    admin_id: int,
+    topic_ids: List[int],
+) -> int:
+    """Unsubscribe all ACTIVE subscriptions of the admin from the given topics.
+
+    Returns number of mappings removed.
+    """
+    if not topic_ids:
+        return 0
+
+    subscriptions: List[int] = [
+        s.id
+        for s in db.query(WebPushSubscription)
+        .filter(
+            WebPushSubscription.user_id == admin_id,
+            WebPushSubscription.is_active == True,  # noqa: E712
+        )
+        .all()
+    ]
+    if not subscriptions:
+        return 0
+
+    deleted = (
+        db.query(SubscriptionTopic)
+        .filter(
+            SubscriptionTopic.subscription_id.in_(subscriptions),
+            SubscriptionTopic.topic_id.in_(topic_ids),
+        )
+        .delete(synchronize_session=False)
+    )
+    if deleted:
+        db.commit()
+    return int(deleted or 0)
 
 def send_to_subscriptions_by_topic(
     db: Session,

@@ -53,6 +53,19 @@ def subscribe_admin(
     try:
         # Associate subscription with current admin
         sub = save_or_update_subscription(db, subscription, user_id=current_admin.id)
+
+        # Auto-enroll this new subscription to the admin's current active topics
+        try:
+            from app.services.push_notifications import list_topics_for_admin, subscribe_subscription_to_topics
+
+            active_topics = list_topics_for_admin(db, current_admin.id)
+            if active_topics:
+                topic_ids = [t.id for t in active_topics]
+                subscribe_subscription_to_topics(db, sub.id, topic_ids)
+        except Exception:
+            # Best-effort auto-enroll; do not fail subscribe on issues here
+            pass
+
         return PushSubscriptionOut(id=sub.id, endpoint=sub.endpoint, is_active=sub.is_active)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Subscribe failed: {str(e)}")
@@ -250,8 +263,11 @@ def broadcast_notification(
 from app.schemas.push_notifications import TopicOut, SubscriptionTopicsRequest
 from app.services.push_notifications import (
     list_notification_topics,
+    list_topics_for_admin,
     subscribe_subscription_to_topics,
     unsubscribe_subscription_from_topics,
+    subscribe_admin_to_topics_fanout,
+    unsubscribe_admin_from_topics_fanout,
 )
 from app.models.web_push_subscription import WebPushSubscription
 
@@ -263,6 +279,36 @@ def get_topics(
 ):
     topics = list_notification_topics(db)
     return [TopicOut.model_validate(t) for t in topics]
+
+
+@router.get("/admin/topics", response_model=list[TopicOut])
+def get_admin_topics(
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    topics = list_topics_for_admin(db, current_admin.id)
+    return [TopicOut.model_validate(t) for t in topics]
+
+
+@router.post("/admin/topics/subscribe", response_model=dict)
+def subscribe_admin_topics(
+    body: SubscriptionTopicsRequest,
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    # Note: we reuse SubscriptionTopicsRequest to carry topic_ids; subscription_id is ignored here
+    created = subscribe_admin_to_topics_fanout(db, current_admin.id, body.topic_ids)
+    return {"created": created}
+
+
+@router.delete("/admin/topics/subscribe", response_model=dict)
+def unsubscribe_admin_topics(
+    body: SubscriptionTopicsRequest,
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    removed = unsubscribe_admin_from_topics_fanout(db, current_admin.id, body.topic_ids)
+    return {"removed": removed}
 
 
 @router.post("/topics/subscribe", response_model=dict)

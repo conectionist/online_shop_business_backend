@@ -12,6 +12,7 @@ services:
       - DEBUG=1
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - ENVIRONMENT=development
+      - FRONTEND_URL=${FRONTEND_URL}
       - DB_HOST=db_debug
       - DB_PORT=3306
       - DB_USER=${MYSQL_USER}

@@ -38,6 +38,10 @@ else:
     # Fallback to wildcard to preserve previous behavior that included "*"
     ALLOWED_HOSTS = ["*"]
 
+# Frontend URL (used by clients, links in notifications, etc.)
+_frontend_url_raw = os.getenv("FRONTEND_URL", "").strip()
+FRONTEND_URL = _frontend_url_raw if _frontend_url_raw else "http://localhost:3000"
+
 # JWT Configuration - Fail fast if not configured
 def get_required_env_var(var_name: str, description: str) -> str:
     """Get a required environment variable or exit gracefully if missing"""
@@ -110,6 +114,7 @@ class Settings:
         self.API_DESCRIPTION = API_DESCRIPTION
         self.CORS_ORIGINS = CORS_ORIGINS
         self.ALLOWED_HOSTS = ALLOWED_HOSTS
+        self.FRONTEND_URL = FRONTEND_URL
         
         # JWT Settings
         self.JWT_SECRET_KEY = JWT_SECRET_KEY

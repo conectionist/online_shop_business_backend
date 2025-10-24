@@ -34,6 +34,7 @@ services:
       - DB_PASSWORD=${TEST_MYSQL_PASSWORD}
       - DB_NAME=${TEST_MYSQL_DATABASE}
       - ENVIRONMENT=test
+      - FRONTEND_URL=${TEST_FRONTEND_URL}
       - UPLOAD_FOLDER=/app/uploads
       # Allow public subscribe in test environment to satisfy push_api tests
       - ALLOW_PUBLIC_PUSH_SUBSCRIBE=true

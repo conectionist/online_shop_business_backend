@@ -18,6 +18,7 @@ from app.models.unitati import Unitati
 from app.models.delivery_type import DeliveryType
 from app.models.modalitati_plata import ModalitatiPlata
 from app.models.business_details import BusinessDetails
+from app.core.config import settings
 from app.schemas.order import (
     Order as OrderSchema,
     OrderCreate,
@@ -564,10 +565,27 @@ def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = Non
                             title = "Comandă nouă"
                             body = f"Comandă #{order_id} · {int(items_count_inner or 0)} produse"
 
+                        # Compose frontend link:
+                        # If both IDs are available: {FRONTEND_URL}/admin/lists/{list_id}/manage?tab=orders&highlight_order={order_id}
+                        # Otherwise, fall back to lists root: {FRONTEND_URL}/admin/lists/
+                        try:
+                            list_id = int(getattr(order_obj, 'liste_id', 0) or 0)
+                        except Exception:
+                            list_id = 0
+                        try:
+                            order_id_int = int(order_id or 0)
+                        except Exception:
+                            order_id_int = 0
+                        base_url = settings.FRONTEND_URL.rstrip('/')
+                        if list_id > 0 and order_id_int > 0:
+                            order_link = f"{base_url}/admin/lists/{list_id}/manage?tab=orders&highlight_order={order_id_int}"
+                        else:
+                            order_link = f"{base_url}/admin/lists/"
+
                         payload = {
                             "title": title,
                             "body": body,
-                            "data": {"type": "new_order", "order_id": order_id},
+                            "data": {"type": "new_order", "order_id": order_id, "url": order_link},
                             "tag": f"new_order_{order_id}",
                         }
                         send_to_subscriptions_by_topic(

@@ -21,13 +21,15 @@ class PaymentMethodTestUtils:
         short_uuid = str(uuid.uuid4())[:8]
         return f"{prefix}-{short_uuid}"
     
-    def create_entity(self, name=None, description=None):
+    def create_entity(self, name=None, description=None, payment_type_id=0, required_data=None):
         """
         Create a new payment method with the given name and description.
         
         Args:
             name: Internal name for the payment method, will generate unique if None
             description: Display description, will use name if None
+            payment_type_id: Payment type ID (default 0 = custom)
+            required_data: Optional required data JSON dict
             
         Returns:
             Tuple of (entity_data, entity_id)
@@ -40,11 +42,19 @@ class PaymentMethodTestUtils:
         # Ensure we're authenticated
         if not auth_utils.access_token:
             auth_utils.login()
+        
+        payload = {
+            "name": name,
+            "description": description,
+            "payment_type_id": payment_type_id
+        }
+        if required_data is not None:
+            payload["required_data"] = required_data
             
         create_response = auth_utils.make_authenticated_request(
             "POST",
             f"{self.base_url}/",
-            json={"name": name, "description": description}
+            json=payload
         )
         assert create_response.status_code == 201, (
             f"Failed to create {self.entity_name}. "
@@ -55,6 +65,9 @@ class PaymentMethodTestUtils:
         assert "id" in created_entity
         assert created_entity["name"] == name
         assert created_entity["description"] == description
+        assert created_entity["payment_type_id"] == payment_type_id
+        if required_data is not None:
+            assert created_entity["required_data"] == required_data
         
         return created_entity, created_entity["id"]
     
@@ -178,6 +191,206 @@ def test_patch_with_valid_data():
         payment_method_utils.delete_entity(entity_id)
 
 
+def test_payment_method_with_payment_type_id():
+    """Test creating payment method with payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=1  # Cash
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 1
+        assert "required_fields_schema" in created_entity
+        # Cash should have no required fields
+        assert created_entity["required_fields_schema"] is None
+        
+        # Verify in GET response
+        retrieved = payment_method_utils.get_entity(entity_id)
+        assert retrieved["payment_type_id"] == 1
+        assert retrieved["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_with_revolut_type_and_phone():
+    """Test creating payment method with Revolut type and phone_number in required_data"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=4,  # Revolut
+        required_data={"phone_number": "0740123456"}
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 4
+        assert created_entity["required_data"] == {"phone_number": "0740123456"}
+        assert "required_fields_schema" in created_entity
+        # Revolut should have phone_number field schema
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "phone_number" in schema
+        assert schema["phone_number"]["label"] == "Număr de telefon"
+        assert schema["phone_number"]["type"] == "tel"
+        assert schema["phone_number"]["required"] is True
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_revolut_missing_phone_number():
+    """Test that Revolut payment method requires phone_number in required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("revolut"),
+            "description": "Revolut without phone",
+            "payment_type_id": 4,  # Revolut
+            "required_data": {}  # Missing phone_number
+        }
+    )
+    assert response.status_code == 400, "Should reject Revolut without phone_number"
+    error = response.json()
+    assert "phone_number" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_with_iban_and_recipient():
+    """Test creating payment method with bank_transfer type and required fields"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=5,  # Bank Transfer
+        required_data={
+            "iban": "RO49AAAA1B31007593840000",
+            "recipient_name": "Test Recipient"
+        }
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 5
+        assert created_entity["required_data"]["iban"] == "RO49AAAA1B31007593840000"
+        assert created_entity["required_data"]["recipient_name"] == "Test Recipient"
+        assert "required_fields_schema" in created_entity
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "iban" in schema
+        assert "recipient_name" in schema
+        assert schema["iban"]["label"] == "IBAN"
+        assert schema["recipient_name"]["label"] == "Nume destinatar"
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_bank_transfer_missing_iban():
+    """Test that bank_transfer payment method requires iban"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without IBAN",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "recipient_name": "Test"
+                # Missing iban
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without iban"
+    error = response.json()
+    assert "iban" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_missing_recipient_name():
+    """Test that bank_transfer payment method requires recipient_name"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without recipient",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "iban": "RO49AAAA1B31007593840000"
+                # Missing recipient_name
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without recipient_name"
+    error = response.json()
+    assert "recipient_name" in error["detail"].lower()
+
+
+def test_payment_method_cash_with_required_data_fails():
+    """Test that cash payment method cannot have required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("cash"),
+            "description": "Cash with data",
+            "payment_type_id": 1,  # Cash
+            "required_data": {"some_field": "value"}  # Should not be allowed
+        }
+    )
+    assert response.status_code == 400, "Should reject cash with required_data"
+    error = response.json()
+    assert "required_data" in error["detail"].lower()
+
+
+def test_payment_method_update_payment_type():
+    """Test updating payment method payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=0  # Custom
+    )
+    
+    try:
+        # Update to cash
+        if not auth_utils.access_token:
+            auth_utils.login()
+        
+        update_response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{payment_method_utils.base_url}/{entity_id}",
+            json={"payment_type_id": 1}  # Cash
+        )
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["payment_type_id"] == 1
+        assert updated["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_invalid_payment_type_id():
+    """Test that invalid payment_type_id is rejected"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("invalid"),
+            "description": "Invalid payment type",
+            "payment_type_id": 999  # Non-existent
+        }
+    )
+    assert response.status_code == 400, "Should reject invalid payment_type_id"
+    error = response.json()
+    assert "payment type" in error["detail"].lower() or "does not exist" in error["detail"].lower()
+
+
 def test_patch_with_empty_json():
     """
     Test PATCH with empty JSON (should return 400 - no valid fields to update).
@@ -204,6 +417,206 @@ def test_patch_with_empty_json():
     finally:
         # Clean up
         payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_with_payment_type_id():
+    """Test creating payment method with payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=1  # Cash
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 1
+        assert "required_fields_schema" in created_entity
+        # Cash should have no required fields
+        assert created_entity["required_fields_schema"] is None
+        
+        # Verify in GET response
+        retrieved = payment_method_utils.get_entity(entity_id)
+        assert retrieved["payment_type_id"] == 1
+        assert retrieved["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_with_revolut_type_and_phone():
+    """Test creating payment method with Revolut type and phone_number in required_data"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=4,  # Revolut
+        required_data={"phone_number": "0740123456"}
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 4
+        assert created_entity["required_data"] == {"phone_number": "0740123456"}
+        assert "required_fields_schema" in created_entity
+        # Revolut should have phone_number field schema
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "phone_number" in schema
+        assert schema["phone_number"]["label"] == "Număr de telefon"
+        assert schema["phone_number"]["type"] == "tel"
+        assert schema["phone_number"]["required"] is True
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_revolut_missing_phone_number():
+    """Test that Revolut payment method requires phone_number in required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("revolut"),
+            "description": "Revolut without phone",
+            "payment_type_id": 4,  # Revolut
+            "required_data": {}  # Missing phone_number
+        }
+    )
+    assert response.status_code == 400, "Should reject Revolut without phone_number"
+    error = response.json()
+    assert "phone_number" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_with_iban_and_recipient():
+    """Test creating payment method with bank_transfer type and required fields"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=5,  # Bank Transfer
+        required_data={
+            "iban": "RO49AAAA1B31007593840000",
+            "recipient_name": "Test Recipient"
+        }
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 5
+        assert created_entity["required_data"]["iban"] == "RO49AAAA1B31007593840000"
+        assert created_entity["required_data"]["recipient_name"] == "Test Recipient"
+        assert "required_fields_schema" in created_entity
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "iban" in schema
+        assert "recipient_name" in schema
+        assert schema["iban"]["label"] == "IBAN"
+        assert schema["recipient_name"]["label"] == "Nume destinatar"
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_bank_transfer_missing_iban():
+    """Test that bank_transfer payment method requires iban"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without IBAN",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "recipient_name": "Test"
+                # Missing iban
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without iban"
+    error = response.json()
+    assert "iban" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_missing_recipient_name():
+    """Test that bank_transfer payment method requires recipient_name"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without recipient",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "iban": "RO49AAAA1B31007593840000"
+                # Missing recipient_name
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without recipient_name"
+    error = response.json()
+    assert "recipient_name" in error["detail"].lower()
+
+
+def test_payment_method_cash_with_required_data_fails():
+    """Test that cash payment method cannot have required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("cash"),
+            "description": "Cash with data",
+            "payment_type_id": 1,  # Cash
+            "required_data": {"some_field": "value"}  # Should not be allowed
+        }
+    )
+    assert response.status_code == 400, "Should reject cash with required_data"
+    error = response.json()
+    assert "required_data" in error["detail"].lower()
+
+
+def test_payment_method_update_payment_type():
+    """Test updating payment method payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=0  # Custom
+    )
+    
+    try:
+        # Update to cash
+        if not auth_utils.access_token:
+            auth_utils.login()
+        
+        update_response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{payment_method_utils.base_url}/{entity_id}",
+            json={"payment_type_id": 1}  # Cash
+        )
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["payment_type_id"] == 1
+        assert updated["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_invalid_payment_type_id():
+    """Test that invalid payment_type_id is rejected"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("invalid"),
+            "description": "Invalid payment type",
+            "payment_type_id": 999  # Non-existent
+        }
+    )
+    assert response.status_code == 400, "Should reject invalid payment_type_id"
+    error = response.json()
+    assert "payment type" in error["detail"].lower() or "does not exist" in error["detail"].lower()
 
 
 def test_patch_with_non_existent_payment_method():
@@ -247,6 +660,206 @@ def test_patch_with_invalid_data():
         payment_method_utils.delete_entity(entity_id)
 
 
+def test_payment_method_with_payment_type_id():
+    """Test creating payment method with payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=1  # Cash
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 1
+        assert "required_fields_schema" in created_entity
+        # Cash should have no required fields
+        assert created_entity["required_fields_schema"] is None
+        
+        # Verify in GET response
+        retrieved = payment_method_utils.get_entity(entity_id)
+        assert retrieved["payment_type_id"] == 1
+        assert retrieved["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_with_revolut_type_and_phone():
+    """Test creating payment method with Revolut type and phone_number in required_data"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=4,  # Revolut
+        required_data={"phone_number": "0740123456"}
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 4
+        assert created_entity["required_data"] == {"phone_number": "0740123456"}
+        assert "required_fields_schema" in created_entity
+        # Revolut should have phone_number field schema
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "phone_number" in schema
+        assert schema["phone_number"]["label"] == "Număr de telefon"
+        assert schema["phone_number"]["type"] == "tel"
+        assert schema["phone_number"]["required"] is True
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_revolut_missing_phone_number():
+    """Test that Revolut payment method requires phone_number in required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("revolut"),
+            "description": "Revolut without phone",
+            "payment_type_id": 4,  # Revolut
+            "required_data": {}  # Missing phone_number
+        }
+    )
+    assert response.status_code == 400, "Should reject Revolut without phone_number"
+    error = response.json()
+    assert "phone_number" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_with_iban_and_recipient():
+    """Test creating payment method with bank_transfer type and required fields"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=5,  # Bank Transfer
+        required_data={
+            "iban": "RO49AAAA1B31007593840000",
+            "recipient_name": "Test Recipient"
+        }
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 5
+        assert created_entity["required_data"]["iban"] == "RO49AAAA1B31007593840000"
+        assert created_entity["required_data"]["recipient_name"] == "Test Recipient"
+        assert "required_fields_schema" in created_entity
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "iban" in schema
+        assert "recipient_name" in schema
+        assert schema["iban"]["label"] == "IBAN"
+        assert schema["recipient_name"]["label"] == "Nume destinatar"
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_bank_transfer_missing_iban():
+    """Test that bank_transfer payment method requires iban"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without IBAN",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "recipient_name": "Test"
+                # Missing iban
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without iban"
+    error = response.json()
+    assert "iban" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_missing_recipient_name():
+    """Test that bank_transfer payment method requires recipient_name"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without recipient",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "iban": "RO49AAAA1B31007593840000"
+                # Missing recipient_name
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without recipient_name"
+    error = response.json()
+    assert "recipient_name" in error["detail"].lower()
+
+
+def test_payment_method_cash_with_required_data_fails():
+    """Test that cash payment method cannot have required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("cash"),
+            "description": "Cash with data",
+            "payment_type_id": 1,  # Cash
+            "required_data": {"some_field": "value"}  # Should not be allowed
+        }
+    )
+    assert response.status_code == 400, "Should reject cash with required_data"
+    error = response.json()
+    assert "required_data" in error["detail"].lower()
+
+
+def test_payment_method_update_payment_type():
+    """Test updating payment method payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=0  # Custom
+    )
+    
+    try:
+        # Update to cash
+        if not auth_utils.access_token:
+            auth_utils.login()
+        
+        update_response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{payment_method_utils.base_url}/{entity_id}",
+            json={"payment_type_id": 1}  # Cash
+        )
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["payment_type_id"] == 1
+        assert updated["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_invalid_payment_type_id():
+    """Test that invalid payment_type_id is rejected"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("invalid"),
+            "description": "Invalid payment type",
+            "payment_type_id": 999  # Non-existent
+        }
+    )
+    assert response.status_code == 400, "Should reject invalid payment_type_id"
+    error = response.json()
+    assert "payment type" in error["detail"].lower() or "does not exist" in error["detail"].lower()
+
+
 def test_patch_with_duplicate_name():
     """
     Test PATCH with duplicate name (should fail).
@@ -267,8 +880,8 @@ def test_patch_with_duplicate_name():
             f"{payment_method_utils.base_url}/{first_id}",
             json={"name": second_name}
         )
-        assert duplicate_patch_response.status_code == 400, (
-            f"PATCH with duplicate name should return 400, got {duplicate_patch_response.status_code}"
+        assert duplicate_patch_response.status_code == 409, (
+            f"PATCH with duplicate name should return 409, got {duplicate_patch_response.status_code}"
         )
         
         # Verify the error message
@@ -308,6 +921,206 @@ def test_patch_with_partial_data_works():
         payment_method_utils.delete_entity(entity_id)
 
 
+def test_payment_method_with_payment_type_id():
+    """Test creating payment method with payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=1  # Cash
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 1
+        assert "required_fields_schema" in created_entity
+        # Cash should have no required fields
+        assert created_entity["required_fields_schema"] is None
+        
+        # Verify in GET response
+        retrieved = payment_method_utils.get_entity(entity_id)
+        assert retrieved["payment_type_id"] == 1
+        assert retrieved["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_with_revolut_type_and_phone():
+    """Test creating payment method with Revolut type and phone_number in required_data"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=4,  # Revolut
+        required_data={"phone_number": "0740123456"}
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 4
+        assert created_entity["required_data"] == {"phone_number": "0740123456"}
+        assert "required_fields_schema" in created_entity
+        # Revolut should have phone_number field schema
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "phone_number" in schema
+        assert schema["phone_number"]["label"] == "Număr de telefon"
+        assert schema["phone_number"]["type"] == "tel"
+        assert schema["phone_number"]["required"] is True
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_revolut_missing_phone_number():
+    """Test that Revolut payment method requires phone_number in required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("revolut"),
+            "description": "Revolut without phone",
+            "payment_type_id": 4,  # Revolut
+            "required_data": {}  # Missing phone_number
+        }
+    )
+    assert response.status_code == 400, "Should reject Revolut without phone_number"
+    error = response.json()
+    assert "phone_number" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_with_iban_and_recipient():
+    """Test creating payment method with bank_transfer type and required fields"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=5,  # Bank Transfer
+        required_data={
+            "iban": "RO49AAAA1B31007593840000",
+            "recipient_name": "Test Recipient"
+        }
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 5
+        assert created_entity["required_data"]["iban"] == "RO49AAAA1B31007593840000"
+        assert created_entity["required_data"]["recipient_name"] == "Test Recipient"
+        assert "required_fields_schema" in created_entity
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "iban" in schema
+        assert "recipient_name" in schema
+        assert schema["iban"]["label"] == "IBAN"
+        assert schema["recipient_name"]["label"] == "Nume destinatar"
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_bank_transfer_missing_iban():
+    """Test that bank_transfer payment method requires iban"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without IBAN",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "recipient_name": "Test"
+                # Missing iban
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without iban"
+    error = response.json()
+    assert "iban" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_missing_recipient_name():
+    """Test that bank_transfer payment method requires recipient_name"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without recipient",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "iban": "RO49AAAA1B31007593840000"
+                # Missing recipient_name
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without recipient_name"
+    error = response.json()
+    assert "recipient_name" in error["detail"].lower()
+
+
+def test_payment_method_cash_with_required_data_fails():
+    """Test that cash payment method cannot have required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("cash"),
+            "description": "Cash with data",
+            "payment_type_id": 1,  # Cash
+            "required_data": {"some_field": "value"}  # Should not be allowed
+        }
+    )
+    assert response.status_code == 400, "Should reject cash with required_data"
+    error = response.json()
+    assert "required_data" in error["detail"].lower()
+
+
+def test_payment_method_update_payment_type():
+    """Test updating payment method payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=0  # Custom
+    )
+    
+    try:
+        # Update to cash
+        if not auth_utils.access_token:
+            auth_utils.login()
+        
+        update_response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{payment_method_utils.base_url}/{entity_id}",
+            json={"payment_type_id": 1}  # Cash
+        )
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["payment_type_id"] == 1
+        assert updated["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_invalid_payment_type_id():
+    """Test that invalid payment_type_id is rejected"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("invalid"),
+            "description": "Invalid payment type",
+            "payment_type_id": 999  # Non-existent
+        }
+    )
+    assert response.status_code == 400, "Should reject invalid payment_type_id"
+    error = response.json()
+    assert "payment type" in error["detail"].lower() or "does not exist" in error["detail"].lower()
+
+
 def test_put_with_empty_json_fails():
     """
     Test that PUT rejects empty JSON.
@@ -336,6 +1149,206 @@ def test_put_with_empty_json_fails():
         payment_method_utils.delete_entity(entity_id)
 
 
+def test_payment_method_with_payment_type_id():
+    """Test creating payment method with payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=1  # Cash
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 1
+        assert "required_fields_schema" in created_entity
+        # Cash should have no required fields
+        assert created_entity["required_fields_schema"] is None
+        
+        # Verify in GET response
+        retrieved = payment_method_utils.get_entity(entity_id)
+        assert retrieved["payment_type_id"] == 1
+        assert retrieved["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_with_revolut_type_and_phone():
+    """Test creating payment method with Revolut type and phone_number in required_data"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=4,  # Revolut
+        required_data={"phone_number": "0740123456"}
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 4
+        assert created_entity["required_data"] == {"phone_number": "0740123456"}
+        assert "required_fields_schema" in created_entity
+        # Revolut should have phone_number field schema
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "phone_number" in schema
+        assert schema["phone_number"]["label"] == "Număr de telefon"
+        assert schema["phone_number"]["type"] == "tel"
+        assert schema["phone_number"]["required"] is True
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_revolut_missing_phone_number():
+    """Test that Revolut payment method requires phone_number in required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("revolut"),
+            "description": "Revolut without phone",
+            "payment_type_id": 4,  # Revolut
+            "required_data": {}  # Missing phone_number
+        }
+    )
+    assert response.status_code == 400, "Should reject Revolut without phone_number"
+    error = response.json()
+    assert "phone_number" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_with_iban_and_recipient():
+    """Test creating payment method with bank_transfer type and required fields"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=5,  # Bank Transfer
+        required_data={
+            "iban": "RO49AAAA1B31007593840000",
+            "recipient_name": "Test Recipient"
+        }
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 5
+        assert created_entity["required_data"]["iban"] == "RO49AAAA1B31007593840000"
+        assert created_entity["required_data"]["recipient_name"] == "Test Recipient"
+        assert "required_fields_schema" in created_entity
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "iban" in schema
+        assert "recipient_name" in schema
+        assert schema["iban"]["label"] == "IBAN"
+        assert schema["recipient_name"]["label"] == "Nume destinatar"
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_bank_transfer_missing_iban():
+    """Test that bank_transfer payment method requires iban"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without IBAN",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "recipient_name": "Test"
+                # Missing iban
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without iban"
+    error = response.json()
+    assert "iban" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_missing_recipient_name():
+    """Test that bank_transfer payment method requires recipient_name"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without recipient",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "iban": "RO49AAAA1B31007593840000"
+                # Missing recipient_name
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without recipient_name"
+    error = response.json()
+    assert "recipient_name" in error["detail"].lower()
+
+
+def test_payment_method_cash_with_required_data_fails():
+    """Test that cash payment method cannot have required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("cash"),
+            "description": "Cash with data",
+            "payment_type_id": 1,  # Cash
+            "required_data": {"some_field": "value"}  # Should not be allowed
+        }
+    )
+    assert response.status_code == 400, "Should reject cash with required_data"
+    error = response.json()
+    assert "required_data" in error["detail"].lower()
+
+
+def test_payment_method_update_payment_type():
+    """Test updating payment method payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=0  # Custom
+    )
+    
+    try:
+        # Update to cash
+        if not auth_utils.access_token:
+            auth_utils.login()
+        
+        update_response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{payment_method_utils.base_url}/{entity_id}",
+            json={"payment_type_id": 1}  # Cash
+        )
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["payment_type_id"] == 1
+        assert updated["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_invalid_payment_type_id():
+    """Test that invalid payment_type_id is rejected"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("invalid"),
+            "description": "Invalid payment type",
+            "payment_type_id": 999  # Non-existent
+        }
+    )
+    assert response.status_code == 400, "Should reject invalid payment_type_id"
+    error = response.json()
+    assert "payment type" in error["detail"].lower() or "does not exist" in error["detail"].lower()
+
+
 def test_put_with_complete_data_works():
     """
     Test that PUT accepts complete data.
@@ -361,6 +1374,206 @@ def test_put_with_complete_data_works():
     finally:
         # Clean up
         payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_with_payment_type_id():
+    """Test creating payment method with payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=1  # Cash
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 1
+        assert "required_fields_schema" in created_entity
+        # Cash should have no required fields
+        assert created_entity["required_fields_schema"] is None
+        
+        # Verify in GET response
+        retrieved = payment_method_utils.get_entity(entity_id)
+        assert retrieved["payment_type_id"] == 1
+        assert retrieved["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_with_revolut_type_and_phone():
+    """Test creating payment method with Revolut type and phone_number in required_data"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=4,  # Revolut
+        required_data={"phone_number": "0740123456"}
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 4
+        assert created_entity["required_data"] == {"phone_number": "0740123456"}
+        assert "required_fields_schema" in created_entity
+        # Revolut should have phone_number field schema
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "phone_number" in schema
+        assert schema["phone_number"]["label"] == "Număr de telefon"
+        assert schema["phone_number"]["type"] == "tel"
+        assert schema["phone_number"]["required"] is True
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_revolut_missing_phone_number():
+    """Test that Revolut payment method requires phone_number in required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("revolut"),
+            "description": "Revolut without phone",
+            "payment_type_id": 4,  # Revolut
+            "required_data": {}  # Missing phone_number
+        }
+    )
+    assert response.status_code == 400, "Should reject Revolut without phone_number"
+    error = response.json()
+    assert "phone_number" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_with_iban_and_recipient():
+    """Test creating payment method with bank_transfer type and required fields"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=5,  # Bank Transfer
+        required_data={
+            "iban": "RO49AAAA1B31007593840000",
+            "recipient_name": "Test Recipient"
+        }
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 5
+        assert created_entity["required_data"]["iban"] == "RO49AAAA1B31007593840000"
+        assert created_entity["required_data"]["recipient_name"] == "Test Recipient"
+        assert "required_fields_schema" in created_entity
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "iban" in schema
+        assert "recipient_name" in schema
+        assert schema["iban"]["label"] == "IBAN"
+        assert schema["recipient_name"]["label"] == "Nume destinatar"
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_bank_transfer_missing_iban():
+    """Test that bank_transfer payment method requires iban"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without IBAN",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "recipient_name": "Test"
+                # Missing iban
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without iban"
+    error = response.json()
+    assert "iban" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_missing_recipient_name():
+    """Test that bank_transfer payment method requires recipient_name"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without recipient",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "iban": "RO49AAAA1B31007593840000"
+                # Missing recipient_name
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without recipient_name"
+    error = response.json()
+    assert "recipient_name" in error["detail"].lower()
+
+
+def test_payment_method_cash_with_required_data_fails():
+    """Test that cash payment method cannot have required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("cash"),
+            "description": "Cash with data",
+            "payment_type_id": 1,  # Cash
+            "required_data": {"some_field": "value"}  # Should not be allowed
+        }
+    )
+    assert response.status_code == 400, "Should reject cash with required_data"
+    error = response.json()
+    assert "required_data" in error["detail"].lower()
+
+
+def test_payment_method_update_payment_type():
+    """Test updating payment method payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=0  # Custom
+    )
+    
+    try:
+        # Update to cash
+        if not auth_utils.access_token:
+            auth_utils.login()
+        
+        update_response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{payment_method_utils.base_url}/{entity_id}",
+            json={"payment_type_id": 1}  # Cash
+        )
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["payment_type_id"] == 1
+        assert updated["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_invalid_payment_type_id():
+    """Test that invalid payment_type_id is rejected"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("invalid"),
+            "description": "Invalid payment type",
+            "payment_type_id": 999  # Non-existent
+        }
+    )
+    assert response.status_code == 400, "Should reject invalid payment_type_id"
+    error = response.json()
+    assert "payment type" in error["detail"].lower() or "does not exist" in error["detail"].lower()
 
 
 def test_payment_method_crud_workflow():
@@ -417,6 +1630,206 @@ def test_payment_method_list_and_pagination():
         payment_method_utils.delete_entity(entity_id)
 
 
+def test_payment_method_with_payment_type_id():
+    """Test creating payment method with payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=1  # Cash
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 1
+        assert "required_fields_schema" in created_entity
+        # Cash should have no required fields
+        assert created_entity["required_fields_schema"] is None
+        
+        # Verify in GET response
+        retrieved = payment_method_utils.get_entity(entity_id)
+        assert retrieved["payment_type_id"] == 1
+        assert retrieved["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_with_revolut_type_and_phone():
+    """Test creating payment method with Revolut type and phone_number in required_data"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=4,  # Revolut
+        required_data={"phone_number": "0740123456"}
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 4
+        assert created_entity["required_data"] == {"phone_number": "0740123456"}
+        assert "required_fields_schema" in created_entity
+        # Revolut should have phone_number field schema
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "phone_number" in schema
+        assert schema["phone_number"]["label"] == "Număr de telefon"
+        assert schema["phone_number"]["type"] == "tel"
+        assert schema["phone_number"]["required"] is True
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_revolut_missing_phone_number():
+    """Test that Revolut payment method requires phone_number in required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("revolut"),
+            "description": "Revolut without phone",
+            "payment_type_id": 4,  # Revolut
+            "required_data": {}  # Missing phone_number
+        }
+    )
+    assert response.status_code == 400, "Should reject Revolut without phone_number"
+    error = response.json()
+    assert "phone_number" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_with_iban_and_recipient():
+    """Test creating payment method with bank_transfer type and required fields"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=5,  # Bank Transfer
+        required_data={
+            "iban": "RO49AAAA1B31007593840000",
+            "recipient_name": "Test Recipient"
+        }
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 5
+        assert created_entity["required_data"]["iban"] == "RO49AAAA1B31007593840000"
+        assert created_entity["required_data"]["recipient_name"] == "Test Recipient"
+        assert "required_fields_schema" in created_entity
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "iban" in schema
+        assert "recipient_name" in schema
+        assert schema["iban"]["label"] == "IBAN"
+        assert schema["recipient_name"]["label"] == "Nume destinatar"
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_bank_transfer_missing_iban():
+    """Test that bank_transfer payment method requires iban"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without IBAN",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "recipient_name": "Test"
+                # Missing iban
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without iban"
+    error = response.json()
+    assert "iban" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_missing_recipient_name():
+    """Test that bank_transfer payment method requires recipient_name"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without recipient",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "iban": "RO49AAAA1B31007593840000"
+                # Missing recipient_name
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without recipient_name"
+    error = response.json()
+    assert "recipient_name" in error["detail"].lower()
+
+
+def test_payment_method_cash_with_required_data_fails():
+    """Test that cash payment method cannot have required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("cash"),
+            "description": "Cash with data",
+            "payment_type_id": 1,  # Cash
+            "required_data": {"some_field": "value"}  # Should not be allowed
+        }
+    )
+    assert response.status_code == 400, "Should reject cash with required_data"
+    error = response.json()
+    assert "required_data" in error["detail"].lower()
+
+
+def test_payment_method_update_payment_type():
+    """Test updating payment method payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=0  # Custom
+    )
+    
+    try:
+        # Update to cash
+        if not auth_utils.access_token:
+            auth_utils.login()
+        
+        update_response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{payment_method_utils.base_url}/{entity_id}",
+            json={"payment_type_id": 1}  # Cash
+        )
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["payment_type_id"] == 1
+        assert updated["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_invalid_payment_type_id():
+    """Test that invalid payment_type_id is rejected"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("invalid"),
+            "description": "Invalid payment type",
+            "payment_type_id": 999  # Non-existent
+        }
+    )
+    assert response.status_code == 400, "Should reject invalid payment_type_id"
+    error = response.json()
+    assert "payment type" in error["detail"].lower() or "does not exist" in error["detail"].lower()
+
+
 def test_payment_method_validation():
     """
     Tests validation for payment method endpoints.
@@ -446,10 +1859,210 @@ def test_payment_method_validation():
         duplicate_response = auth_utils.make_authenticated_request(
             "POST",
             f"{payment_method_utils.base_url}/",
-            json={"name": unique_name, "description": "Duplicate Payment Method"}
+            json={"name": unique_name, "description": "Duplicate Payment Method", "payment_type_id": 0}
         )
-        assert duplicate_response.status_code == 400, "Should not allow duplicate names"
+        assert duplicate_response.status_code == 409, "Should not allow duplicate names"
         
     finally:
         # Clean up
         payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_with_payment_type_id():
+    """Test creating payment method with payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=1  # Cash
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 1
+        assert "required_fields_schema" in created_entity
+        # Cash should have no required fields
+        assert created_entity["required_fields_schema"] is None
+        
+        # Verify in GET response
+        retrieved = payment_method_utils.get_entity(entity_id)
+        assert retrieved["payment_type_id"] == 1
+        assert retrieved["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_with_revolut_type_and_phone():
+    """Test creating payment method with Revolut type and phone_number in required_data"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=4,  # Revolut
+        required_data={"phone_number": "0740123456"}
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 4
+        assert created_entity["required_data"] == {"phone_number": "0740123456"}
+        assert "required_fields_schema" in created_entity
+        # Revolut should have phone_number field schema
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "phone_number" in schema
+        assert schema["phone_number"]["label"] == "Număr de telefon"
+        assert schema["phone_number"]["type"] == "tel"
+        assert schema["phone_number"]["required"] is True
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_revolut_missing_phone_number():
+    """Test that Revolut payment method requires phone_number in required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("revolut"),
+            "description": "Revolut without phone",
+            "payment_type_id": 4,  # Revolut
+            "required_data": {}  # Missing phone_number
+        }
+    )
+    assert response.status_code == 400, "Should reject Revolut without phone_number"
+    error = response.json()
+    assert "phone_number" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_with_iban_and_recipient():
+    """Test creating payment method with bank_transfer type and required fields"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=5,  # Bank Transfer
+        required_data={
+            "iban": "RO49AAAA1B31007593840000",
+            "recipient_name": "Test Recipient"
+        }
+    )
+    
+    try:
+        assert created_entity["payment_type_id"] == 5
+        assert created_entity["required_data"]["iban"] == "RO49AAAA1B31007593840000"
+        assert created_entity["required_data"]["recipient_name"] == "Test Recipient"
+        assert "required_fields_schema" in created_entity
+        schema = created_entity["required_fields_schema"]
+        assert schema is not None
+        assert "iban" in schema
+        assert "recipient_name" in schema
+        assert schema["iban"]["label"] == "IBAN"
+        assert schema["recipient_name"]["label"] == "Nume destinatar"
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_bank_transfer_missing_iban():
+    """Test that bank_transfer payment method requires iban"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without IBAN",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "recipient_name": "Test"
+                # Missing iban
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without iban"
+    error = response.json()
+    assert "iban" in error["detail"].lower()
+
+
+def test_payment_method_bank_transfer_missing_recipient_name():
+    """Test that bank_transfer payment method requires recipient_name"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("bank"),
+            "description": "Bank transfer without recipient",
+            "payment_type_id": 5,  # Bank Transfer
+            "required_data": {
+                "iban": "RO49AAAA1B31007593840000"
+                # Missing recipient_name
+            }
+        }
+    )
+    assert response.status_code == 400, "Should reject bank_transfer without recipient_name"
+    error = response.json()
+    assert "recipient_name" in error["detail"].lower()
+
+
+def test_payment_method_cash_with_required_data_fails():
+    """Test that cash payment method cannot have required_data"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("cash"),
+            "description": "Cash with data",
+            "payment_type_id": 1,  # Cash
+            "required_data": {"some_field": "value"}  # Should not be allowed
+        }
+    )
+    assert response.status_code == 400, "Should reject cash with required_data"
+    error = response.json()
+    assert "required_data" in error["detail"].lower()
+
+
+def test_payment_method_update_payment_type():
+    """Test updating payment method payment_type_id"""
+    created_entity, entity_id = payment_method_utils.create_entity(
+        payment_type_id=0  # Custom
+    )
+    
+    try:
+        # Update to cash
+        if not auth_utils.access_token:
+            auth_utils.login()
+        
+        update_response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{payment_method_utils.base_url}/{entity_id}",
+            json={"payment_type_id": 1}  # Cash
+        )
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["payment_type_id"] == 1
+        assert updated["required_fields_schema"] is None
+        
+    finally:
+        payment_method_utils.delete_entity(entity_id)
+
+
+def test_payment_method_invalid_payment_type_id():
+    """Test that invalid payment_type_id is rejected"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    response = auth_utils.make_authenticated_request(
+        "POST",
+        f"{payment_method_utils.base_url}/",
+        json={
+            "name": payment_method_utils.generate_unique_name("invalid"),
+            "description": "Invalid payment type",
+            "payment_type_id": 999  # Non-existent
+        }
+    )
+    assert response.status_code == 400, "Should reject invalid payment_type_id"
+    error = response.json()
+    assert "payment type" in error["detail"].lower() or "does not exist" in error["detail"].lower()

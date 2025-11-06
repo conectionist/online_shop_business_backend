@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.endpoints import unitati, modalitati_plata, delivery_types, delivery_schedules, business_details, categories, system_config, products, product_images, lists, list_products, list_categories, list_products_ordered, list_delivery_types, product_overrides, auth, orders, push
+from app.api.endpoints import unitati, modalitati_plata, delivery_types, delivery_schedules, business_details, categories, system_config, products, product_images, lists, list_products, list_categories, list_products_ordered, list_delivery_types, product_overrides, auth, orders, push, payment_types
 
 api_router = APIRouter()
 
@@ -10,6 +10,11 @@ api_router.include_router(
     modalitati_plata.router, 
     prefix="/modalitati-plata", 
     tags=["modalitati-plata"]
+)
+api_router.include_router(
+    payment_types.router,
+    prefix="/payment-types",
+    tags=["payment-types"]
 )
 api_router.include_router(
     delivery_types.router,

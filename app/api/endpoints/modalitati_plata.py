@@ -18,6 +18,7 @@ from app.services.modalitati_plata import (
     get_modalitate_plata_by_id,
     get_modalitati_plata,
     update_modalitate_plata,
+    _get_required_fields_schema,
 )
 
 router = APIRouter()
@@ -36,7 +37,19 @@ def read_modalitati_plata(
     """Get all payment methods with pagination support"""
     try:
         modalitati = get_modalitati_plata(db, skip=skip, limit=limit)
-        return modalitati
+        # Add required_fields_schema to each payment method
+        result = []
+        for modalitate in modalitati:
+            modalitate_dict = {
+                "id": modalitate.id,
+                "name": modalitate.name,
+                "description": modalitate.description,
+                "payment_type_id": modalitate.payment_type_id,
+                "required_data": modalitate.required_data,
+                "required_fields_schema": _get_required_fields_schema(modalitate.payment_type_id)
+            }
+            result.append(modalitate_dict)
+        return result
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -63,7 +76,16 @@ def create_modalitati_plata(
 ):
     """Create a new payment method"""
     try:
-        return create_modalitate_plata(db=db, modalitate=modalitate)
+        db_modalitate = create_modalitate_plata(db=db, modalitate=modalitate)
+        # Add required_fields_schema to response
+        return {
+            "id": db_modalitate.id,
+            "name": db_modalitate.name,
+            "description": db_modalitate.description,
+            "payment_type_id": db_modalitate.payment_type_id,
+            "required_data": db_modalitate.required_data,
+            "required_fields_schema": _get_required_fields_schema(db_modalitate.payment_type_id)
+        }
     except HTTPException:
         # Re-raise HTTP exceptions from the service layer
         raise
@@ -97,7 +119,15 @@ def read_modalitate_plata(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Payment method not found"
             )
-        return db_modalitate
+        # Add required_fields_schema to response
+        return {
+            "id": db_modalitate.id,
+            "name": db_modalitate.name,
+            "description": db_modalitate.description,
+            "payment_type_id": db_modalitate.payment_type_id,
+            "required_data": db_modalitate.required_data,
+            "required_fields_schema": _get_required_fields_schema(db_modalitate.payment_type_id)
+        }
     except HTTPException:
         raise
     except ValidationError as e:
@@ -139,8 +169,16 @@ def update_modalitati_plata(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Payment method not found"
             )
-            
-        return db_modalitate
+        
+        # Add required_fields_schema to response
+        return {
+            "id": db_modalitate.id,
+            "name": db_modalitate.name,
+            "description": db_modalitate.description,
+            "payment_type_id": db_modalitate.payment_type_id,
+            "required_data": db_modalitate.required_data,
+            "required_fields_schema": _get_required_fields_schema(db_modalitate.payment_type_id)
+        }
         
     except HTTPException:
         raise
@@ -183,8 +221,16 @@ def patch_modalitati_plata(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Payment method not found"
             )
-            
-        return db_modalitate
+        
+        # Add required_fields_schema to response
+        return {
+            "id": db_modalitate.id,
+            "name": db_modalitate.name,
+            "description": db_modalitate.description,
+            "payment_type_id": db_modalitate.payment_type_id,
+            "required_data": db_modalitate.required_data,
+            "required_fields_schema": _get_required_fields_schema(db_modalitate.payment_type_id)
+        }
         
     except HTTPException:
         raise

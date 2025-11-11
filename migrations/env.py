@@ -11,6 +11,7 @@ from app.models.product import Product
 from app.models.list import List
 from app.models.delivery_type import DeliveryType
 from app.models.modalitati_plata import ModalitatiPlata
+from app.models.payment_type import PaymentType
 from app.models.category import Category
 from app.models.unitati import Unitati
 from app.models.business_details import BusinessDetails

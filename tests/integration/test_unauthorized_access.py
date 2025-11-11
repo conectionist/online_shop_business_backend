@@ -48,9 +48,9 @@ PROTECTED_ENDPOINTS = [
     ("orare-livrari/1", "DELETE", {}),
     
     # Payment Methods
-    ("modalitati-plata", "POST", {"denumire": "Test Payment"}),
-    ("modalitati-plata/1", "PUT", {"denumire": "Updated Payment"}),
-    ("modalitati-plata/1", "PATCH", {"denumire": "Patched Payment"}),
+    ("modalitati-plata", "POST", {"name": "test_pm", "description": "Test Payment", "payment_type_id": 0}),
+    ("modalitati-plata/1", "PUT", {"name": "updated_pm", "description": "Updated Payment", "payment_type_id": 0}),
+    ("modalitati-plata/1", "PATCH", {"description": "Patched Payment"}),
     ("modalitati-plata/1", "DELETE", {}),
     
     # Units
@@ -166,6 +166,8 @@ class TestPublicEndpoints:
         ("delivery-schedules/1", "GET"),
         ("modalitati-plata", "GET"),
         ("modalitati-plata/1", "GET"),
+        ("payment-types", "GET"),
+        ("payment-types/1", "GET"),
         ("unitati", "GET"),
         ("unitati/1", "GET"),
         ("lists", "GET"),

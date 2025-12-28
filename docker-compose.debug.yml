@@ -40,6 +40,7 @@ services:
       - ./uploads:/app/uploads
       - ./config/placeholders:/app/config/placeholders
       - ./app:/app/app  # Mount app directory for live code changes
+      - logs_data_debug:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 30s
@@ -104,3 +105,5 @@ networks:
 
 volumes:
   mysql_data_debug:
+  logs_data_debug:
+    driver: local

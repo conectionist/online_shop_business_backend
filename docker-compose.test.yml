@@ -62,6 +62,7 @@ services:
     volumes:
       - test_uploads_data:/app/uploads
       - ./config/placeholders:/app/config/placeholders
+      - logs_data_test:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 5s
@@ -117,4 +118,6 @@ networks:
 volumes:
   test_reports:
   test_uploads_data:
+    driver: local
+  logs_data_test:
     driver: local

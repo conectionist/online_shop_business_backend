@@ -41,6 +41,7 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./config/placeholders:/app/config/placeholders
+      - logs_data:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 30s
@@ -111,4 +112,6 @@ volumes:
   mysql_data:
     driver: local
   uploads_data:
+    driver: local
+  logs_data:
     driver: local

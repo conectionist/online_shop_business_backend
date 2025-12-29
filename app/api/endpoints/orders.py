@@ -125,7 +125,34 @@ def read_orders(
         }
     },
     400: {"description": "Bad request - validation failed (e.g., delivery type not available for list, missing address for home delivery)"},
-    409: {"description": "Conflict - duplicate order detected (same customer, list, and items quantities)"},
+    409: {
+        "description": "Conflict - duplicate order detected or insufficient stock",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "duplicate_order": {
+                        "summary": "Duplicate order error",
+                        "value": {
+                            "error_code": "DUPLICATE_ORDER",
+                            "message": "Duplicate order detected: an order with the same customer and items already exists",
+                            "order_id": 117
+                        }
+                    },
+                    "insufficient_stock": {
+                        "summary": "Insufficient stock error",
+                        "value": {
+                            "error_code": "INSUFFICIENT_STOCK",
+                            "message": "Insufficient stock for product",
+                            "product_id": 7,
+                            "list_id": 57,
+                            "requested_quantity": 5,
+                            "available_quantity": 2
+                        }
+                    }
+                }
+            }
+        }
+    },
     422: {"description": "Validation error - invalid input data"},
     500: {"description": "Internal server error"},
 })

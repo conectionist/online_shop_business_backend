@@ -823,6 +823,11 @@ def test_orders_create_duplicate_without_items_returns_409():
     assert r1.status_code == 201, r1.text
     r2 = requests.post(f"{API_V1}/orders/", json=payload)
     assert r2.status_code == 409, f"Expected 409 duplicate, got {r2.status_code}: {r2.text}"
+    error_data = r2.json()
+    assert "error_code" in error_data, f"Expected structured error, got: {error_data}"
+    assert error_data["error_code"] == "DUPLICATE_ORDER", f"Expected DUPLICATE_ORDER, got: {error_data.get('error_code')}"
+    assert "order_id" in error_data, f"Expected order_id in error, got: {error_data}"
+    assert "message" in error_data, f"Expected message in error, got: {error_data}"
 
 
 def test_orders_create_duplicate_with_items_returns_409():
@@ -852,6 +857,10 @@ def test_orders_create_duplicate_with_items_returns_409():
     assert r1.status_code == 201, r1.text
     r2 = requests.post(f"{API_V1}/orders/", json=base)
     assert r2.status_code == 409, f"Expected 409 duplicate, got {r2.status_code}: {r2.text}"
+    error_data = r2.json()
+    assert "error_code" in error_data, f"Expected structured error, got: {error_data}"
+    assert error_data["error_code"] == "DUPLICATE_ORDER", f"Expected DUPLICATE_ORDER, got: {error_data.get('error_code')}"
+    assert "order_id" in error_data, f"Expected order_id in error, got: {error_data}"
 
 
 def test_orders_create_same_products_split_items_still_409():
@@ -890,6 +899,9 @@ def test_orders_create_same_products_split_items_still_409():
     }
     r2 = requests.post(f"{API_V1}/orders/", json=split_lines)
     assert r2.status_code == 409, f"Expected 409 for split duplicate, got {r2.status_code}: {r2.text}"
+    error_data = r2.json()
+    assert "error_code" in error_data, f"Expected structured error, got: {error_data}"
+    assert error_data["error_code"] == "DUPLICATE_ORDER", f"Expected DUPLICATE_ORDER, got: {error_data.get('error_code')}"
 
 
 def test_orders_create_different_quantities_returns_201():

@@ -386,8 +386,15 @@ def _check_stock(db: Session, liste_id: int, produse_id: int, requested_qty: int
     ).first()
     if lp and lp.stoc_produs is not None and requested_qty > lp.stoc_produs:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Insufficient stock for product {produse_id} in list {liste_id}",
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error_code": "INSUFFICIENT_STOCK",
+                "message": "Insufficient stock for product",
+                "product_id": produse_id,
+                "list_id": liste_id,
+                "requested_quantity": requested_qty,
+                "available_quantity": lp.stoc_produs,
+            },
         )
 
 
@@ -512,7 +519,11 @@ def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = Non
         if duplicate is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Duplicate order detected: an order with the same customer and items already exists (id={duplicate.id})",
+                detail={
+                    "error_code": "DUPLICATE_ORDER",
+                    "message": "Duplicate order detected: an order with the same customer and items already exists",
+                    "order_id": duplicate.id,
+                },
             )
 
         db_order = OrderModel(

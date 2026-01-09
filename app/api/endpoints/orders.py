@@ -20,6 +20,8 @@ from app.services.order import (
     list_orders_merged,
     update_order,
     delete_order,
+    hard_delete_order,
+    restore_order,
     list_order_items,
     add_order_item,
     update_order_item,
@@ -48,6 +50,7 @@ router = APIRouter()
                         "order_notes": "Please deliver in the morning",
                         "created_at": "2024-01-15T10:30:00.000000Z",
                         "updated_at": "2024-01-15T10:30:00.000000Z",
+                        "is_deleted": False,
                         "items": [
                             {
                                 "produse_id": 10,
@@ -71,6 +74,7 @@ def read_orders(
     payment_method_id: Optional[int] = Query(None, gt=0, description="Filter by payment method ID"),
     data_plasarii_start: Optional[str] = Query(None, description="Start datetime (ISO 8601)"),
     data_plasarii_end: Optional[str] = Query(None, description="End datetime (ISO 8601)"),
+    include_deleted: bool = Query(False, description="Include soft-deleted orders"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     sort_by: str = Query("data_plasarii", pattern="^(data_plasarii|nume_client|liste_id|delivery_type_id|payment_method_id)$"),
@@ -86,6 +90,7 @@ def read_orders(
         payment_method_id=payment_method_id,
         data_plasarii_start=data_plasarii_start,
         data_plasarii_end=data_plasarii_end,
+        include_deleted=include_deleted,
         skip=skip,
         limit=limit,
         sort_by=sort_by,  # type: ignore
@@ -241,6 +246,7 @@ def create_order_endpoint(
 })
 def read_order(
     order_id: int = Path(..., gt=0),
+    include_deleted: bool = Query(False, description="Include soft-deleted orders"),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -253,8 +259,9 @@ def read_order(
     - Payment method information
     - Delivery address (if provided)
     - Order notes and timestamps
+    - is_deleted flag (soft delete status)
     """
-    return get_order_by_id(db=db, order_id=order_id)
+    return get_order_by_id(db=db, order_id=order_id, include_deleted=include_deleted)
 
 
 @router.patch("/{order_id}", response_model=OrderSchema, responses={
@@ -309,13 +316,46 @@ def update_order_endpoint(
 })
 def delete_order_endpoint(
     order_id: int = Path(..., gt=0),
+    permanent: bool = Query(False, description="If true, performs a hard delete (permanent removal). Default is soft delete."),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    deleted = delete_order(db=db, order_id=order_id)
+    """
+    Delete an order.
+    
+    - **order_id**: ID of the order to delete
+    - **permanent**: If true, performs a hard delete (permanent removal). Default is soft delete.
+    
+    By default, this performs a soft delete. The order is marked as deleted but can be restored.
+    Use `permanent=true` to permanently remove the order from the database.
+    """
+    if permanent:
+        deleted = hard_delete_order(db=db, order_id=order_id)
+    else:
+        deleted = delete_order(db=db, order_id=order_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order {order_id} not found")
     return None
+
+
+@router.post("/{order_id}/restore", response_model=OrderSchema, status_code=status.HTTP_200_OK, responses={
+    200: {"description": "Order restored"},
+    401: {"description": "Unauthorized"},
+    404: {"description": "Order not found or not soft-deleted"},
+    422: {"description": "Validation error"},
+})
+def restore_order_endpoint(
+    order_id: int = Path(..., gt=0),
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Restore a soft-deleted order.
+    
+    This endpoint allows restoring an order that was previously soft-deleted.
+    The order will be marked as active (is_deleted=False) and will appear in normal listings again.
+    """
+    return restore_order(db=db, order_id=order_id)
 
 
 @router.get("/{order_id}/products", response_model=List[OrderItemSchema], responses={

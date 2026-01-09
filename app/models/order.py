@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, TIMESTAMP, DateTime, ForeignKey, Index, text
+from sqlalchemy import Column, Integer, String, TIMESTAMP, DateTime, ForeignKey, Index, SmallInteger, text
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.orm import relationship
 
@@ -35,6 +35,7 @@ class Order(Base):
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
     )
+    is_deleted = Column(SmallInteger, nullable=False, default=0, server_default=text("0"))
 
     # Relationships
     list = relationship("List", foreign_keys=[liste_id])
@@ -50,6 +51,7 @@ class Order(Base):
         Index("idx_comenzi_delivery_type", "delivery_type_id"),
         Index("idx_comenzi_payment_method", "payment_method_id"),
         Index("idx_comenzi_delivery_address", "delivery_address"),
+        Index("idx_comenzi_is_deleted", "is_deleted"),
         {"mysql_engine": "InnoDB"},
     )
 

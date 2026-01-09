@@ -479,6 +479,7 @@ def _is_duplicate_order(db: Session, order_in: OrderCreate) -> Optional[OrderMod
         .filter(
             and_(
                 OrderModel.liste_id == order_in.liste_id,
+                OrderModel.is_deleted == False,  # Exclude soft-deleted orders from duplicate detection
                 # Match by normalized key using SQL LIKE on collapsed/stripped version.
                 # Since we don't store a normalized column, fetch candidates by same list
                 # and filter in Python using the same normalization.
@@ -656,11 +657,28 @@ def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = Non
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database error: {str(e)}")
 
 
-def get_order_by_id(db: Session, order_id: int) -> OrderModel:
+def get_order_by_id(db: Session, order_id: int, include_deleted: bool = False) -> OrderModel:
+    """
+    Get an order by ID.
+    
+    Args:
+        db: Database session
+        order_id: ID of the order to retrieve
+        include_deleted: If True, include soft-deleted orders
+        
+    Returns:
+        OrderModel instance
+        
+    Raises:
+        HTTPException: If order not found or database error occurs
+    """
     if order_id <= 0:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid order ID")
     try:
-        order = db.query(OrderModel).filter(OrderModel.id == order_id).first()
+        query = db.query(OrderModel).filter(OrderModel.id == order_id)
+        if not include_deleted:
+            query = query.filter(OrderModel.is_deleted == False)
+        order = query.first()
         if not order:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order {order_id} not found")
         return order
@@ -674,6 +692,9 @@ def list_orders(db: Session, filters: Optional[OrderFilterParams] = None) -> Lis
         if filters is None:
             filters = OrderFilterParams()
         query = db.query(OrderModel)
+        # Filter out soft-deleted orders by default
+        if not filters.include_deleted:
+            query = query.filter(OrderModel.is_deleted == False)
         query = _apply_order_filters(query, filters)
         query = _apply_sorting(query, filters.sort_by, filters.sort_order)
         return query.offset(filters.skip).limit(filters.limit).all()
@@ -875,6 +896,12 @@ def update_order(db: Session, order_id: int, order_update: OrderUpdate) -> Order
         order = db.query(OrderModel).filter(OrderModel.id == order_id).first()
         if not order:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order {order_id} not found")
+        # Prevent updates to soft-deleted orders
+        if order.is_deleted:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot update order {order_id} because it is soft-deleted. Restore it first."
+            )
 
         # Validate delivery method changes
         if "delivery_type_id" in update_data:
@@ -908,6 +935,93 @@ def update_order(db: Session, order_id: int, order_update: OrderUpdate) -> Order
 
 
 def delete_order(db: Session, order_id: int) -> bool:
+    """
+    Soft delete an order by setting is_deleted to True.
+    
+    Args:
+        db: Database session
+        order_id: ID of the order to delete
+        
+    Returns:
+        True if deleted, False if not found
+        
+    Raises:
+        HTTPException: If the ID is invalid or a database error occurs
+    """
+    if order_id <= 0:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid order ID")
+    try:
+        # Check if order exists and is not already deleted
+        order = db.query(OrderModel).filter(
+            and_(OrderModel.id == order_id, OrderModel.is_deleted == False)
+        ).first()
+        if not order:
+            return False
+        # Soft delete by setting is_deleted to True
+        order.is_deleted = True
+        db.commit()
+        return True
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database error: {str(e)}")
+
+
+def restore_order(db: Session, order_id: int) -> OrderModel:
+    """
+    Restore a soft-deleted order by setting is_deleted to False.
+    
+    Args:
+        db: Database session
+        order_id: ID of the order to restore
+        
+    Returns:
+        Restored OrderModel instance
+        
+    Raises:
+        HTTPException: If the ID is invalid, order not found, or order is not soft-deleted
+    """
+    if order_id <= 0:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid order ID")
+    try:
+        # Check if order exists and is currently soft-deleted
+        order = db.query(OrderModel).filter(
+            and_(OrderModel.id == order_id, OrderModel.is_deleted == True)
+        ).first()
+        if not order:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Order {order_id} not found or is not soft-deleted"
+            )
+        # Restore by setting is_deleted to False
+        order.is_deleted = False
+        db.commit()
+        db.refresh(order)
+        return order
+    except HTTPException:
+        db.rollback()
+        raise
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database error: {str(e)}")
+
+
+def hard_delete_order(db: Session, order_id: int) -> bool:
+    """
+    Hard delete an order from the database (permanent deletion).
+    
+    This permanently removes the order and its items from the database.
+    This operation cannot be undone.
+    
+    Args:
+        db: Database session
+        order_id: ID of the order to delete
+        
+    Returns:
+        True if deleted, False if not found
+        
+    Raises:
+        HTTPException: If the ID is invalid or a database error occurs
+    """
     if order_id <= 0:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid order ID")
     try:

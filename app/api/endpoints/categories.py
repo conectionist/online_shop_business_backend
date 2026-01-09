@@ -20,7 +20,8 @@ from app.services.category import (
     get_category_by_id,
     soft_delete_category,
     update_category,
-    hard_delete_category
+    hard_delete_category,
+    reorder_categories,
 )
 
 router = APIRouter()
@@ -131,6 +132,31 @@ def read_categories(
         )
 
 
+@router.put("/reorder", response_model=List[Category], responses={
+    200: {"description": "Reordered successfully; returns the ordered list"},
+    400: {"description": "Bad request"},
+    401: {"description": "Unauthorized - Authentication required"},
+    404: {"description": "One or more categories not found"},
+    422: {"description": "Validation error"},
+    500: {"description": "Internal server error"}
+})
+def reorder_categories_endpoint(
+    ordered_ids: List[int] = Body(..., min_items=1, description="Full ordered list of category IDs"),
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Atomically reorder categories by providing the full ordered list of IDs."""
+    try:
+        return reorder_categories(db=db, ordered_ids=ordered_ids)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+
 @router.post("/", response_model=Category, status_code=status.HTTP_201_CREATED, responses={
     201: {"description": "Category created successfully"},
     400: {"description": "Bad request, e.g., duplicate category name or invalid image"},
@@ -140,13 +166,14 @@ def read_categories(
 })
 def create_category_endpoint(
     name: str = Form(..., description="The name of the category"),
+    order_index: int = Form(..., ge=1, le=127, description="Manual ordering index (1-127), unique"),
     primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new category
     
-    Accepts multipart/form-data with a name field and optional image file.
+    Accepts multipart/form-data with a name field, order_index field, and optional image file.
     If no image is provided, a placeholder image will be used.
     """
     try:
@@ -173,7 +200,7 @@ def create_category_endpoint(
             primary_image_path = process_and_save_image_versions(primary_image, subdirectory="categories")
         
         # Create category object
-        category = CategoryCreate(name=name, image_path=primary_image_path)
+        category = CategoryCreate(name=name, order_index=order_index, image_path=primary_image_path)
         
         # Create the category in the database
         created_category = create_category(db=db, category=category)
@@ -250,6 +277,7 @@ def read_category(
 def update_category_endpoint(
     category_id: int = Path(..., gt=0, description="The ID of the category to update"),
     name: str = Form(..., description="The name of the category"),
+    order_index: int = Form(..., ge=1, le=127, description="Manual ordering index (1-127), unique"),
     primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
     clear_image: bool = Form(False, description="If true, will clear the image and use placeholder"),
     current_admin: Admin = Depends(get_current_admin),
@@ -257,8 +285,8 @@ def update_category_endpoint(
 ):
     """Update an existing category (PUT - full replacement)
     
-    Accepts multipart/form-data with required name and optional image file.
-    - Name is required for a PUT operation (replaces the entire resource)
+    Accepts multipart/form-data with required name, order_index and optional image file.
+    - Name and order_index are required for a PUT operation (replaces the entire resource)
     - If primary_image is not provided:
       - If clear_image is true: the image will be removed and placeholder will be used
       - If clear_image is false: the image will be set to placeholder (following PUT semantics)
@@ -276,8 +304,9 @@ def update_category_endpoint(
         update_dict = {}
         primary_image_path = None
         
-        # In PUT semantics, we always set the name (it's required)
+        # In PUT semantics, we always set the name and order_index (they're required)
         update_dict["name"] = name
+        update_dict["order_index"] = order_index
         
         # Handle image updates
         if clear_image:
@@ -373,6 +402,7 @@ def update_category_endpoint(
 def patch_category_endpoint(
     category_id: int = Path(..., gt=0, description="The ID of the category to update"),
     name: Optional[str] = Form(None, description="The name of the category"),
+    order_index: Optional[int] = Form(None, ge=1, le=127, description="Manual ordering index (1-127), unique"),
     primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
     clear_image: bool = Form(False, description="If true, will clear the image and use placeholder"),
     db: Session = Depends(get_db)
@@ -401,6 +431,10 @@ def patch_category_endpoint(
         # Add name to update only if provided
         if name is not None:
             update_dict["name"] = name
+        
+        # Add order_index to update only if provided
+        if order_index is not None:
+            update_dict["order_index"] = order_index
         
         # Handle image updates
         if clear_image:

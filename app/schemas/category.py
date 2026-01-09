@@ -33,7 +33,10 @@ class CategoryBase(BaseModel):
 
 class CategoryCreate(CategoryBase):
     """Schema for creating a new category"""
-    pass
+    order_index: int = Field(
+        ..., ge=1, le=127,
+        description="Manual ordering index (1-127), unique"
+    )
 
 
 class CategoryUpdate(BaseModel):
@@ -50,6 +53,11 @@ class CategoryUpdate(BaseModel):
         None,
         description="Path to the category image directory (None for placeholder image)",
         max_length=256
+    )
+    
+    order_index: Optional[int] = Field(
+        None, ge=1, le=127,
+        description="Manual ordering index (1-127), unique"
     )
     
     is_deleted: Optional[bool] = Field(
@@ -69,6 +77,7 @@ class Category(CategoryBase):
     """Schema for returning category data"""
     
     id: Annotated[int, Field(gt=0, description="The unique identifier for the category")]
+    order_index: int = Field(ge=1, le=127, description="Manual ordering index (1-127), unique")
     created_at: Annotated[datetime, Field(description="Creation timestamp")]
     updated_at: Annotated[datetime, Field(description="Last update timestamp")]
     is_deleted: bool

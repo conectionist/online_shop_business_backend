@@ -1,9 +1,9 @@
-from typing import List, Optional
+from typing import List, Optional, List as TypeList
 import os
 import shutil
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -30,13 +30,68 @@ def get_categories(db: Session, skip: int = 0, limit: int = 100, include_deleted
         query = db.query(Category)
         if not include_deleted:
             query = query.filter(Category.is_deleted == False)
-        return query.offset(skip).limit(limit).all()
+        return query.order_by(Category.order_index.asc(), Category.name.asc()).offset(skip).limit(limit).all()
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error occurred: {str(e)}"
         )
+
+
+# REORDER categories atomically
+def reorder_categories(db: Session, ordered_ids: TypeList[int]):
+    """Rewrite order_index based on the full ordered list of IDs.
+    Requires the provided IDs to be an exact permutation of all existing categories.
+    """
+    if not ordered_ids:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Ordered ID list must not be empty")
+
+    try:
+        # Fetch existing IDs
+        existing_ids = [row[0] for row in db.query(Category.id).all()]
+        total = len(existing_ids)
+
+        # Validate counts and uniqueness
+        if len(ordered_ids) != total:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="IDs list must include all categories")
+        if len(set(ordered_ids)) != len(ordered_ids):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="IDs list contains duplicates")
+
+        # Validate all IDs exist
+        missing = [i for i in ordered_ids if i not in existing_ids]
+        if missing:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Category IDs not found: {missing}")
+
+        # 1) Temporarily negate order_index to avoid unique collisions during reassignment
+        db.execute(text("UPDATE category SET order_index = -order_index"))
+
+        # 2) Assign new order_index using a CASE expression
+        # Build CASE ... WHEN id THEN position ... END
+        case_clauses = []
+        params = {}
+        for position, cat_id in enumerate(ordered_ids, start=1):
+            key_id = f"id_{position}"
+            case_clauses.append(f"WHEN id = :{key_id} THEN {position}")
+            params[key_id] = cat_id
+        case_sql = " ".join(case_clauses)
+        update_sql = f"UPDATE category SET order_index = CASE {case_sql} ELSE order_index END"
+        db.execute(text(update_sql), params)
+
+        db.commit()
+
+        # Return updated list ordered by order_index, name
+        return (
+            db.query(Category)
+            .order_by(Category.order_index.asc(), Category.name.asc())
+            .all()
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database error occurred: {str(e)}")
 
 
 # GET category by ID
@@ -159,12 +214,30 @@ def create_category(db: Session, category: CategoryCreate) -> Category:
     ).first()
     
     if soft_deleted_category:
+        # Check if order_index is already used by another category (excluding the soft-deleted one we're restoring)
+        existing_idx = db.query(Category).filter(
+            and_(Category.order_index == category.order_index, Category.id != soft_deleted_category.id)
+        ).first()
+        if existing_idx:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"order_index '{category.order_index}' is already used by another category"
+            )
         # Restore the soft-deleted category
         soft_deleted_category.is_deleted = False
         soft_deleted_category.image_path = category.image_path
+        soft_deleted_category.order_index = category.order_index
         db.commit()
         db.refresh(soft_deleted_category)
         return soft_deleted_category
+    
+    # Check for duplicate order_index (only if we're creating a new category, not restoring)
+    existing_idx = db.query(Category).filter(Category.order_index == category.order_index).first()
+    if existing_idx:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"order_index '{category.order_index}' is already used by another category"
+        )
     
     # Create new category
     try:
@@ -172,6 +245,7 @@ def create_category(db: Session, category: CategoryCreate) -> Category:
         db_category = Category(
             name=category.name,
             image_path=category.image_path,
+            order_index=category.order_index,
             is_deleted=False
         )
         db.add(db_category)
@@ -221,6 +295,7 @@ def update_category(db: Session, category_id: int, category: CategoryUpdate) -> 
     fields_provided = [
         hasattr(category, 'name') and category.name is not None,
         hasattr(category, 'image_path'),  # image_path can be None explicitly
+        hasattr(category, 'order_index') and category.order_index is not None,
         hasattr(category, 'is_deleted') and category.is_deleted is not None
     ]
     if not any(fields_provided):
@@ -260,6 +335,22 @@ def update_category(db: Session, category_id: int, category: CategoryUpdate) -> 
         # Note: image_path can be explicitly set to None to use the placeholder image
         if hasattr(category, '__fields_set__') and 'image_path' in category.__fields_set__:
             db_category.image_path = category.image_path
+        
+        # Update order_index if provided
+        if category.order_index is not None:
+            # Check for duplicate order_index if updating order_index
+            existing_idx = db.query(Category).filter(
+                and_(
+                    Category.order_index == category.order_index,
+                    Category.id != category_id
+                )
+            ).first()
+            if existing_idx:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"order_index '{category.order_index}' is already used by another category"
+                )
+            db_category.order_index = category.order_index
         
         # Update is_deleted if provided
         if category.is_deleted is not None:

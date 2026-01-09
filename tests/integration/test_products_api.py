@@ -796,33 +796,21 @@ def test_category_deletion_cascade():
     """
     Tests that when a category is deleted, all its products are moved to "Uncategorized" category.
     """
+    # Import category_utils to use its create_entity method which handles order_index
+    from integration.test_categories_api import category_utils
+    
     # Ensure we're authenticated
     if not auth_utils.access_token:
         auth_utils.login()
         
-    # First, create a category directly
-    categories_base_url = get_categories_base_url()
-    
     # Use a unique category name to avoid conflicts
     unique_category_name = f"Test Category for Cascade {uuid.uuid4().hex[:8]}"
-    category_data = {
-        "name": unique_category_name,
-        "order_index": "50"  # Include order_index as required
-    }
     
-    category_response = auth_utils.make_authenticated_request(
-        "POST",
-        f"{categories_base_url}/",
-        data=category_data
+    # Create a category using category_utils which handles finding available order_index
+    created_category, category_id = category_utils.create_entity(
+        name=unique_category_name,
+        with_image=False  # Don't need image for this test
     )
-    
-    assert category_response.status_code == 201, (
-        f"Failed to create category. "
-        f"Expected 201, got {category_response.status_code}: {category_response.text}"
-    )
-    
-    created_category = category_response.json()
-    category_id = created_category["id"]
     
     try:
         # Create a product in this category
@@ -853,15 +841,8 @@ def test_category_deletion_cascade():
         # Verify product is in the correct category
         assert created_product["category_id"] == category_id
         
-        # Delete the category
-        delete_response = auth_utils.make_authenticated_request(
-            "DELETE",
-            f"{categories_base_url}/{category_id}"
-        )
-        assert delete_response.status_code == 204, (
-            f"Failed to delete category. "
-            f"Expected 204, got {delete_response.status_code}: {delete_response.text}"
-        )
+        # Delete the category using category_utils
+        category_utils.soft_delete_entity(category_id)
         
         # Check that the product now has category_id = 1 (Uncategorized)
         get_product_response = requests.get(f"{product_utils.base_url}/{product_id}")
@@ -880,6 +861,6 @@ def test_category_deletion_cascade():
         print(f"Error during test: {e}")
         # Clean up category if it still exists
         try:
-            requests.delete(f"{categories_base_url}/{category_id}")
+            category_utils.hard_delete_entity(category_id)
         except:
             pass

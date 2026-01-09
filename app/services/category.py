@@ -425,30 +425,28 @@ def soft_delete_category(db: Session, category_id: int) -> bool:
         for product in products_to_update:
             product.category_id = UNCATEGORIZED_CATEGORY_ID  # Default to "Uncategorized"
         
-        # Find the maximum order_index among ALL categories (including deleted ones)
-        max_order_index = db.query(func.max(Category.order_index)).scalar() or 0
+        # Find all used order_index values, EXCLUDING the category being deleted
+        # (since we're about to free up its order_index)
+        used_indices = {
+            row[0] for row in db.query(Category.order_index)
+            .filter(Category.id != category_id)
+            .all()
+        }
         
-        # Calculate the new order_index (highest available value)
-        # If max is less than 127, use max+1; otherwise find the highest available gap
-        new_order_index = min(max_order_index + 1, 127)
+        # Assign the highest available order_index (starting from 127 and going down)
+        # This ensures soft-deleted categories are moved to the end
+        new_order_index = None
+        for i in range(127, 0, -1):
+            if i not in used_indices:
+                new_order_index = i
+                break
         
-        # If max+1 would exceed 127 or conflict, find the highest available value
-        # by checking for gaps starting from the highest deleted category's order_index
-        if new_order_index > 127 or db.query(Category).filter(Category.order_index == new_order_index).first():
-            # Find all used order_index values
-            used_indices = {row[0] for row in db.query(Category.order_index).all()}
-            # Find the highest available value (starting from 127 and going down)
-            new_order_index = None
-            for i in range(127, 0, -1):
-                if i not in used_indices:
-                    new_order_index = i
-                    break
-            if new_order_index is None:
-                # All 127 slots are used - this shouldn't happen in practice, but handle it
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Cannot assign order_index: all 127 slots are in use"
-                )
+        if new_order_index is None:
+            # All 127 slots are used - this shouldn't happen in practice, but handle it
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Cannot assign order_index: all 127 slots are in use"
+            )
         
         # Soft delete by setting is_deleted to True and updating order_index to highest available value
         # This moves deleted categories to the end while maintaining ordering

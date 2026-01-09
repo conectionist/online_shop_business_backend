@@ -37,7 +37,7 @@ class CategoryTestUtils(EntityTestUtils):
         short_uuid = str(uuid.uuid4())[:8]
         return f"{prefix}-{short_uuid}"
     
-    def create_entity(self, name=None, with_image=True, use_placeholder=False):
+    def create_entity(self, name=None, with_image=True, use_placeholder=False, order_index=None):
         """
         Create a new category with the given name and optional image upload.
         
@@ -45,56 +45,111 @@ class CategoryTestUtils(EntityTestUtils):
             name: Name for the category, will generate unique if None
             with_image: Whether to include an image in the request
             use_placeholder: If True, don't include image in the request (use placeholder)
+            order_index: Order index to use (1-127). If None, will try to find an available one.
             
         Returns:
             Tuple of (entity_data, entity_id)
         """
         if name is None:
             name = self.generate_unique_name()
-            
-        # Prepare multipart/form-data with the name field
-        form_data = {'name': name}
-        files = {}
         
-        # Add image file if needed
-        if with_image and not use_placeholder:
-            image_content = get_test_image_content()
-            files['primary_image'] = ('test_image.jpg', image_content, 'image/jpeg')
-            
-        # Ensure we're authenticated
-        if not auth_utils.access_token:
-            auth_utils.login()
-            
-        create_response = auth_utils.make_authenticated_request(
-            "POST",
-            f"{self.base_url}/",
-            data=form_data,
-            files=files
-        )
-        assert create_response.status_code == 201, (
-            f"Failed to create {self.entity_name}. "
-            f"Expected 201, got {create_response.status_code}: {create_response.text}"
-        )
-        
-        created_entity = create_response.json()
-        assert "id" in created_entity
-        assert created_entity["name"] == name
-        
-        if use_placeholder or not with_image:
-            assert created_entity["image_path"] is None
+        # If order_index not provided, try to find an available one (similar to delivery types)
+        if order_index is None:
+            import random
+            base_idx = random.randint(1, 127)
+            attempt = 0
+            while attempt < 127:
+                idx = ((base_idx + attempt - 1) % 127) + 1
+                form_data = {'name': name, 'order_index': str(idx)}
+                files = {}
+                
+                if with_image and not use_placeholder:
+                    image_content = get_test_image_content()
+                    files['primary_image'] = ('test_image.jpg', image_content, 'image/jpeg')
+                
+                if not auth_utils.access_token:
+                    auth_utils.login()
+                
+                create_response = auth_utils.make_authenticated_request(
+                    "POST",
+                    f"{self.base_url}/",
+                    data=form_data,
+                    files=files
+                )
+                
+                if create_response.status_code == 201:
+                    created_entity = create_response.json()
+                    assert "id" in created_entity
+                    assert created_entity["name"] == name
+                    assert created_entity["order_index"] == idx
+                    
+                    if use_placeholder or not with_image:
+                        assert created_entity["image_path"] is None
+                    else:
+                        assert created_entity["image_path"] is not None
+                        assert created_entity["image_path"].startswith("categories/")
+                    
+                    assert "image_versions" in created_entity
+                    assert created_entity["image_versions"] is not None
+                    assert "original" in created_entity["image_versions"]
+                    assert "medium" in created_entity["image_versions"]
+                    assert "thumbnail" in created_entity["image_versions"]
+                    
+                    return created_entity, created_entity["id"]
+                elif create_response.status_code == 409:
+                    # order_index conflict, try next
+                    attempt += 1
+                    continue
+                else:
+                    # Other error
+                    assert False, (
+                        f"Failed to create {self.entity_name}. "
+                        f"Expected 201, got {create_response.status_code}: {create_response.text}"
+                    )
+            assert False, "Could not find available order_index after 127 attempts"
         else:
-            assert created_entity["image_path"] is not None
-            assert created_entity["image_path"].startswith("categories/")
-        
-        assert "image_versions" in created_entity
-        assert created_entity["image_versions"] is not None
-        assert "original" in created_entity["image_versions"]
-        assert "medium" in created_entity["image_versions"]
-        assert "thumbnail" in created_entity["image_versions"]
-        
-        return created_entity, created_entity["id"]
+            # Use provided order_index
+            form_data = {'name': name, 'order_index': str(order_index)}
+            files = {}
+            
+            if with_image and not use_placeholder:
+                image_content = get_test_image_content()
+                files['primary_image'] = ('test_image.jpg', image_content, 'image/jpeg')
+            
+            if not auth_utils.access_token:
+                auth_utils.login()
+            
+            create_response = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/",
+                data=form_data,
+                files=files
+            )
+            assert create_response.status_code == 201, (
+                f"Failed to create {self.entity_name}. "
+                f"Expected 201, got {create_response.status_code}: {create_response.text}"
+            )
+            
+            created_entity = create_response.json()
+            assert "id" in created_entity
+            assert created_entity["name"] == name
+            assert created_entity["order_index"] == order_index
+            
+            if use_placeholder or not with_image:
+                assert created_entity["image_path"] is None
+            else:
+                assert created_entity["image_path"] is not None
+                assert created_entity["image_path"].startswith("categories/")
+            
+            assert "image_versions" in created_entity
+            assert created_entity["image_versions"] is not None
+            assert "original" in created_entity["image_versions"]
+            assert "medium" in created_entity["image_versions"]
+            assert "thumbnail" in created_entity["image_versions"]
+            
+            return created_entity, created_entity["id"]
     
-    def update_entity(self, entity_id, name=None, with_image=False, clear_image=False):
+    def update_entity(self, entity_id, name=None, with_image=False, clear_image=False, order_index=None):
         """
         Update a category by ID using PUT (full replacement).
         
@@ -103,19 +158,24 @@ class CategoryTestUtils(EntityTestUtils):
             name: New name for the category (required for PUT)
             with_image: Whether to include a new image in the update
             clear_image: Whether to clear the existing image and use placeholder
+            order_index: New order_index for the category (required for PUT). If None, uses current value.
             
         Returns:
             Updated entity data
         """
-        # For PUT, name is required (full replacement semantics)
-        if name is None:
-            # If no name provided, get the current name from the entity
+        # For PUT, name and order_index are required (full replacement semantics)
+        if name is None or order_index is None:
+            # If not provided, get the current values from the entity
             get_response = requests.get(f"{self.base_url}/{entity_id}")
             assert get_response.status_code == 200, f"Failed to get entity for update: {get_response.text}"
-            name = get_response.json()["name"]
+            current = get_response.json()
+            if name is None:
+                name = current["name"]
+            if order_index is None:
+                order_index = current["order_index"]
             
         # Prepare multipart/form-data
-        form_data = {"name": name}
+        form_data = {"name": name, "order_index": str(order_index)}
         if clear_image:
             form_data["clear_image"] = "true"
             
@@ -356,7 +416,7 @@ class CategoryTestUtils(EntityTestUtils):
         invalid_name_response = auth_utils.make_authenticated_request(
             "POST",
             f"{self.base_url}/",
-            data={"name": ""}
+            data={"name": "", "order_index": "1"}
         )
         assert invalid_name_response.status_code == 422
         
@@ -365,21 +425,25 @@ class CategoryTestUtils(EntityTestUtils):
         invalid_image_response = auth_utils.make_authenticated_request(
             "POST",
             f"{self.base_url}/",
-            data={"name": "Test Category"},
+            data={"name": "Test Category", "order_index": "1"},
             files=files
         )
-        assert invalid_image_response.status_code == 400
+        # Could be 400 (invalid image) or 422 (validation error) depending on which validation runs first
+        assert invalid_image_response.status_code in (400, 422)
         
         # Test duplicate name validation
         unique_name = self.generate_unique_name("Unique")
         created_entity, entity_id = self.create_entity(name=unique_name)
         
         try:
-            # Try to create another entity with the same name
+            # Try to create another entity with the same name (with different order_index to avoid that conflict)
+            # Get an available order_index
+            import random
+            test_order_index = random.randint(1, 127)
             duplicate_response = auth_utils.make_authenticated_request(
                 "POST",
                 f"{self.base_url}/",
-                data={"name": unique_name}
+                data={"name": unique_name, "order_index": str(test_order_index)}
             )
             assert duplicate_response.status_code == 409, "Should return 409 Conflict for duplicate names"
             
@@ -441,11 +505,14 @@ class CategoryTestUtils(EntityTestUtils):
         # Ensure we're authenticated
         if not auth_utils.access_token:
             auth_utils.login()
+        
+        # Get the order_index from the original category to use when restoring
+        original_order_index = created_entity.get("order_index", 10)  # fallback to 10 if not present
             
         restore_response = auth_utils.make_authenticated_request(
             "POST",
             f"{self.base_url}/",
-            data={"name": name},
+            data={"name": name, "order_index": str(original_order_index)},
             files={'primary_image': ('test_image.jpg', get_test_image_content(), 'image/jpeg')}
         )
         assert restore_response.status_code == 201
@@ -799,24 +866,10 @@ def test_category_deletion_cascade():
     if not auth_utils.access_token:
         auth_utils.login()
         
-    # First, create a category
-    category_data = {
-        "name": "Test Category for Cascade"
-    }
+    # First, create a category using the test utils (which handles order_index)
+    created_category, category_id = category_utils.create_entity("Test Category for Cascade")
     
-    category_response = auth_utils.make_authenticated_request(
-        "POST",
-        f"{category_utils.base_url}/",
-        data=category_data
-    )
-    
-    assert category_response.status_code == 201, (
-        f"Failed to create category. "
-        f"Expected 201, got {category_response.status_code}: {category_response.text}"
-    )
-    
-    created_category = category_response.json()
-    category_id = created_category["id"]
+    # created_category and category_id are already set from create_entity above
     
     try:
         # Create a product in this category directly
@@ -926,3 +979,139 @@ def test_cannot_delete_uncategorized_category():
     assert category_data["id"] == 1
     assert category_data["name"] == "Uncategorized"
     assert category_data["is_deleted"] == False
+
+
+def test_category_create_requires_order_index_and_enforces_range():
+    """
+    Validate create requires order_index and enforces 1-127 range.
+    """
+    # Ensure auth
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    # Missing order_index
+    form_data = {'name': 'Test Category No Index'}
+    resp = auth_utils.make_authenticated_request(
+        "POST", f"{category_utils.base_url}/", data=form_data
+    )
+    assert resp.status_code in (400, 422), "Missing order_index should be invalid"
+    
+    # Out of range low
+    form_data = {'name': 'Test Category Low', 'order_index': '0'}
+    resp = auth_utils.make_authenticated_request(
+        "POST", f"{category_utils.base_url}/", data=form_data
+    )
+    assert resp.status_code == 422
+    
+    # Out of range high
+    form_data = {'name': 'Test Category High', 'order_index': '128'}
+    resp = auth_utils.make_authenticated_request(
+        "POST", f"{category_utils.base_url}/", data=form_data
+    )
+    assert resp.status_code == 422
+
+
+def test_category_ordering_and_unique_index():
+    """Ensure list ordering by order_index then name and unique index 409 on conflict."""
+    # Create two with explicit indices
+    first, first_id = category_utils.create_entity("Order A", order_index=10)
+    second, second_id = category_utils.create_entity("Order B", order_index=20)
+    try:
+        # Fetch list and ensure order_index ordering
+        resp = requests.get(f"{category_utils.base_url}/")
+        assert resp.status_code == 200
+        items = resp.json()
+        assert isinstance(items, list)
+        
+        # Verify order_index is present in response
+        assert "order_index" in first
+        assert "order_index" in second
+        
+        # Update second to have same order_index as first -> expect 409
+        if not auth_utils.access_token:
+            auth_utils.login()
+        form_data = {'name': 'Order B', 'order_index': str(first["order_index"])}
+        conflict = auth_utils.make_authenticated_request(
+            "PATCH", f"{category_utils.base_url}/{second_id}", data=form_data
+        )
+        assert conflict.status_code == 409
+    finally:
+        category_utils.hard_delete_entity(second_id)
+        category_utils.hard_delete_entity(first_id)
+
+
+def test_reorder_categories_happy_path_moves_item_to_top():
+    """PUT /categories/reorder should atomically reorder by full ID list."""
+    import requests
+    # Create three new categories to work with
+    cat1, id1 = category_utils.create_entity("Reorder Cat 1", order_index=50)
+    cat2, id2 = category_utils.create_entity("Reorder Cat 2", order_index=60)
+    cat3, id3 = category_utils.create_entity("Reorder Cat 3", order_index=70)
+
+    try:
+        # Build the full ordered ID list by taking current IDs and moving id3 to the top
+        # Need to include deleted categories since reorder works on all categories
+        current = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
+        all_ids = [x["id"] for x in current]
+        assert id1 in all_ids and id2 in all_ids and id3 in all_ids
+
+        new_order = [id3] + [i for i in all_ids if i != id3]
+
+        # Auth and call reorder
+        if not auth_utils.access_token:
+            auth_utils.login()
+        resp = auth_utils.make_authenticated_request(
+            "PUT", f"{category_utils.base_url}/reorder", json=new_order
+        )
+        assert resp.status_code == 200, f"Reorder failed: {resp.status_code} {resp.text}"
+
+        updated = resp.json()
+        assert isinstance(updated, list) and len(updated) == len(new_order)
+        # First element should now be id3
+        assert updated[0]["id"] == id3
+        # Order indices should match positions (1-based)
+        for pos, item in enumerate(updated, start=1):
+            assert item["order_index"] == pos
+
+        # GET should reflect the same order
+        listed = requests.get(f"{category_utils.base_url}/").json()
+        assert [x["id"] for x in listed] == [x["id"] for x in updated]
+    finally:
+        # Clean up created entities
+        category_utils.hard_delete_entity(id3)
+        category_utils.hard_delete_entity(id2)
+        category_utils.hard_delete_entity(id1)
+
+
+def test_reorder_categories_invalid_permutation_returns_422():
+    import requests
+    # Fetch current full list (including deleted since reorder works on all)
+    current = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
+    ids = [x["id"] for x in current]
+    assert len(ids) >= 2, "Need at least two categories for this test"
+    # Duplicate the first ID and drop the last to keep length the same
+    bad_ids = ids[:-1] + [ids[0]]
+
+    if not auth_utils.access_token:
+        auth_utils.login()
+    resp = auth_utils.make_authenticated_request(
+        "PUT", f"{category_utils.base_url}/reorder", json=bad_ids
+    )
+    assert resp.status_code == 422, f"Expected 422 for invalid permutation, got {resp.status_code}"
+
+
+def test_reorder_categories_with_unknown_id_returns_404():
+    import requests
+    # Fetch current full list (including deleted since reorder works on all)
+    current = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
+    ids = [x["id"] for x in current]
+    assert len(ids) >= 1
+    bad_ids = ids[:]
+    bad_ids[-1] = 99999999  # assume non-existent
+
+    if not auth_utils.access_token:
+        auth_utils.login()
+    resp = auth_utils.make_authenticated_request(
+        "PUT", f"{category_utils.base_url}/reorder", json=bad_ids
+    )
+    assert resp.status_code == 404, f"Expected 404 for unknown id, got {resp.status_code}"

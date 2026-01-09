@@ -806,7 +806,8 @@ def test_category_deletion_cascade():
     # Use a unique category name to avoid conflicts
     unique_category_name = f"Test Category for Cascade {uuid.uuid4().hex[:8]}"
     category_data = {
-        "name": unique_category_name
+        "name": unique_category_name,
+        "order_index": "50"  # Include order_index as required
     }
     
     category_response = auth_utils.make_authenticated_request(

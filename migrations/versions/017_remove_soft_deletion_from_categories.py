@@ -16,10 +16,33 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # 1) Delete all soft-deleted categories (they're already hidden from users)
+    # 1) Delete foreign key references to soft-deleted categories
+    # Delete from liste_au_categorii (list-category associations)
+    op.execute(sa.text("""
+        DELETE lac FROM liste_au_categorii lac
+        INNER JOIN category c ON lac.category_id = c.id
+        WHERE c.is_deleted = 1
+    """))
+    
+    # Delete from liste_au_produse_ordered (list-product ordering)
+    op.execute(sa.text("""
+        DELETE lpo FROM liste_au_produse_ordered lpo
+        INNER JOIN category c ON lpo.category_id = c.id
+        WHERE c.is_deleted = 1
+    """))
+    
+    # Move products from soft-deleted categories to "Uncategorized" (category_id = 1)
+    op.execute(sa.text("""
+        UPDATE produse p
+        INNER JOIN category c ON p.category_id = c.id
+        SET p.category_id = 1
+        WHERE c.is_deleted = 1
+    """))
+    
+    # 2) Delete all soft-deleted categories (they're already hidden from users)
     op.execute(sa.text("DELETE FROM category WHERE is_deleted = 1"))
     
-    # 2) Compact order_index to sequential 1-N for remaining categories
+    # 3) Compact order_index to sequential 1-N for remaining categories
     # First, temporarily negate all order_index values to avoid unique constraint violations
     op.execute(sa.text("UPDATE category SET order_index = -order_index"))
     
@@ -37,10 +60,10 @@ def upgrade() -> None:
         )
     )
     
-    # 3) Drop the index on is_deleted
+    # 4) Drop the index on is_deleted
     op.drop_index("idx_category_is_deleted", table_name="category")
     
-    # 4) Drop the is_deleted column
+    # 5) Drop the is_deleted column
     op.drop_column("category", "is_deleted")
 
 

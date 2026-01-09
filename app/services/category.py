@@ -48,8 +48,8 @@ def reorder_categories(db: Session, ordered_ids: TypeList[int]):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Ordered ID list must not be empty")
 
     try:
-        # Fetch existing IDs
-        existing_ids = [row[0] for row in db.query(Category.id).all()]
+        # Fetch existing IDs (only non-deleted categories - soft-deleted categories are excluded from reordering)
+        existing_ids = [row[0] for row in db.query(Category.id).filter(Category.is_deleted == False).all()]
         total = len(existing_ids)
 
         # Validate counts and uniqueness
@@ -80,9 +80,10 @@ def reorder_categories(db: Session, ordered_ids: TypeList[int]):
 
         db.commit()
 
-        # Return updated list ordered by order_index, name
+        # Return updated list ordered by order_index, name (only non-deleted categories)
         return (
             db.query(Category)
+            .filter(Category.is_deleted == False)
             .order_by(Category.order_index.asc(), Category.name.asc())
             .all()
         )

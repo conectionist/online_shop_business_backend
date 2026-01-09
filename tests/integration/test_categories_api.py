@@ -300,65 +300,6 @@ class CategoryTestUtils(EntityTestUtils):
             f"Expected 204, got {delete_response.status_code}: {delete_response.text}"
         )
     
-    def soft_delete_entity(self, entity_id):
-        """
-        Soft delete a category by ID.
-        
-        Args:
-            entity_id: ID of the category to soft delete
-        """
-        # Ensure we're authenticated
-        if not auth_utils.access_token:
-            auth_utils.login()
-            
-        delete_response = auth_utils.make_authenticated_request(
-            "DELETE",
-            f"{self.base_url}/{entity_id}"
-        )
-        assert delete_response.status_code == 204, (
-            f"Failed to soft delete {self.entity_name}. "
-            f"Expected 204, got {delete_response.status_code}: {delete_response.text}"
-        )
-    
-    def get_entity_with_deleted(self, entity_id, include_deleted=True, expected_status=200):
-        """
-        Get a category by ID, including soft-deleted ones if specified.
-        
-        Args:
-            entity_id: ID of the category to retrieve
-            include_deleted: Whether to include soft-deleted categories
-            expected_status: Expected HTTP status code
-            
-        Returns:
-            Entity data if found, None if expected_status is not 200
-        """
-        get_response = requests.get(f"{self.base_url}/{entity_id}?include_deleted={str(include_deleted).lower()}")
-        assert get_response.status_code == expected_status, (
-            f"Failed to get {self.entity_name}. "
-            f"Expected {expected_status}, got {get_response.status_code}: {get_response.text}"
-        )
-        
-        if expected_status == 200:
-            return get_response.json()
-        return None
-    
-    def list_entities_with_deleted(self, include_deleted=True):
-        """
-        List categories, including soft-deleted ones if specified.
-        
-        Args:
-            include_deleted: Whether to include soft-deleted categories
-            
-        Returns:
-            List of categories
-        """
-        list_response = requests.get(f"{self.base_url}/?include_deleted={str(include_deleted).lower()}")
-        assert list_response.status_code == 200, (
-            f"Failed to list {self.entity_name}s. "
-            f"Expected 200, got {list_response.status_code}: {list_response.text}"
-        )
-        
-        return list_response.json()
     
     def test_crud_workflow(self):
         """
@@ -382,23 +323,11 @@ class CategoryTestUtils(EntityTestUtils):
         assert updated_entity["image_path"] is not None
         assert updated_entity["image_path"] != initial_image_path
         
-        # 4. DELETE (soft delete)
-        self.soft_delete_entity(entity_id)
-        
-        # 5. VERIFY soft deletion
-        self.get_entity(entity_id, expected_status=404)  # Should not be found with default params
-        
-        # 6. VERIFY can still get with include_deleted=true
-        deleted_entity = self.get_entity_with_deleted(entity_id, include_deleted=True)
-        assert deleted_entity["is_deleted"] is True
-        
-        # 7. HARD DELETE
+        # 4. DELETE
         self.hard_delete_entity(entity_id)
         
-        # 8. VERIFY hard deletion
-        # Should not be found even with include_deleted=true
-        get_response = requests.get(f"{self.base_url}/{entity_id}?include_deleted=true")
-        assert get_response.status_code == 404
+        # 5. VERIFY deletion
+        self.get_entity(entity_id, expected_status=404)
     
     def test_validation(self):
         """
@@ -482,53 +411,6 @@ class CategoryTestUtils(EntityTestUtils):
             # Clean up
             self.hard_delete_entity(entity_id)
     
-    def test_soft_delete_and_restore(self):
-        """
-        Test soft delete functionality and restoration of soft-deleted categories.
-        """
-        # 1. Create a category
-        name = self.generate_unique_name("SoftDelete")
-        created_entity, entity_id = self.create_entity(name=name)
-        original_order_index = created_entity.get("order_index")
-        
-        # 2. Soft delete it
-        self.soft_delete_entity(entity_id)
-        
-        # 3. Verify it's not in the regular list
-        regular_list = requests.get(f"{self.base_url}/").json()
-        assert not any(c["id"] == entity_id for c in regular_list)
-        
-        # 4. Verify it is in the list with include_deleted=true
-        deleted_list = self.list_entities_with_deleted(include_deleted=True)
-        deleted_category = next((c for c in deleted_list if c["id"] == entity_id), None)
-        assert deleted_category is not None
-        assert deleted_category["is_deleted"] is True
-        
-        # 5. Verify the order_index was reassigned to a high value (highest available)
-        assert deleted_category["order_index"] != original_order_index
-        assert deleted_category["order_index"] >= 100, "Deleted category should have a high order_index"
-        
-        # 6. Try to create a new category with the same name (should restore the soft-deleted one)
-        # Ensure we're authenticated
-        if not auth_utils.access_token:
-            auth_utils.login()
-            
-        restore_response = auth_utils.make_authenticated_request(
-            "POST",
-            f"{self.base_url}/",
-            data={"name": name, "order_index": str(original_order_index)},
-            files={'primary_image': ('test_image.jpg', get_test_image_content(), 'image/jpeg')}
-        )
-        assert restore_response.status_code == 201
-        restored_entity = restore_response.json()
-        
-        # 7. Verify it has the same ID as the original (restored, not new)
-        assert restored_entity["id"] == entity_id
-        assert restored_entity["is_deleted"] is False
-        assert restored_entity["order_index"] == original_order_index
-        
-        # 8. Clean up
-        self.hard_delete_entity(entity_id)
     
     def test_error_handling(self):
         """
@@ -661,7 +543,7 @@ def find_available_order_indices(count=1, prefer_high=False):
     Returns:
         List of available order_index values
     """
-    all_categories = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
+    all_categories = requests.get(f"{category_utils.base_url}/").json()
     used_indices = {c["order_index"] for c in all_categories}
     
     available = []
@@ -696,12 +578,6 @@ def test_category_validation():
     Tests validation for category endpoints.
     """
     category_utils.test_validation()
-
-def test_category_soft_delete_and_restore():
-    """
-    Tests soft delete functionality and restoration of soft-deleted categories.
-    """
-    category_utils.test_soft_delete_and_restore()
 
 def test_category_error_handling():
     """
@@ -974,35 +850,21 @@ def test_cannot_delete_uncategorized_category():
     if not auth_utils.access_token:
         auth_utils.login()
         
-    # Try to soft delete the Uncategorized category
-    soft_delete_response = auth_utils.make_authenticated_request(
+    # Try to delete the Uncategorized category
+    delete_response = auth_utils.make_authenticated_request(
         "DELETE",
         f"{category_utils.base_url}/1"
     )
-    assert soft_delete_response.status_code == 403, (
-        f"Expected 403 Forbidden when trying to soft delete Uncategorized category, "
-        f"got {soft_delete_response.status_code}: {soft_delete_response.text}"
+    assert delete_response.status_code == 403, (
+        f"Expected 403 Forbidden when trying to delete Uncategorized category, "
+        f"got {delete_response.status_code}: {delete_response.text}"
     )
     
     # Verify the error message
-    error_detail = soft_delete_response.json().get("detail", "")
+    error_detail = delete_response.json().get("detail", "")
     assert "Cannot delete the default 'Uncategorized' category" in error_detail
     
-    # Try to hard delete the Uncategorized category
-    hard_delete_response = auth_utils.make_authenticated_request(
-        "DELETE",
-        f"{category_utils.base_url}/1?permanent=true"
-    )
-    assert hard_delete_response.status_code == 403, (
-        f"Expected 403 Forbidden when trying to hard delete Uncategorized category, "
-        f"got {hard_delete_response.status_code}: {hard_delete_response.text}"
-    )
-    
-    # Verify the error message
-    error_detail = hard_delete_response.json().get("detail", "")
-    assert "Cannot delete the default 'Uncategorized' category" in error_detail
-    
-    # Verify the category still exists and is not deleted
+    # Verify the category still exists
     get_response = requests.get(f"{category_utils.base_url}/1")
     assert get_response.status_code == 200, (
         f"Expected 200 OK when getting Uncategorized category, "
@@ -1012,7 +874,6 @@ def test_cannot_delete_uncategorized_category():
     category_data = get_response.json()
     assert category_data["id"] == 1
     assert category_data["name"] == "Uncategorized"
-    assert category_data["is_deleted"] == False
 
 
 def test_category_create_requires_order_index_and_enforces_range():
@@ -1090,8 +951,7 @@ def test_reorder_categories_happy_path_moves_item_to_top():
 
     try:
         # Build the full ordered ID list by taking current IDs and moving id3 to the top
-        # Need to include deleted categories since reorder works on all categories
-        current = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
+        current = requests.get(f"{category_utils.base_url}/").json()
         all_ids = [x["id"] for x in current]
         assert id1 in all_ids and id2 in all_ids and id3 in all_ids
 
@@ -1125,8 +985,8 @@ def test_reorder_categories_happy_path_moves_item_to_top():
 
 def test_reorder_categories_invalid_permutation_returns_422():
     import requests
-    # Fetch current full list (including deleted since reorder works on all)
-    current = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
+    # Fetch current full list
+    current = requests.get(f"{category_utils.base_url}/").json()
     ids = [x["id"] for x in current]
     assert len(ids) >= 2, "Need at least two categories for this test"
     # Duplicate the first ID and drop the last to keep length the same
@@ -1142,8 +1002,8 @@ def test_reorder_categories_invalid_permutation_returns_422():
 
 def test_reorder_categories_with_unknown_id_returns_404():
     import requests
-    # Fetch current full list (including deleted since reorder works on all)
-    current = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
+    # Fetch current full list
+    current = requests.get(f"{category_utils.base_url}/").json()
     ids = [x["id"] for x in current]
     assert len(ids) >= 1
     bad_ids = ids[:]
@@ -1155,249 +1015,3 @@ def test_reorder_categories_with_unknown_id_returns_404():
         "PUT", f"{category_utils.base_url}/reorder", json=bad_ids
     )
     assert resp.status_code == 404, f"Expected 404 for unknown id, got {resp.status_code}"
-
-
-def test_soft_delete_assigns_highest_available_order_index():
-    """
-    Test that soft deleting a category assigns it the highest available order_index.
-    This ensures deleted categories are moved to the end of the ordering.
-    """
-    # Ensure we're authenticated
-    if not auth_utils.access_token:
-        auth_utils.login()
-    
-    # Find available order_index values dynamically
-    indices = find_available_order_indices(count=3)
-    
-    # Create multiple categories with specific order_indices
-    cat1, id1 = category_utils.create_entity("SoftDelete Test 1", order_index=indices[0])
-    cat2, id2 = category_utils.create_entity("SoftDelete Test 2", order_index=indices[1])
-    cat3, id3 = category_utils.create_entity("SoftDelete Test 3", order_index=indices[2])
-    
-    try:
-        # Get all categories including deleted to see current max order_index
-        all_categories = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
-        used_indices = {c["order_index"] for c in all_categories}
-        max_order_index = max(used_indices) if used_indices else 0
-        
-        # Soft delete the first category
-        category_utils.soft_delete_entity(id1)
-        
-        # Verify it got assigned the highest available order_index
-        deleted_cat1 = category_utils.get_entity_with_deleted(id1, include_deleted=True)
-        assert deleted_cat1["is_deleted"] is True
-        # The order_index should be the highest available (127 if free, or highest available below that)
-        assert deleted_cat1["order_index"] > max_order_index or deleted_cat1["order_index"] == 127
-        
-        # Soft delete the second category
-        category_utils.soft_delete_entity(id2)
-        
-        # Verify it got assigned the next highest available order_index
-        deleted_cat2 = category_utils.get_entity_with_deleted(id2, include_deleted=True)
-        assert deleted_cat2["is_deleted"] is True
-        # Should be less than or equal to the first deleted category's order_index
-        assert deleted_cat2["order_index"] <= deleted_cat1["order_index"]
-        # And should be the highest available (could be same if there are gaps, or one less)
-        assert deleted_cat2["order_index"] >= deleted_cat1["order_index"] - 1
-        
-        # Verify the third category is still active with its original order_index
-        active_cat3 = category_utils.get_entity(id3)
-        assert active_cat3["is_deleted"] is False
-        assert active_cat3["order_index"] == indices[2]
-        
-    finally:
-        # Clean up
-        category_utils.hard_delete_entity(id3)
-        category_utils.hard_delete_entity(id2)
-        category_utils.hard_delete_entity(id1)
-
-
-def test_soft_delete_order_index_with_gaps():
-    """
-    Test that soft delete correctly finds the highest available order_index even when there are gaps.
-    """
-    # Ensure we're authenticated
-    if not auth_utils.access_token:
-        auth_utils.login()
-    
-    # Find available order_index values to use (use low values to create gaps)
-    all_categories = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
-    used_indices = {c["order_index"] for c in all_categories}
-    
-    # Find two available low order_index values (to create gaps)
-    idx1 = None
-    idx2 = None
-    for i in range(1, 20):  # Look for low values
-        if i not in used_indices:
-            if idx1 is None:
-                idx1 = i
-            elif idx2 is None and i > idx1 + 2:  # Ensure there's a gap between them
-                idx2 = i
-                break
-    
-    # If we couldn't find two low values with gaps, use any two available values
-    if idx1 is None or idx2 is None:
-        for i in range(1, 127):
-            if i not in used_indices:
-                if idx1 is None:
-                    idx1 = i
-                elif idx2 is None:
-                    idx2 = i
-                    break
-    
-    assert idx1 is not None and idx2 is not None, "Could not find available order_index values"
-    
-    # Create categories with gaps in order_index
-    cat1, id1 = category_utils.create_entity("Gap Test 1", order_index=idx1)
-    cat2, id2 = category_utils.create_entity("Gap Test 2", order_index=idx2)
-    
-    try:
-        # Get all used indices before deletion (excluding the ones we'll delete)
-        all_before = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
-        used_before = {c["order_index"] for c in all_before if c["id"] not in [id1, id2]}
-        
-        # Find what the highest available should be
-        expected_first = None
-        for i in range(127, 0, -1):
-            if i not in used_before:
-                expected_first = i
-                break
-        
-        # Soft delete the first category
-        category_utils.soft_delete_entity(id1)
-        
-        deleted_cat1 = category_utils.get_entity_with_deleted(id1, include_deleted=True)
-        assert deleted_cat1["is_deleted"] is True
-        # Should get the highest available order_index
-        assert deleted_cat1["order_index"] == expected_first
-        
-        # Now find what the next highest available should be (after id1 is deleted)
-        used_after_first = used_before | {deleted_cat1["order_index"]}
-        expected_second = None
-        for i in range(127, 0, -1):
-            if i not in used_after_first:
-                expected_second = i
-                break
-        
-        # Soft delete the second category
-        category_utils.soft_delete_entity(id2)
-        
-        deleted_cat2 = category_utils.get_entity_with_deleted(id2, include_deleted=True)
-        assert deleted_cat2["is_deleted"] is True
-        # Should get the next highest available order_index
-        assert deleted_cat2["order_index"] == expected_second
-        
-    finally:
-        # Clean up
-        category_utils.hard_delete_entity(id2)
-        category_utils.hard_delete_entity(id1)
-
-
-def test_soft_delete_order_index_excludes_deleted_category():
-    """
-    Test that when soft deleting, the algorithm correctly excludes the category being deleted
-    from the used indices, so it assigns the highest available index (not reusing the freed one).
-    """
-    # Ensure we're authenticated
-    if not auth_utils.access_token:
-        auth_utils.login()
-    
-    # Find a high available order_index value dynamically
-    high_indices = find_available_order_indices(count=1, prefer_high=True)
-    high_index = high_indices[0]
-    
-    # Create a category with the found high order_index
-    cat1, id1 = category_utils.create_entity("High Index Test", order_index=high_index)
-    
-    try:
-        # Get all categories to see what's used (excluding the one we'll delete)
-        all_categories = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
-        used_indices_before = {c["order_index"] for c in all_categories if c["id"] != id1}
-        
-        # Soft delete the category with the high order_index
-        category_utils.soft_delete_entity(id1)
-        
-        deleted_cat1 = category_utils.get_entity_with_deleted(id1, include_deleted=True)
-        assert deleted_cat1["is_deleted"] is True
-        
-        # The algorithm should assign the highest available order_index
-        # Find what the highest available should be (starting from 127)
-        expected_order_index = None
-        for i in range(127, 0, -1):
-            if i not in used_indices_before:
-                expected_order_index = i
-                break
-        
-        assert deleted_cat1["order_index"] == expected_order_index, (
-            f"Expected order_index {expected_order_index}, got {deleted_cat1['order_index']}"
-        )
-        # Should be a high value (at least the original high_index or higher)
-        assert deleted_cat1["order_index"] >= high_index
-        
-    finally:
-        # Clean up
-        category_utils.hard_delete_entity(id1)
-
-
-def test_multiple_soft_deletes_assign_decreasing_order_indices():
-    """
-    Test that multiple soft deletions assign decreasing order_index values
-    (highest available, then second highest, etc.).
-    """
-    # Ensure we're authenticated
-    if not auth_utils.access_token:
-        auth_utils.login()
-    
-    # Find available order_index values dynamically
-    all_categories = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
-    used_indices = {c["order_index"] for c in all_categories}
-    
-    # Find 5 available order_index values
-    available_indices = []
-    for i in range(1, 127):
-        if i not in used_indices and len(available_indices) < 5:
-            available_indices.append(i)
-    
-    # If we couldn't find 5, try to find any available ones
-    if len(available_indices) < 5:
-        for i in range(1, 127):
-            if i not in used_indices:
-                available_indices.append(i)
-                if len(available_indices) >= 5:
-                    break
-    
-    assert len(available_indices) >= 5, "Could not find 5 available order_index values"
-    
-    # Create several categories with the available indices
-    categories = []
-    for i, order_idx in enumerate(available_indices[:5]):
-        cat, cat_id = category_utils.create_entity(f"Multi Delete {i}", order_index=order_idx)
-        categories.append((cat, cat_id))
-    
-    try:
-        deleted_order_indices = []
-        
-        # Soft delete all categories one by one
-        for cat, cat_id in categories:
-            category_utils.soft_delete_entity(cat_id)
-            deleted_cat = category_utils.get_entity_with_deleted(cat_id, include_deleted=True)
-            deleted_order_indices.append(deleted_cat["order_index"])
-        
-        # Verify that order_indices are assigned in descending order
-        # (each should be <= the previous one, and they should be high values)
-        assert len(deleted_order_indices) == 5
-        assert all(idx >= 100 for idx in deleted_order_indices), (
-            f"All deleted categories should have high order_indices, got: {deleted_order_indices}"
-        )
-        
-        # Verify they're in descending order (or equal if there are gaps)
-        for i in range(len(deleted_order_indices) - 1):
-            assert deleted_order_indices[i] >= deleted_order_indices[i + 1] - 1, (
-                f"Order indices should be assigned in descending order: "
-                f"{deleted_order_indices[i]} should be >= {deleted_order_indices[i + 1]} - 1"
-            )
-        
-    finally:
-        # Clean up
-        for cat, cat_id in reversed(categories):
-            category_utils.hard_delete_entity(cat_id)

@@ -12,25 +12,21 @@ from app.models.category import Category
 from app.schemas.category import CategoryCreate, CategoryUpdate
 
 
-# GET all categories with pagination and filter by is_deleted
-def get_categories(db: Session, skip: int = 0, limit: int = 100, include_deleted: bool = False) -> List[Category]:
+# GET all categories with pagination
+def get_categories(db: Session, skip: int = 0, limit: int = 100) -> List[Category]:
     """
-    Retrieve all categories with pagination and optional filtering for deleted items.
+    Retrieve all categories with pagination.
     
     Args:
         db: Database session
         skip: Number of records to skip
         limit: Maximum number of records to return
-        include_deleted: Whether to include soft-deleted categories
         
     Returns:
         List of Category objects
     """
     try:
-        query = db.query(Category)
-        if not include_deleted:
-            query = query.filter(Category.is_deleted == False)
-        return query.order_by(Category.order_index.asc(), Category.name.asc()).offset(skip).limit(limit).all()
+        return db.query(Category).order_by(Category.order_index.asc(), Category.name.asc()).offset(skip).limit(limit).all()
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(
@@ -48,8 +44,8 @@ def reorder_categories(db: Session, ordered_ids: TypeList[int]):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Ordered ID list must not be empty")
 
     try:
-        # Fetch existing IDs (only non-deleted categories - soft-deleted categories are excluded from reordering)
-        existing_ids = [row[0] for row in db.query(Category.id).filter(Category.is_deleted == False).all()]
+        # Fetch existing IDs
+        existing_ids = [row[0] for row in db.query(Category.id).all()]
         total = len(existing_ids)
 
         # Validate counts and uniqueness
@@ -80,13 +76,8 @@ def reorder_categories(db: Session, ordered_ids: TypeList[int]):
 
         db.commit()
 
-        # Return updated list ordered by order_index, name (only non-deleted categories)
-        return (
-            db.query(Category)
-            .filter(Category.is_deleted == False)
-            .order_by(Category.order_index.asc(), Category.name.asc())
-            .all()
-        )
+        # Return updated list ordered by order_index, name
+        return db.query(Category).order_by(Category.order_index.asc(), Category.name.asc()).all()
     except HTTPException:
         db.rollback()
         raise
@@ -96,14 +87,13 @@ def reorder_categories(db: Session, ordered_ids: TypeList[int]):
 
 
 # GET category by ID
-def get_category_by_id(db: Session, category_id: int, include_deleted: bool = False) -> Optional[Category]:
+def get_category_by_id(db: Session, category_id: int) -> Optional[Category]:
     """
     Retrieve a specific category by its ID.
     
     Args:
         db: Database session
         category_id: ID of the category to retrieve
-        include_deleted: Whether to include soft-deleted categories
         
     Returns:
         Category object if found
@@ -118,11 +108,7 @@ def get_category_by_id(db: Session, category_id: int, include_deleted: bool = Fa
         )
     
     try:
-        query = db.query(Category).filter(Category.id == category_id)
-        if not include_deleted:
-            query = query.filter(Category.is_deleted == False)
-            
-        category = query.first()
+        category = db.query(Category).filter(Category.id == category_id).first()
         if category is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -138,14 +124,13 @@ def get_category_by_id(db: Session, category_id: int, include_deleted: bool = Fa
 
 
 # GET category by name
-def get_category_by_name(db: Session, name: str, include_deleted: bool = False) -> Optional[Category]:
+def get_category_by_name(db: Session, name: str) -> Optional[Category]:
     """
     Retrieve a specific category by its name.
     
     Args:
         db: Database session
         name: Name of the category to retrieve
-        include_deleted: Whether to include soft-deleted categories
         
     Returns:
         Category object if found
@@ -160,11 +145,7 @@ def get_category_by_name(db: Session, name: str, include_deleted: bool = False) 
         )
         
     try:
-        query = db.query(Category).filter(Category.name == name)
-        if not include_deleted:
-            query = query.filter(Category.is_deleted == False)
-            
-        return query.first()
+        return db.query(Category).filter(Category.name == name).first()
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(
@@ -176,19 +157,17 @@ def get_category_by_name(db: Session, name: str, include_deleted: bool = False) 
 # CREATE new category
 def create_category(db: Session, category: CategoryCreate) -> Category:
     """
-    Create a new category or restore a soft-deleted one.
-    
-    If a soft-deleted category with the same name exists, it will be restored instead.
+    Create a new category.
     
     Args:
         db: Database session
         category: CategoryCreate object containing the data
         
     Returns:
-        Created or restored Category object
+        Created Category object
         
     Raises:
-        HTTPException: If a duplicate name is found (status 400) or other validation/database errors occur
+        HTTPException: If a duplicate name is found (status 409) or other validation/database errors occur
     """
     # Validate name (image_path is now optional)
     if not category.name or category.name.strip() == "":
@@ -197,42 +176,15 @@ def create_category(db: Session, category: CategoryCreate) -> Category:
             detail="Category name cannot be empty"
         )
     
-    # First check if category with the same name already exists (not soft-deleted)
-    existing_active = db.query(Category).filter(
-        and_(Category.name == category.name, Category.is_deleted == False)
-    ).first()
-    
-    if existing_active:
-        # Return 409 Conflict for duplicate name (REST API best practice)
+    # Check if category with the same name already exists
+    existing = db.query(Category).filter(Category.name == category.name).first()
+    if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Category with name '{category.name}' already exists"
         )
     
-    # Check if a soft-deleted category with the same name exists
-    soft_deleted_category = db.query(Category).filter(
-        and_(Category.name == category.name, Category.is_deleted == True)
-    ).first()
-    
-    if soft_deleted_category:
-        # Check if order_index is already used by another category (excluding the soft-deleted one we're restoring)
-        existing_idx = db.query(Category).filter(
-            and_(Category.order_index == category.order_index, Category.id != soft_deleted_category.id)
-        ).first()
-        if existing_idx:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"order_index '{category.order_index}' is already used by another category"
-            )
-        # Restore the soft-deleted category
-        soft_deleted_category.is_deleted = False
-        soft_deleted_category.image_path = category.image_path
-        soft_deleted_category.order_index = category.order_index
-        db.commit()
-        db.refresh(soft_deleted_category)
-        return soft_deleted_category
-    
-    # Check for duplicate order_index (only if we're creating a new category, not restoring)
+    # Check for duplicate order_index
     existing_idx = db.query(Category).filter(Category.order_index == category.order_index).first()
     if existing_idx:
         raise HTTPException(
@@ -246,8 +198,7 @@ def create_category(db: Session, category: CategoryCreate) -> Category:
         db_category = Category(
             name=category.name,
             image_path=category.image_path,
-            order_index=category.order_index,
-            is_deleted=False
+            order_index=category.order_index
         )
         db.add(db_category)
         db.commit()
@@ -296,8 +247,7 @@ def update_category(db: Session, category_id: int, category: CategoryUpdate) -> 
     fields_provided = [
         hasattr(category, 'name') and category.name is not None,
         hasattr(category, 'image_path'),  # image_path can be None explicitly
-        hasattr(category, 'order_index') and category.order_index is not None,
-        hasattr(category, 'is_deleted') and category.is_deleted is not None
+        hasattr(category, 'order_index') and category.order_index is not None
     ]
     if not any(fields_provided):
         raise HTTPException(
@@ -353,10 +303,6 @@ def update_category(db: Session, category_id: int, category: CategoryUpdate) -> 
                 )
             db_category.order_index = category.order_index
         
-        # Update is_deleted if provided
-        if category.is_deleted is not None:
-            db_category.is_deleted = category.is_deleted
-        
         db.commit()
         db.refresh(db_category)
         return db_category
@@ -377,98 +323,11 @@ def update_category(db: Session, category_id: int, category: CategoryUpdate) -> 
         )
 
 
-# DELETE category (soft delete)
-def soft_delete_category(db: Session, category_id: int) -> bool:
+# DELETE category
+def delete_category(db: Session, category_id: int) -> bool:
     """
-    Soft delete a category by setting is_deleted to True.
-    Also updates all products in this category to use the default "Uncategorized" category (ID 0).
-    
-    Args:
-        db: Database session
-        category_id: ID of the category to delete
-        
-    Returns:
-        True if deleted, False if not found
-        
-    Raises:
-        HTTPException: If the ID is invalid or a database error occurs
-    """
-    # Validate ID
-    if category_id <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid ID: {category_id} - must be positive"
-        )
-    
-    # Protect against deletion of the default "Uncategorized" category
-    from app.core.constants import UNCATEGORIZED_CATEGORY_ID
-    if category_id == UNCATEGORIZED_CATEGORY_ID:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot delete the default 'Uncategorized' category"
-        )
-    
-    try:
-        # Check if category exists and is not already deleted
-        db_category = db.query(Category).filter(
-            and_(Category.id == category_id, Category.is_deleted == False)
-        ).first()
-        
-        if db_category is None:
-            return False
-        
-        # Import Product model here to avoid circular imports
-        from app.models.product import Product
-        
-        # Update all products in this category to use the default "Uncategorized" category
-        products_to_update = db.query(Product).filter(Product.category_id == category_id).all()
-        for product in products_to_update:
-            product.category_id = UNCATEGORIZED_CATEGORY_ID  # Default to "Uncategorized"
-        
-        # Find all used order_index values, EXCLUDING the category being deleted
-        # (since we're about to free up its order_index)
-        used_indices = {
-            row[0] for row in db.query(Category.order_index)
-            .filter(Category.id != category_id)
-            .all()
-        }
-        
-        # Assign the highest available order_index (starting from 127 and going down)
-        # This ensures soft-deleted categories are moved to the end
-        new_order_index = None
-        for i in range(127, 0, -1):
-            if i not in used_indices:
-                new_order_index = i
-                break
-        
-        if new_order_index is None:
-            # All 127 slots are used - this shouldn't happen in practice, but handle it
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Cannot assign order_index: all 127 slots are in use"
-            )
-        
-        # Soft delete by setting is_deleted to True and updating order_index to highest available value
-        # This moves deleted categories to the end while maintaining ordering
-        db_category.is_deleted = True
-        db_category.order_index = new_order_index
-        db.commit()
-        return True
-        # Note: We don't delete the image file on soft delete
-        # This allows for easy restoration if the category is undeleted
-    except SQLAlchemyError as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error occurred: {str(e)}"
-        )
-
-
-# HARD DELETE category (physical deletion)
-def hard_delete_category(db: Session, category_id: int) -> bool:
-    """
-    Hard delete a category from the database.
-    Also updates all products in this category to use the default "Uncategorized" category (ID 0).
+    Delete a category from the database.
+    Also updates all products in this category to use the default "Uncategorized" category (ID 1).
     
     Args:
         db: Database session

@@ -17,13 +17,13 @@ ALTER TABLE `liste` AUTO_INCREMENT = 1;
 
 -- Seed categories (let them auto-increment, starting after the default "Uncategorized" category)
 -- Note: order_index is required and must be unique. Using values 2-7 (1 is for Uncategorized)
-INSERT INTO `online_shop`.`category` (`name`, `image_path`, `order_index`, `is_deleted`) VALUES 
-('Fruits', '/images/categories/fruits.jpg', 2, 0),
-('Vegetables', '/images/categories/vegetables.jpg', 3, 0),
-('Dairy', '/images/categories/dairy.jpg', 4, 0),
-('Bakery', '/images/categories/bakery.jpg', 5, 0),
-('Meat', '/images/categories/meat.jpg', 6, 0),
-('Beverages', '/images/categories/beverages.jpg', 7, 0);
+INSERT INTO `online_shop`.`category` (`name`, `image_path`, `order_index`) VALUES 
+('Fruits', '/images/categories/fruits.jpg', 2),
+('Vegetables', '/images/categories/vegetables.jpg', 3),
+('Dairy', '/images/categories/dairy.jpg', 4),
+('Bakery', '/images/categories/bakery.jpg', 5),
+('Meat', '/images/categories/meat.jpg', 6),
+('Beverages', '/images/categories/beverages.jpg', 7);
 
 -- Seed products
 INSERT INTO `online_shop`.`produse` (`nume`, `cantitate`, `pret`, `description`, `category_id`, `unitati_id`, `is_deleted`) VALUES 

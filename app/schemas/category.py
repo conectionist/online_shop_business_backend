@@ -60,11 +60,6 @@ class CategoryUpdate(BaseModel):
         description="Manual ordering index (1-127), unique"
     )
     
-    is_deleted: Optional[bool] = Field(
-        None,
-        description="Soft delete flag"
-    )
-    
     @field_validator('name', 'image_path')
     @classmethod
     def validate_not_empty(cls, v):
@@ -80,7 +75,6 @@ class Category(CategoryBase):
     order_index: int = Field(ge=1, le=127, description="Manual ordering index (1-127), unique")
     created_at: Annotated[datetime, Field(description="Creation timestamp")]
     updated_at: Annotated[datetime, Field(description="Last update timestamp")]
-    is_deleted: bool
     
     @computed_field
     @property

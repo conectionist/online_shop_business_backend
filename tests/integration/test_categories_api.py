@@ -650,6 +650,35 @@ class CategoryTestUtils(EntityTestUtils):
 # Create a test utils instance for categories
 category_utils = CategoryTestUtils()
 
+def find_available_order_indices(count=1, prefer_high=False):
+    """
+    Find available order_index values dynamically.
+    
+    Args:
+        count: Number of indices to find
+        prefer_high: If True, prefer high values (for testing high index scenarios)
+    
+    Returns:
+        List of available order_index values
+    """
+    all_categories = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
+    used_indices = {c["order_index"] for c in all_categories}
+    
+    available = []
+    if prefer_high:
+        # Start from high values and work down
+        for i in range(127, 0, -1):
+            if i not in used_indices and len(available) < count:
+                available.append(i)
+    else:
+        # Start from low values and work up
+        for i in range(1, 127):
+            if i not in used_indices and len(available) < count:
+                available.append(i)
+    
+    assert len(available) >= count, f"Could not find {count} available order_index values"
+    return available
+
 def test_category_crud_workflow():
     """
     Tests the full Create, Read, Update, and Delete (CRUD) workflow for categories.
@@ -1018,9 +1047,12 @@ def test_category_create_requires_order_index_and_enforces_range():
 
 def test_category_ordering_and_unique_index():
     """Ensure list ordering by order_index then name and unique index 409 on conflict."""
+    # Find available order_index values dynamically
+    indices = find_available_order_indices(count=2)
+    
     # Create two with explicit indices
-    first, first_id = category_utils.create_entity("Order A", order_index=10)
-    second, second_id = category_utils.create_entity("Order B", order_index=20)
+    first, first_id = category_utils.create_entity("Order A", order_index=indices[0])
+    second, second_id = category_utils.create_entity("Order B", order_index=indices[1])
     try:
         # Fetch list and ensure order_index ordering
         resp = requests.get(f"{category_utils.base_url}/")
@@ -1048,10 +1080,13 @@ def test_category_ordering_and_unique_index():
 def test_reorder_categories_happy_path_moves_item_to_top():
     """PUT /categories/reorder should atomically reorder by full ID list."""
     import requests
+    # Find available order_index values dynamically
+    indices = find_available_order_indices(count=3)
+    
     # Create three new categories to work with
-    cat1, id1 = category_utils.create_entity("Reorder Cat 1", order_index=50)
-    cat2, id2 = category_utils.create_entity("Reorder Cat 2", order_index=60)
-    cat3, id3 = category_utils.create_entity("Reorder Cat 3", order_index=70)
+    cat1, id1 = category_utils.create_entity("Reorder Cat 1", order_index=indices[0])
+    cat2, id2 = category_utils.create_entity("Reorder Cat 2", order_index=indices[1])
+    cat3, id3 = category_utils.create_entity("Reorder Cat 3", order_index=indices[2])
 
     try:
         # Build the full ordered ID list by taking current IDs and moving id3 to the top
@@ -1131,10 +1166,13 @@ def test_soft_delete_assigns_highest_available_order_index():
     if not auth_utils.access_token:
         auth_utils.login()
     
+    # Find available order_index values dynamically
+    indices = find_available_order_indices(count=3)
+    
     # Create multiple categories with specific order_indices
-    cat1, id1 = category_utils.create_entity("SoftDelete Test 1", order_index=10)
-    cat2, id2 = category_utils.create_entity("SoftDelete Test 2", order_index=20)
-    cat3, id3 = category_utils.create_entity("SoftDelete Test 3", order_index=30)
+    cat1, id1 = category_utils.create_entity("SoftDelete Test 1", order_index=indices[0])
+    cat2, id2 = category_utils.create_entity("SoftDelete Test 2", order_index=indices[1])
+    cat3, id3 = category_utils.create_entity("SoftDelete Test 3", order_index=indices[2])
     
     try:
         # Get all categories including deleted to see current max order_index
@@ -1165,7 +1203,7 @@ def test_soft_delete_assigns_highest_available_order_index():
         # Verify the third category is still active with its original order_index
         active_cat3 = category_utils.get_entity(id3)
         assert active_cat3["is_deleted"] is False
-        assert active_cat3["order_index"] == 30
+        assert active_cat3["order_index"] == indices[2]
         
     finally:
         # Clean up
@@ -1264,15 +1302,19 @@ def test_soft_delete_order_index_excludes_deleted_category():
     if not auth_utils.access_token:
         auth_utils.login()
     
-    # Create a category with a high order_index
-    cat1, id1 = category_utils.create_entity("High Index Test", order_index=125)
+    # Find a high available order_index value dynamically
+    high_indices = find_available_order_indices(count=1, prefer_high=True)
+    high_index = high_indices[0]
+    
+    # Create a category with the found high order_index
+    cat1, id1 = category_utils.create_entity("High Index Test", order_index=high_index)
     
     try:
         # Get all categories to see what's used (excluding the one we'll delete)
         all_categories = requests.get(f"{category_utils.base_url}/?include_deleted=true").json()
         used_indices_before = {c["order_index"] for c in all_categories if c["id"] != id1}
         
-        # Soft delete the category with order_index=125
+        # Soft delete the category with the high order_index
         category_utils.soft_delete_entity(id1)
         
         deleted_cat1 = category_utils.get_entity_with_deleted(id1, include_deleted=True)
@@ -1289,8 +1331,8 @@ def test_soft_delete_order_index_excludes_deleted_category():
         assert deleted_cat1["order_index"] == expected_order_index, (
             f"Expected order_index {expected_order_index}, got {deleted_cat1['order_index']}"
         )
-        # Should be a high value (at least 125 or higher)
-        assert deleted_cat1["order_index"] >= 125
+        # Should be a high value (at least the original high_index or higher)
+        assert deleted_cat1["order_index"] >= high_index
         
     finally:
         # Clean up

@@ -117,6 +117,7 @@ class Order(BaseModel):
     order_notes: Optional[str] = Field(None, description="Optional order notes")
     created_at: Annotated[datetime, Field(description="Creation timestamp")]
     updated_at: Annotated[datetime, Field(description="Last update timestamp")]
+    is_deleted: bool = Field(False, description="Soft delete flag")
     items: List[OrderItem] = Field(default_factory=list, description="Order items")
 
     model_config = ConfigDict(
@@ -137,6 +138,7 @@ class OrderFilterParams(BaseModel):
     payment_method_id: Optional[int] = Field(default=None, gt=0, description="Filter by payment method ID")
     data_plasarii_start: Optional[datetime] = Field(default=None, description="Start of placement datetime range (inclusive)")
     data_plasarii_end: Optional[datetime] = Field(default=None, description="End of placement datetime range (inclusive)")
+    include_deleted: Optional[bool] = Field(False, description="Include soft-deleted orders")
 
     skip: Annotated[int, Field(ge=0, description="Number of records to skip")]=0
     limit: Annotated[int, Field(ge=1, le=1000, description="Maximum number of records to return")]=100

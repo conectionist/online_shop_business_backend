@@ -183,16 +183,32 @@ def test_orders_patch_updates_fields():
     assert body.get("order_notes") == "Updated notes"
 
 
-def test_orders_delete_removes_order():
+def test_orders_delete_soft_deletes_order():
+    """Test that delete performs soft delete - order is marked as deleted but still exists"""
     order_id = _create_minimal_order_and_return_id()
     if not auth_utils.access_token:
         auth_utils.login()
-    # Delete
+    # Delete (soft delete)
     resp = auth_utils.make_authenticated_request("DELETE", f"{API_V1}/orders/{order_id}")
     assert resp.status_code == 204, resp.text
-    # Verify not found
+    # Verify not found in normal listing (soft-deleted orders excluded by default)
     get_after = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/{order_id}")
-    assert get_after.status_code == 404
+    assert get_after.status_code == 404, "Soft-deleted order should not be found without include_deleted"
+    # Verify can be retrieved with include_deleted=True
+    get_with_deleted = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/{order_id}?include_deleted=true")
+    assert get_with_deleted.status_code == 200, "Soft-deleted order should be found with include_deleted=true"
+    deleted_order = get_with_deleted.json()
+    assert deleted_order["is_deleted"] == True, "Order should be marked as deleted"
+    # Verify not in list without include_deleted
+    list_resp = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/")
+    assert list_resp.status_code == 200
+    order_ids = [o["id"] for o in list_resp.json()]
+    assert order_id not in order_ids, "Soft-deleted order should not appear in normal listing"
+    # Verify appears in list with include_deleted=True
+    list_with_deleted = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/?include_deleted=true")
+    assert list_with_deleted.status_code == 200
+    order_ids_with_deleted = [o["id"] for o in list_with_deleted.json()]
+    assert order_id in order_ids_with_deleted, "Soft-deleted order should appear in listing with include_deleted=true"
 
 
 # ---------- Additional coverage ----------
@@ -945,3 +961,194 @@ def test_orders_create_different_quantities_returns_201():
     }
     r2 = requests.post(f"{API_V1}/orders/", json=base_qty3)
     assert r2.status_code == 201, f"Expected 201 for different quantities, got {r2.status_code}: {r2.text}"
+
+
+# ---------- Soft delete and restore tests ----------
+
+def test_orders_soft_delete_and_restore():
+    """Test soft delete and restore functionality"""
+    order_id = _create_minimal_order_and_return_id()
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    # 1. Verify order exists and is not deleted
+    get_resp = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/{order_id}")
+    assert get_resp.status_code == 200
+    order = get_resp.json()
+    assert order["is_deleted"] == False, "New order should not be deleted"
+    
+    # 2. Soft delete the order
+    delete_resp = auth_utils.make_authenticated_request("DELETE", f"{API_V1}/orders/{order_id}")
+    assert delete_resp.status_code == 204, "Delete should return 204"
+    
+    # 3. Verify order is soft-deleted
+    get_deleted = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/{order_id}?include_deleted=true")
+    assert get_deleted.status_code == 200
+    deleted_order = get_deleted.json()
+    assert deleted_order["is_deleted"] == True, "Order should be marked as deleted"
+    
+    # 4. Verify order is excluded from normal listing
+    list_resp = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/")
+    assert list_resp.status_code == 200
+    order_ids = [o["id"] for o in list_resp.json()]
+    assert order_id not in order_ids, "Soft-deleted order should not appear in normal listing"
+    
+    # 5. Restore the order
+    restore_resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/{order_id}/restore")
+    assert restore_resp.status_code == 200, f"Restore should return 200, got {restore_resp.status_code}: {restore_resp.text}"
+    restored_order = restore_resp.json()
+    assert restored_order["is_deleted"] == False, "Restored order should not be marked as deleted"
+    
+    # 6. Verify order appears in normal listing again
+    list_after_restore = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/")
+    assert list_after_restore.status_code == 200
+    order_ids_after = [o["id"] for o in list_after_restore.json()]
+    assert order_id in order_ids_after, "Restored order should appear in normal listing"
+
+
+def test_orders_restore_non_existent_order_returns_404():
+    """Test that restoring a non-existent order returns 404"""
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    # Try to restore non-existent order
+    restore_resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/999999/restore")
+    assert restore_resp.status_code == 404, "Restoring non-existent order should return 404"
+
+
+def test_orders_restore_not_deleted_order_returns_404():
+    """Test that restoring an order that is not soft-deleted returns 404"""
+    order_id = _create_minimal_order_and_return_id()
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    # Try to restore order that is not deleted
+    restore_resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/{order_id}/restore")
+    assert restore_resp.status_code == 404, "Restoring non-deleted order should return 404"
+
+
+def test_orders_update_soft_deleted_order_fails():
+    """Test that updating a soft-deleted order fails"""
+    order_id = _create_minimal_order_and_return_id()
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    # Soft delete the order
+    delete_resp = auth_utils.make_authenticated_request("DELETE", f"{API_V1}/orders/{order_id}")
+    assert delete_resp.status_code == 204
+    
+    # Try to update soft-deleted order
+    update_resp = auth_utils.make_authenticated_request(
+        "PATCH", 
+        f"{API_V1}/orders/{order_id}",
+        json={"nume_client": "Updated Name"}
+    )
+    assert update_resp.status_code == 400, "Updating soft-deleted order should return 400"
+    assert "soft-deleted" in update_resp.text.lower(), "Error message should mention soft-deleted"
+
+
+def test_orders_duplicate_detection_excludes_soft_deleted():
+    """Test that duplicate detection excludes soft-deleted orders"""
+    list_id = _get_any_list_id_or_skip()
+    name = f"Dup Exclude Deleted {int(datetime.utcnow().timestamp()*1000)}"
+    
+    # Create first order
+    payload = {
+        "nume_client": name,
+        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,
+        "payment_method_id": 5,
+    }
+    r1 = requests.post(f"{API_V1}/orders/", json=payload)
+    assert r1.status_code == 201, r1.text
+    order_id = r1.json()["id"]
+    
+    # Soft delete the order
+    if not auth_utils.access_token:
+        auth_utils.login()
+    delete_resp = auth_utils.make_authenticated_request("DELETE", f"{API_V1}/orders/{order_id}")
+    assert delete_resp.status_code == 204
+    
+    # Try to create duplicate - should succeed because original is soft-deleted
+    r2 = requests.post(f"{API_V1}/orders/", json=payload)
+    assert r2.status_code == 201, f"Creating duplicate of soft-deleted order should succeed, got {r2.status_code}: {r2.text}"
+
+
+def test_orders_include_deleted_parameter():
+    """Test include_deleted parameter in list and get endpoints"""
+    order_id = _create_minimal_order_and_return_id()
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    # Soft delete the order
+    delete_resp = auth_utils.make_authenticated_request("DELETE", f"{API_V1}/orders/{order_id}")
+    assert delete_resp.status_code == 204
+    
+    # Test list endpoint without include_deleted (default False)
+    list_default = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/")
+    assert list_default.status_code == 200
+    order_ids_default = [o["id"] for o in list_default.json()]
+    assert order_id not in order_ids_default, "Soft-deleted order should not appear without include_deleted"
+    
+    # Test list endpoint with include_deleted=True
+    list_with_deleted = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/?include_deleted=true")
+    assert list_with_deleted.status_code == 200
+    order_ids_with_deleted = [o["id"] for o in list_with_deleted.json()]
+    assert order_id in order_ids_with_deleted, "Soft-deleted order should appear with include_deleted=true"
+    
+    # Test get endpoint without include_deleted (default False)
+    get_default = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/{order_id}")
+    assert get_default.status_code == 404, "Soft-deleted order should not be found without include_deleted"
+    
+    # Test get endpoint with include_deleted=True
+    get_with_deleted = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/{order_id}?include_deleted=true")
+    assert get_with_deleted.status_code == 200, "Soft-deleted order should be found with include_deleted=true"
+    order = get_with_deleted.json()
+    assert order["is_deleted"] == True, "Order should be marked as deleted"
+
+
+def test_orders_hard_delete_permanently_removes_order():
+    """Test that hard delete permanently removes the order"""
+    order_id = _create_minimal_order_and_return_id()
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    # Hard delete the order
+    delete_resp = auth_utils.make_authenticated_request("DELETE", f"{API_V1}/orders/{order_id}?permanent=true")
+    assert delete_resp.status_code == 204, "Hard delete should return 204"
+    
+    # Verify order is permanently gone (not found even with include_deleted)
+    get_resp = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/{order_id}?include_deleted=true")
+    assert get_resp.status_code == 404, "Hard-deleted order should not be found even with include_deleted=true"
+    
+    # Verify not in list even with include_deleted
+    list_with_deleted = auth_utils.make_authenticated_request("GET", f"{API_V1}/orders/?include_deleted=true")
+    assert list_with_deleted.status_code == 200
+    order_ids = [o["id"] for o in list_with_deleted.json()]
+    assert order_id not in order_ids, "Hard-deleted order should not appear in any listing"
+
+
+def test_orders_soft_delete_vs_hard_delete():
+    """Test the difference between soft delete and hard delete"""
+    # Create two orders
+    order1_id = _create_minimal_order_and_return_id()
+    order2_id = _create_minimal_order_and_return_id()
+    if not auth_utils.access_token:
+        auth_utils.login()
+    
+    # Soft delete first order
+    soft_delete_resp = auth_utils.make_authenticated_request("DELETE", f"{API_V1}/orders/{order1_id}")
+    assert soft_delete_resp.status_code == 204
+    
+    # Hard delete second order
+    hard_delete_resp = auth_utils.make_authenticated_request("DELETE", f"{API_V1}/orders/{order2_id}?permanent=true")
+    assert hard_delete_resp.status_code == 204
+    
+    # Verify soft-deleted order can be restored
+    restore_resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/{order1_id}/restore")
+    assert restore_resp.status_code == 200, "Soft-deleted order should be restorable"
+    
+    # Verify hard-deleted order cannot be restored (doesn't exist)
+    restore_hard_resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/{order2_id}/restore")
+    assert restore_hard_resp.status_code == 404, "Hard-deleted order should not be restorable"

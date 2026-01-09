@@ -46,8 +46,7 @@ def get_list_categories_ordered(db: Session, list_id: int) -> TypeList[dict]:
                 "image_path": category.image_path,
                 "position": list_category.position,
                 "created_at": category.created_at,
-                "updated_at": category.updated_at,
-                "is_deleted": category.is_deleted
+                "updated_at": category.updated_at
             }
             result.append(category_dict)
         

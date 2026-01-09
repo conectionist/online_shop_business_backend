@@ -842,7 +842,7 @@ def test_category_deletion_cascade():
         assert created_product["category_id"] == category_id
         
         # Delete the category using category_utils
-        category_utils.soft_delete_entity(category_id)
+        category_utils.hard_delete_entity(category_id)
         
         # Check that the product now has category_id = 1 (Uncategorized)
         get_product_response = requests.get(f"{product_utils.base_url}/{product_id}")

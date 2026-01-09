@@ -59,7 +59,6 @@ PUT /api/v1/categories/reorder
     "name": "Electronics",
     "order_index": 1,
     "image_path": "categories/...",
-    "is_deleted": false,
     "created_at": "2024-01-15T10:30:00.000000Z",
     "updated_at": "2024-01-15T10:30:00.000000Z"
   },
@@ -74,11 +73,10 @@ PUT /api/v1/categories/reorder
 ```
 
 **Validation Rules**:
-- Must include **all non-deleted** category IDs (complete permutation of active categories only)
-- Soft-deleted categories are excluded from reordering
+- Must include **all** category IDs (complete permutation of all categories)
 - Cannot include duplicates
 - Cannot include non-existent category IDs
-- All IDs must exist in the database and be non-deleted
+- All IDs must exist in the database
 
 **Error Responses**:
 - `422`: Invalid permutation (missing IDs, duplicates, or wrong count)
@@ -100,7 +98,6 @@ PUT /api/v1/categories/reorder
     "order_index": 1,
     "image_path": "categories/...",
     "image_versions": {...},
-    "is_deleted": false,
     "created_at": "2024-01-15T10:30:00.000000Z",
     "updated_at": "2024-01-15T10:30:00.000000Z"
   },
@@ -328,7 +325,7 @@ function handleCategoryReorder(newOrder) {
   // newOrder is an array of category IDs in the desired order
   // e.g., [3, 1, 2, 5, 4]
   
-  // Get all active categories (soft-deleted are excluded from reordering)
+  // Get all categories
   fetch('/api/v1/categories/')
     .then(res => res.json())
     .then(activeCategories => {
@@ -402,7 +399,7 @@ function CategoryManager() {
   }
 
   async function handleReorder(newOrder) {
-    // Get all active category IDs in current order (soft-deleted are excluded)
+    // Get all category IDs in current order
     const allIds = categories.map(c => c.id);
     
     // Build complete permutation for reorder endpoint (only active categories)

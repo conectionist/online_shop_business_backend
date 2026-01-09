@@ -43,7 +43,6 @@ class CategoryInListResponse(BaseModel):
     position: int = Field(..., description="Position of the category in the list")
     created_at: datetime = Field(..., description="Category creation timestamp")
     updated_at: datetime = Field(..., description="Category last update timestamp")
-    is_deleted: bool = Field(..., description="Whether the category is soft-deleted")
     
     class Config:
         from_attributes = True

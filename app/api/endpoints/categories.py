@@ -18,9 +18,8 @@ from app.services.category import (
     create_category,
     get_categories,
     get_category_by_id,
-    soft_delete_category,
     update_category,
-    hard_delete_category,
+    delete_category,
     reorder_categories,
 )
 
@@ -116,12 +115,11 @@ def upload_category_image(
 def read_categories(
     skip: int = Query(0, ge=0, le=1000, description="Number of items to skip (max 1000)"),
     limit: int = Query(100, ge=1, le=100, description="Number of items to return (max 100)"),
-    include_deleted: bool = Query(False, description="Whether to include soft-deleted categories"),
     db: Session = Depends(get_db)
 ):
-    """Get all categories with pagination and optional filtering for deleted items"""
+    """Get all categories with pagination"""
     try:
-        categories = get_categories(db, skip=skip, limit=limit, include_deleted=include_deleted)
+        categories = get_categories(db, skip=skip, limit=limit)
         return categories
     except HTTPException:
         raise
@@ -246,12 +244,11 @@ def create_category_endpoint(
 })
 def read_category(
     category_id: int = Path(..., gt=0, description="The ID of the category to retrieve"),
-    include_deleted: bool = Query(False, description="Whether to include soft-deleted categories"),
     db: Session = Depends(get_db)
 ):
     """Get a specific category by ID"""
     try:
-        return get_category_by_id(db, category_id=category_id, include_deleted=include_deleted)
+        return get_category_by_id(db, category_id=category_id)
     except HTTPException:
         raise
     except ValidationError as e:
@@ -535,19 +532,14 @@ def patch_category_endpoint(
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
-def delete_category(
+def delete_category_endpoint(
     category_id: int = Path(..., gt=0, description="The ID of the category to delete"),
-    permanent: bool = Query(False, description="Whether to permanently delete the category"),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """Delete a category (soft delete by default, hard delete if permanent=True)"""
+    """Delete a category (permanently)"""
     try:
-        if permanent:
-            result = hard_delete_category(db=db, category_id=category_id)
-        else:
-            result = soft_delete_category(db=db, category_id=category_id)
-            
+        result = delete_category(db=db, category_id=category_id)
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

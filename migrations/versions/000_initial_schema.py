@@ -32,12 +32,7 @@ def _load_and_sanitize_schema_sql() -> List[str]:
     schema_path = project_root / "db" / "schema.sql"
 
     if not schema_path.exists():
-        # Fallback for alternate location used by docker-entrypoint-initdb.d
-        alt_path = project_root / "db" / "docker-entrypoint-initdb.d" / "schema.sql"
-        if alt_path.exists():
-            schema_path = alt_path
-        else:
-            raise FileNotFoundError(f"Could not find schema.sql at {schema_path} or {alt_path}")
+        raise FileNotFoundError(f"Could not find schema.sql at {schema_path}")
 
     with open(schema_path, "r", encoding="utf-8") as f:
         sql_text = f.read()

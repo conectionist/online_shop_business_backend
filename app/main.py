@@ -17,7 +17,7 @@ if os.getenv("DEBUG", "0") == "1":
     # debugpy.wait_for_client()
 
 from app.core.config import API_VERSION, API_TITLE, API_DESCRIPTION, settings
-from app.core.database import get_db, Base, engine, SessionLocal
+from app.core.database import get_db, SessionLocal
 from app.api.api import api_router
 from app.api.endpoints.system_config import mount_static_files
 from app.core.admin_init import initialize_default_admin
@@ -58,10 +58,8 @@ mount_static_files(app)
 async def startup_event():
     """Initialize application on startup"""
     try:
-        # Create database tables if they don't exist
-        Base.metadata.create_all(bind=engine)
-        
         # Initialize default admin user
+        # Note: Database tables are created by Alembic migrations in docker-entrypoint.sh
         initialize_default_admin()
     except Exception as e:
         # Log the error but don't prevent the app from starting

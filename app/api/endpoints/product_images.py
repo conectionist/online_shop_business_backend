@@ -1,8 +1,9 @@
 import os
 import shutil
+import logging
 from typing import Dict, List
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, UploadFile, status, Body
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -20,6 +21,7 @@ from app.services.product_image import (
 from app.schemas.product_image import ProductImageCreate, ProductImageUpdate
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/{product_id}/images", response_model=ProductImageSchema, responses={
@@ -285,7 +287,7 @@ async def delete_product_image_endpoint(
 })
 async def reorder_product_images_endpoint(
     product_id: int = Path(..., gt=0, description="The ID of the product"),
-    image_order: List[Dict[str, int]] = None,
+    image_order: List[Dict[str, int]] = Body(..., description="List of image IDs and positions to reorder"),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -304,7 +306,10 @@ async def reorder_product_images_endpoint(
     ]
     ```
     """
+    logger.info(f"Reorder images request for product_id={product_id}, image_order={image_order}")
+    
     if not image_order:
+        logger.warning(f"Reorder images failed: image_order not provided for product_id={product_id}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Image order not provided"
@@ -313,6 +318,10 @@ async def reorder_product_images_endpoint(
     # Validate each item in the image_order list has required fields
     for i, item in enumerate(image_order):
         if not isinstance(item, dict) or 'id' not in item or 'position' not in item:
+            logger.warning(
+                f"Reorder images failed: item at position {i} missing required fields "
+                f"for product_id={product_id}, item={item}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Item at position {i} is missing required fields 'id' and 'position'"
@@ -323,6 +332,10 @@ async def reorder_product_images_endpoint(
             int(item['id'])
             int(item['position'])
         except (ValueError, TypeError):
+            logger.warning(
+                f"Reorder images failed: invalid values at position {i} "
+                f"for product_id={product_id}, item={item}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Item at position {i} has invalid values: 'id' and 'position' must be integers"
@@ -331,6 +344,7 @@ async def reorder_product_images_endpoint(
     # Check if product exists
     product = get_product_by_id(db, product_id=product_id)
     if not product:
+        logger.warning(f"Reorder images failed: product not found, product_id={product_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found"
@@ -340,9 +354,20 @@ async def reorder_product_images_endpoint(
     updated_images = reorder_product_images(db, product_id, image_order)
     
     if not updated_images:
+        # Get more context about which images weren't found
+        image_ids = [item["id"] for item in image_order]
+        existing_images = get_product_images(db, product_id)
+        existing_image_ids = [img.id for img in existing_images]
+        missing_ids = set(image_ids) - set(existing_image_ids)
+        
+        logger.warning(
+            f"Reorder images failed: invalid image IDs for product_id={product_id}. "
+            f"Requested IDs: {image_ids}, Existing IDs: {existing_image_ids}, Missing: {missing_ids}"
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid image IDs provided"
+            detail=f"Invalid image IDs provided. Missing image IDs: {sorted(missing_ids) if missing_ids else 'none'} (existing IDs: {existing_image_ids})"
         )
     
+    logger.info(f"Reorder images successful for product_id={product_id}, reordered {len(updated_images)} images")
     return updated_images

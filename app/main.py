@@ -1,7 +1,8 @@
 import os
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -46,6 +47,35 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Set up logger for HTTP exceptions
+logger = logging.getLogger(__name__)
+
+# Global exception handler for HTTPException to log error details
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Log HTTP exceptions with detailed information including status code and error message.
+    This helps debug 4xx errors that would otherwise only show status codes in access logs.
+    """
+    # Log the error with context
+    log_level = logging.WARNING if 400 <= exc.status_code < 500 else logging.ERROR
+    logger.log(
+        log_level,
+        f"HTTP {exc.status_code} error on {request.method} {request.url.path}: {exc.detail}",
+        extra={
+            "status_code": exc.status_code,
+            "path": request.url.path,
+            "method": request.method,
+            "detail": exc.detail,
+        }
+    )
+    
+    # Return the standard FastAPI error response
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")

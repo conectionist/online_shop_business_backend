@@ -661,6 +661,155 @@ class ProductTestUtils(EntityTestUtils):
             except Exception as e:
                 print(f"Error during test cleanup: {e}")
 
+    def test_reorder_product_images_error_cases(self):
+        """
+        Test error cases for reordering product images.
+        """
+        entity_id = None
+        try:
+            # Ensure we're authenticated
+            if not auth_utils.access_token:
+                auth_utils.login()
+            
+            # Create a product with images first
+            unique_name = self.generate_unique_name("ReorderError" + str(uuid.uuid4())[:8])
+            form_data = {
+                "nume": unique_name,
+                "cantitate": "10",
+                "pret": "100",
+                "description": f"Description for {unique_name}",
+                "category_id": "1",
+                "unitati_id": "1"
+            }
+            
+            create_response = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/",
+                data=form_data
+            )
+            assert create_response.status_code == 201
+            created_entity = create_response.json()
+            entity_id = created_entity["id"]
+            
+            # Upload two images
+            test_image_content = get_test_image_content()
+            files = {'file': ('test_image.jpg', test_image_content, 'image/jpeg')}
+            
+            upload_response_1 = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/{entity_id}/images",
+                files=files
+            )
+            assert upload_response_1.status_code == 200
+            image_1_data = upload_response_1.json()
+            image_1_id = image_1_data["id"]
+            
+            upload_response_2 = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/{entity_id}/images",
+                files=files
+            )
+            assert upload_response_2.status_code == 200
+            image_2_data = upload_response_2.json()
+            image_2_id = image_2_data["id"]
+            
+            # Test 1: Missing request body (empty body)
+            empty_response = auth_utils.make_authenticated_request(
+                "PUT",
+                f"{self.base_url}/{entity_id}/images/reorder",
+                json=None
+            )
+            assert empty_response.status_code == 422, f"Expected 422 for missing body, got {empty_response.status_code}: {empty_response.text}"
+            
+            # Test 2: Empty image_order list
+            empty_list_response = auth_utils.make_authenticated_request(
+                "PUT",
+                f"{self.base_url}/{entity_id}/images/reorder",
+                json=[]
+            )
+            assert empty_list_response.status_code == 400, f"Expected 400 for empty list, got {empty_list_response.status_code}: {empty_list_response.text}"
+            assert "not provided" in empty_list_response.json()["detail"].lower()
+            
+            # Test 3: Missing required field 'id'
+            missing_id_response = auth_utils.make_authenticated_request(
+                "PUT",
+                f"{self.base_url}/{entity_id}/images/reorder",
+                json=[{"position": 0}]
+            )
+            assert missing_id_response.status_code == 400, f"Expected 400 for missing id, got {missing_id_response.status_code}: {missing_id_response.text}"
+            assert "missing required fields" in missing_id_response.json()["detail"].lower()
+            
+            # Test 4: Missing required field 'position'
+            missing_position_response = auth_utils.make_authenticated_request(
+                "PUT",
+                f"{self.base_url}/{entity_id}/images/reorder",
+                json=[{"id": image_1_id}]
+            )
+            assert missing_position_response.status_code == 400, f"Expected 400 for missing position, got {missing_position_response.status_code}: {missing_position_response.text}"
+            assert "missing required fields" in missing_position_response.json()["detail"].lower()
+            
+            # Test 5: Invalid data type for 'id' (string instead of int)
+            # FastAPI/Pydantic validation will catch this and return 422
+            invalid_id_type_response = auth_utils.make_authenticated_request(
+                "PUT",
+                f"{self.base_url}/{entity_id}/images/reorder",
+                json=[{"id": "not_an_int", "position": 0}]
+            )
+            assert invalid_id_type_response.status_code == 422, f"Expected 422 for invalid id type (validation error), got {invalid_id_type_response.status_code}: {invalid_id_type_response.text}"
+            # Pydantic validation error format
+            detail = invalid_id_type_response.json()["detail"]
+            assert isinstance(detail, list) or "int" in str(detail).lower() or "integer" in str(detail).lower()
+            
+            # Test 6: Invalid data type for 'position' (string instead of int)
+            # FastAPI/Pydantic validation will catch this and return 422
+            invalid_position_type_response = auth_utils.make_authenticated_request(
+                "PUT",
+                f"{self.base_url}/{entity_id}/images/reorder",
+                json=[{"id": image_1_id, "position": "not_an_int"}]
+            )
+            assert invalid_position_type_response.status_code == 422, f"Expected 422 for invalid position type (validation error), got {invalid_position_type_response.status_code}: {invalid_position_type_response.text}"
+            # Pydantic validation error format
+            detail = invalid_position_type_response.json()["detail"]
+            assert isinstance(detail, list) or "int" in str(detail).lower() or "integer" in str(detail).lower()
+            
+            # Test 7: Invalid image IDs (IDs that don't exist)
+            invalid_ids_response = auth_utils.make_authenticated_request(
+                "PUT",
+                f"{self.base_url}/{entity_id}/images/reorder",
+                json=[{"id": 99999, "position": 0}, {"id": 99998, "position": 1}]
+            )
+            assert invalid_ids_response.status_code == 400, f"Expected 400 for invalid IDs, got {invalid_ids_response.status_code}: {invalid_ids_response.text}"
+            error_detail = invalid_ids_response.json()["detail"]
+            assert "invalid image ids" in error_detail.lower() or "missing image ids" in error_detail.lower()
+            # Check that the error message includes context about existing IDs
+            assert "existing" in error_detail.lower() or str(image_1_id) in error_detail or str(image_2_id) in error_detail
+            
+            # Test 8: Mix of valid and invalid image IDs
+            mixed_ids_response = auth_utils.make_authenticated_request(
+                "PUT",
+                f"{self.base_url}/{entity_id}/images/reorder",
+                json=[{"id": image_1_id, "position": 0}, {"id": 99999, "position": 1}]
+            )
+            assert mixed_ids_response.status_code == 400, f"Expected 400 for mixed valid/invalid IDs, got {mixed_ids_response.status_code}: {mixed_ids_response.text}"
+            
+            # Test 9: Product not found
+            nonexistent_product_response = auth_utils.make_authenticated_request(
+                "PUT",
+                f"{self.base_url}/99999/images/reorder",
+                json=[{"id": image_1_id, "position": 0}]
+            )
+            assert nonexistent_product_response.status_code == 404, f"Expected 404 for nonexistent product, got {nonexistent_product_response.status_code}: {nonexistent_product_response.text}"
+            error_detail = nonexistent_product_response.json()["detail"].lower()
+            assert "product" in error_detail and "not found" in error_detail
+            
+        finally:
+            # Clean up
+            try:
+                if entity_id:
+                    self.hard_delete_entity(entity_id)
+            except Exception as e:
+                print(f"Error during test cleanup: {e}")
+
 
 # Create a test utils instance for products
 product_utils = ProductTestUtils()
@@ -706,6 +855,13 @@ def test_multiple_product_images():
     Tests adding multiple images to a product and managing their positions.
     """
     product_utils.test_multiple_product_images()
+
+
+def test_reorder_product_images_error_cases():
+    """
+    Tests error cases for reordering product images.
+    """
+    product_utils.test_reorder_product_images_error_cases()
 
 
 def test_create_product_without_category():

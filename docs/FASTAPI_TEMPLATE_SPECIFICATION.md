@@ -22,7 +22,8 @@
 19. [AI Rules](#ai-rules)
 20. [Metrics & Observability](#metrics--observability)
 21. [Deployment](#deployment)
-22. [Minimal Functionality](#minimal-functionality)
+22. [Backup & Restore](#backup--restore)
+23. [Minimal Functionality](#minimal-functionality)
 
 ---
 
@@ -4992,6 +4993,803 @@ def init_otel(app):
 
 ---
 
+## Backup & Restore
+
+The template includes a comprehensive backup and restore system that allows administrators to create backups of the database and optionally configured file directories, and restore them to the same or different server instances.
+
+### Overview
+
+The backup and restore functionality provides:
+
+- **Database Backup**: Full MySQL database dump with all tables, data, routines, and triggers
+- **File Backup**: Optional backup of configurable directories (e.g., uploads, media files)
+- **Optional Encryption**: Password-protected backups using Fernet symmetric encryption
+- **Maintenance Mode**: Automatic maintenance mode during operations to prevent data inconsistencies
+- **Safety First**: Automatic safety backup before restore with rollback on failure
+- **All-or-Nothing Restore**: Atomic restore operations that either fully succeed or fully rollback
+
+### Key Principles
+
+1. **Application Data Only**: Backups contain only application-specific data (database, configured directories). No Docker configuration, environment variables, or infrastructure details.
+2. **Database User Agnostic**: Backups can be restored regardless of MySQL username/password changes between backup and restore.
+3. **Configurable File Backup**: Developers specify which directories to backup via environment variable. If not configured, only database is backed up.
+4. **All-or-Nothing Restore**: Restore operations are atomic - either fully succeed or fully rollback.
+5. **Maintenance Mode**: System enters maintenance mode during backup/restore to prevent data inconsistencies.
+
+### Configuration
+
+#### Environment Variables
+
+Add to `.env.example` and `app/core/config.py`:
+
+**File: `.env.example`**:
+
+```bash
+# Backup and Restore Configuration
+FOLDERS_TO_BACKUP=                    # Comma-separated list of directories to backup (e.g., /app/uploads,/app/media)
+                                      # Leave empty to backup only database
+BACKUP_MAX_SIZE_MB=2048              # Maximum backup file size in MB (default: 2048 = 2GB)
+BACKUP_OPERATION_TIMEOUT_SECONDS=600   # Maximum time for backup/restore operations in seconds (default: 600 = 10 minutes)
+```
+
+**File: `app/core/config.py`** (add to Settings class):
+
+```python
+from typing import List
+from pydantic import Field, field_validator
+
+# Backup and Restore Configuration
+FOLDERS_TO_BACKUP: List[str] = Field(
+    default_factory=list,
+    description="Comma-separated list of directories to backup"
+)
+BACKUP_MAX_SIZE_MB: int = 2048  # Maximum backup file size in MB
+BACKUP_OPERATION_TIMEOUT_SECONDS: int = 600  # Operation timeout in seconds
+
+@field_validator('FOLDERS_TO_BACKUP', mode='before')
+@classmethod
+def parse_folders_to_backup(cls, v):
+    """Parse comma-separated string to list of directories"""
+    if isinstance(v, str):
+        # Split by comma, strip whitespace, filter empty strings
+        return [folder.strip() for folder in v.split(',') if folder.strip()]
+    return v or []
+```
+
+### Backup Archive Structure
+
+```
+backup_YYYYMMDD_HHMMSS.tar.gz
+├── database.sql          # MySQL dump (processed to be user-agnostic)
+├── files.tar.gz          # Optional: Backed up directories (if FOLDERS_TO_BACKUP configured)
+└── metadata.json         # Backup metadata
+```
+
+**Files Archive Structure** (if `files.tar.gz` is present):
+
+```
+files.tar.gz
+└── files/
+    ├── uploads/         # Example: if /app/uploads was in FOLDERS_TO_BACKUP
+    │   └── ...
+    ├── media/            # Example: if /app/media was in FOLDERS_TO_BACKUP
+    │   └── ...
+    └── ...
+```
+
+### Metadata Structure
+
+```json
+{
+  "api_version": "1.0.0",
+  "backup_timestamp": "2024-01-15T10:30:00Z",
+  "backup_format_version": "1.0",
+  "database_name": "mydb",
+  "backup_size_bytes": 524288000,
+  "encrypted": false,
+  "folders_included": ["/app/uploads", "/app/media"],
+  "files_included": true
+}
+```
+
+### File Structure
+
+```
+app/
+├── core/
+│   ├── maintenance.py          # Maintenance mode flag & utilities
+│   └── backup_config.py        # Backup configuration
+├── services/
+│   └── backup.py               # Core backup/restore logic
+├── api/
+│   └── endpoints/
+│       └── backup.py           # Backup/restore API endpoints
+└── schemas/
+    └── backup.py               # Pydantic models for backup operations
+```
+
+### Implementation Details
+
+#### Maintenance Mode Module
+
+**File: `app/core/maintenance.py`**
+
+```python
+"""Maintenance mode management for backup/restore operations"""
+import os
+import logging
+from pathlib import Path
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+MAINTENANCE_FLAG_FILE = "/tmp/maintenance_mode.flag"
+
+def enable_maintenance_mode() -> None:
+    """Enable maintenance mode by creating flag file"""
+    try:
+        Path(MAINTENANCE_FLAG_FILE).touch()
+        logger.info("Maintenance mode enabled")
+    except Exception as e:
+        logger.error(f"Failed to enable maintenance mode: {e}")
+        raise
+
+def disable_maintenance_mode() -> None:
+    """Disable maintenance mode by removing flag file"""
+    try:
+        flag_file = Path(MAINTENANCE_FLAG_FILE)
+        if flag_file.exists():
+            flag_file.unlink()
+        logger.info("Maintenance mode disabled")
+    except Exception as e:
+        logger.error(f"Failed to disable maintenance mode: {e}")
+        raise
+
+def is_maintenance_mode() -> bool:
+    """Check if maintenance mode is active"""
+    return Path(MAINTENANCE_FLAG_FILE).exists()
+```
+
+**Add to `app/main.py`** (maintenance mode middleware):
+
+```python
+from app.core.maintenance import is_maintenance_mode
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.middleware("http")
+async def maintenance_mode_middleware(request: Request, call_next):
+    """Middleware to handle maintenance mode"""
+    if is_maintenance_mode():
+        # Allow GET requests (read-only)
+        if request.method == "GET":
+            return await call_next(request)
+        
+        # Allow backup/restore endpoints (admin-only, so auth will be checked)
+        if request.url.path in ["/api/v1/admin/backup", "/api/v1/admin/restore"]:
+            return await call_next(request)
+        
+        # Block all other write requests
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Service temporarily unavailable. Maintenance in progress."
+            }
+        )
+    
+    return await call_next(request)
+```
+
+#### Backup Service - File Backup
+
+**File: `app/services/backup.py`**
+
+**Function:** `_create_files_archive(folders_to_backup: List[str]) -> Optional[bytes]`
+
+```python
+"""Create archive of configured directories to backup"""
+import tarfile
+import io
+import os
+import logging
+from pathlib import Path
+from typing import List, Optional
+
+logger = logging.getLogger(__name__)
+
+def _create_files_archive(folders_to_backup: List[str]) -> Optional[bytes]:
+    """
+    Create tar.gz archive of directories specified in FOLDERS_TO_BACKUP.
+    
+    Args:
+        folders_to_backup: List of directory paths to backup
+    
+    Returns:
+        bytes: Archive as bytes, or None if no folders configured or all missing
+    """
+    if not folders_to_backup:
+        return None
+    
+    # Filter to only existing directories
+    existing_folders = [
+        f for f in folders_to_backup 
+        if Path(f).exists() and Path(f).is_dir()
+    ]
+    
+    if not existing_folders:
+        logger.warning("No existing directories found in FOLDERS_TO_BACKUP")
+        return None
+    
+    # Log which directories are being backed up
+    logger.info(f"Backing up directories: {existing_folders}")
+    
+    archive_buffer = io.BytesIO()
+    
+    with tarfile.open(fileobj=archive_buffer, mode='w:gz') as tar:
+        for folder_path in existing_folders:
+            folder_name = Path(folder_path).name
+            # Add directory to archive, preserving structure under files/
+            tar.add(folder_path, arcname=f"files/{folder_name}", recursive=True)
+    
+    archive_buffer.seek(0)
+    archive_data = archive_buffer.read()
+    logger.info(f"Files archive created: {len(archive_data)} bytes")
+    return archive_data
+```
+
+**Key Points:**
+- Only backs up directories that exist
+- Preserves directory structure under `files/` in archive
+- Returns `None` if no folders configured or all missing
+- Handles missing directories gracefully (logs warning, continues)
+
+#### Backup Service - Database Dump
+
+**Function:** `_create_database_dump() -> bytes`
+
+```python
+"""Create MySQL database dump"""
+import subprocess
+import os
+import logging
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+def _create_database_dump() -> bytes:
+    """
+    Create MySQL database dump using mysqldump.
+    
+    Returns:
+        bytes: Database dump as bytes
+    """
+    cmd = [
+        'mysqldump',
+        '--single-transaction',      # Consistent snapshot (InnoDB)
+        '--routines',                # Include stored procedures/functions
+        '--triggers',                # Include triggers
+        '--no-create-db',            # Don't include CREATE DATABASE
+        '--skip-add-drop-database',   # Don't include DROP DATABASE
+        '--skip-lock-tables',        # Don't lock tables
+        '--skip-tz-utc',             # Avoid timezone issues
+        '-h', settings.DB_HOST,
+        '-P', str(settings.DB_PORT),
+        '-u', settings.DB_USER,
+        settings.DB_NAME
+    ]
+    
+    # Use MYSQL_PWD environment variable for password (more secure than -p)
+    env = {**os.environ, 'MYSQL_PWD': settings.DB_PASSWORD}
+    
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        check=True,
+        env=env
+    )
+    
+    logger.info(f"Database dump created: {len(result.stdout)} bytes")
+    return result.stdout
+```
+
+#### Backup Service - Metadata Creation
+
+**Function:** `_create_backup_metadata(...) -> dict`
+
+```python
+"""Create backup metadata"""
+from datetime import datetime
+from typing import List
+from app.core.config import settings
+
+def _create_backup_metadata(
+    database_name: str,
+    backup_size: int,
+    encrypted: bool,
+    folders_included: List[str],
+    files_included: bool
+) -> dict:
+    """
+    Create backup metadata dictionary.
+    
+    Returns:
+        dict: Metadata as dictionary (will be serialized to JSON)
+    """
+    return {
+        "api_version": settings.API_VERSION,
+        "backup_timestamp": datetime.utcnow().isoformat() + "Z",
+        "backup_format_version": "1.0",
+        "database_name": database_name,
+        "backup_size_bytes": backup_size,
+        "encrypted": encrypted,
+        "folders_included": folders_included,
+        "files_included": files_included
+    }
+```
+
+#### Backup Service - Archive Creation
+
+**Function:** `_create_backup_archive(...) -> bytes`
+
+```python
+"""Create complete backup archive"""
+import tarfile
+import io
+import json
+
+def _create_backup_archive(
+    database_dump: bytes,
+    files_archive: Optional[bytes],
+    metadata: dict
+) -> bytes:
+    """
+    Create tar.gz archive containing database dump, files, and metadata.
+    
+    Args:
+        database_dump: Database SQL dump as bytes
+        files_archive: Optional files archive as bytes
+        metadata: Metadata dictionary
+    
+    Returns:
+        bytes: Complete backup archive
+    """
+    archive_buffer = io.BytesIO()
+    
+    with tarfile.open(fileobj=archive_buffer, mode='w:gz') as tar:
+        # Add database dump
+        database_info = tarfile.TarInfo(name="database.sql")
+        database_info.size = len(database_dump)
+        tar.addfile(database_info, io.BytesIO(database_dump))
+        
+        # Add files archive if present
+        if files_archive:
+            files_info = tarfile.TarInfo(name="files.tar.gz")
+            files_info.size = len(files_archive)
+            tar.addfile(files_info, io.BytesIO(files_archive))
+        
+        # Add metadata
+        metadata_json = json.dumps(metadata, indent=2).encode('utf-8')
+        metadata_info = tarfile.TarInfo(name="metadata.json")
+        metadata_info.size = len(metadata_json)
+        tar.addfile(metadata_info, io.BytesIO(metadata_json))
+    
+    archive_buffer.seek(0)
+    return archive_buffer.read()
+```
+
+#### Backup Service - Encryption
+
+**Function:** `_encrypt_backup()` and `_decrypt_backup()`
+
+```python
+"""Backup encryption using Fernet"""
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.backends import default_backend
+import base64
+import os
+
+def _derive_key_from_password(password: str, salt: bytes) -> bytes:
+    """Derive encryption key from password using PBKDF2"""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+        backend=default_backend()
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    return key
+
+def _encrypt_backup(backup_data: bytes, password: str) -> bytes:
+    """
+    Encrypt backup data using password-derived key.
+    
+    Args:
+        backup_data: Backup archive bytes
+        password: Encryption password
+    
+    Returns:
+        bytes: Encrypted backup data (salt prepended)
+    """
+    salt = os.urandom(16)
+    key = _derive_key_from_password(password, salt)
+    fernet = Fernet(key)
+    
+    encrypted_data = fernet.encrypt(backup_data)
+    # Prepend salt for decryption
+    return salt + encrypted_data
+
+def _decrypt_backup(encrypted_data: bytes, password: str) -> bytes:
+    """
+    Decrypt backup data using password.
+    
+    Args:
+        encrypted_data: Encrypted backup data (with salt prepended)
+        password: Decryption password
+    
+    Returns:
+        bytes: Decrypted backup data
+    
+    Raises:
+        ValueError: If decryption fails (wrong password)
+    """
+    salt = encrypted_data[:16]
+    encrypted = encrypted_data[16:]
+    
+    key = _derive_key_from_password(password, salt)
+    fernet = Fernet(key)
+    
+    try:
+        return fernet.decrypt(encrypted)
+    except Exception as e:
+        raise ValueError("Decryption failed. Incorrect password or corrupted data.") from e
+```
+
+#### Backup Service - Main Backup Function
+
+**Function:** `create_backup(encrypt: bool = False, password: Optional[str] = None) -> bytes`
+
+```python
+"""Create complete backup archive"""
+import logging
+from typing import Optional
+from app.core.config import settings
+from app.core.maintenance import enable_maintenance_mode, disable_maintenance_mode
+from app.services.backup import (
+    _create_database_dump,
+    _create_files_archive,
+    _create_backup_metadata,
+    _create_backup_archive,
+    _encrypt_backup
+)
+
+logger = logging.getLogger(__name__)
+
+def create_backup(encrypt: bool = False, password: Optional[str] = None) -> bytes:
+    """
+    Create complete backup archive.
+    
+    Args:
+        encrypt: Whether to encrypt the backup
+        password: Encryption password (required if encrypt=True)
+    
+    Returns:
+        bytes: Backup archive (encrypted if requested)
+    """
+    try:
+        enable_maintenance_mode()
+        logger.info("Starting backup creation")
+        
+        # Create database dump
+        database_dump = _create_database_dump()
+        
+        # Create files archive (if folders configured)
+        files_archive = _create_files_archive(settings.FOLDERS_TO_BACKUP)
+        files_included = files_archive is not None
+        folders_included = settings.FOLDERS_TO_BACKUP if files_included else []
+        
+        # Create metadata
+        metadata = _create_backup_metadata(
+            database_name=settings.DB_NAME,
+            backup_size=0,  # Will be updated after archive creation
+            encrypted=encrypt,
+            folders_included=folders_included,
+            files_included=files_included
+        )
+        
+        # Create archive
+        backup_data = _create_backup_archive(
+            database_dump=database_dump,
+            files_archive=files_archive,
+            metadata=metadata
+        )
+        
+        # Encrypt if requested
+        if encrypt:
+            if not password:
+                raise ValueError("Password required for encryption")
+            logger.info("Encrypting backup")
+            backup_data = _encrypt_backup(backup_data, password)
+        
+        # Update metadata with final size
+        metadata["backup_size_bytes"] = len(backup_data)
+        
+        logger.info(f"Backup created successfully: {len(backup_data)} bytes")
+        return backup_data
+        
+    finally:
+        disable_maintenance_mode()
+```
+
+### Restore Service
+
+The restore service follows the same comprehensive pattern as outlined in the original backup/restore implementation plan. Key functions include:
+
+- `_validate_backup_file()`: Validate backup format and extract metadata
+- `_process_database_sql()`: Process SQL dump (handle USE statements, DB name changes)
+- `_create_safety_backup()`: Create safety backup before restore
+- `_restore_database()`: Restore database from SQL dump
+- `_restore_files()`: Restore files from archive (if present)
+- `_rollback_from_safety_backup()`: Rollback on failure
+- `restore_backup()`: Main restore function with all-or-nothing guarantee
+
+For complete restore implementation details, refer to the backup/restore implementation plan document. The restore logic handles:
+- Database name/user changes
+- File restoration to configured directories
+- Automatic rollback on any failure
+- Safety backup creation and restoration
+
+### API Endpoints
+
+#### Backup Endpoint
+
+**File: `app/api/endpoints/backup.py`**
+
+```python
+"""Backup and restore API endpoints"""
+from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException
+from fastapi.responses import Response
+from typing import Optional
+from datetime import datetime
+import logging
+from app.services.backup import create_backup, restore_backup
+from app.api.dependencies import get_current_admin  # Admin authentication
+from app.core.config import settings
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+@router.post("/api/v1/admin/backup")
+async def create_backup_endpoint(
+    encrypt: bool = Query(False, description="Enable encryption"),
+    password: Optional[str] = Query(None, description="Encryption password (required if encrypt=true)"),
+    current_user = Depends(get_current_admin)
+):
+    """
+    Create a backup of the database and configured file directories.
+    
+    - **encrypt**: Enable password-protected encryption
+    - **password**: Encryption password (required if encrypt=true)
+    
+    Returns backup archive as downloadable file.
+    """
+    if encrypt and not password:
+        raise HTTPException(
+            status_code=400,
+            detail="Password required when encryption is enabled"
+        )
+    
+    try:
+        backup_data = create_backup(encrypt=encrypt, password=password)
+        
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        filename = f"backup_{timestamp}.tar.gz"
+        
+        return Response(
+            content=backup_data,
+            media_type="application/gzip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Backup creation failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Backup creation failed. Please check logs for details."
+        )
+```
+
+#### Restore Endpoint
+
+```python
+@router.post("/api/v1/admin/restore")
+async def restore_backup_endpoint(
+    file: UploadFile = File(..., description="Backup archive file"),
+    password: Optional[str] = Query(None, description="Decryption password (required if encrypted)"),
+    current_user = Depends(get_current_admin)
+):
+    """
+    Restore database and files from backup archive.
+    
+    - **file**: Backup archive file (.tar.gz)
+    - **password**: Decryption password (required if backup is encrypted)
+    
+    Creates safety backup before restore. Rolls back automatically on failure.
+    """
+    # Validate file size
+    file_size = 0
+    file_content = b""
+    
+    async for chunk in file.stream():
+        file_size += len(chunk)
+        if file_size > settings.BACKUP_MAX_SIZE_MB * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Backup file exceeds maximum size of {settings.BACKUP_MAX_SIZE_MB}MB"
+            )
+        file_content += chunk
+    
+    try:
+        result = restore_backup(
+            backup_data=file_content,
+            encrypted=False,  # Will be detected from metadata
+            password=password
+        )
+        
+        return {
+            "status": "success",
+            "message": "Restore completed successfully",
+            "details": result
+        }
+    except Exception as e:
+        logger.error(f"Restore failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Restore failed. System has been rolled back to previous state."
+        )
+```
+
+**Add to `app/api/api.py`**:
+
+```python
+from app.api.endpoints import health, version, backup
+
+# ... existing code ...
+
+api_router.include_router(
+    backup.router,
+    tags=["admin", "backup"]
+)
+```
+
+### Usage Instructions
+
+#### Setting Up File Backup
+
+1. **Configure directories to backup** in `.env`:
+   ```bash
+   FOLDERS_TO_BACKUP=/app/uploads,/app/media,/app/files
+   ```
+
+2. **Ensure directories exist** before creating backup:
+   - The backup service will only backup directories that exist
+   - Missing directories are skipped (with warning in logs)
+   - If no directories exist or are configured, only database is backed up
+
+3. **Directory structure is preserved**:
+   - Original directory names are preserved in the backup archive
+   - On restore, files are restored based on current `FOLDERS_TO_BACKUP` configuration
+
+#### Creating a Backup
+
+```bash
+# Unencrypted backup
+curl -X POST "http://localhost:8000/api/v1/admin/backup" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -o backup.tar.gz
+
+# Encrypted backup
+curl -X POST "http://localhost:8000/api/v1/admin/backup?encrypt=true&password=mysecurepassword" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -o backup_encrypted.tar.gz
+```
+
+#### Restoring a Backup
+
+```bash
+# Restore unencrypted backup
+curl -X POST "http://localhost:8000/api/v1/admin/restore" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "file=@backup.tar.gz"
+
+# Restore encrypted backup
+curl -X POST "http://localhost:8000/api/v1/admin/restore?password=mysecurepassword" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "file=@backup_encrypted.tar.gz"
+```
+
+### Extending File Backup
+
+Developers can extend the backup system to include additional directories or custom logic:
+
+1. **Add more directories**: Simply add to `FOLDERS_TO_BACKUP` environment variable (comma-separated)
+2. **Custom backup logic**: Extend `_create_files_archive()` function in `app/services/backup.py` to filter files, add custom directories, etc.
+3. **Selective file backup**: Modify the backup service to filter files by extension, size, or other criteria
+4. **Cloud storage integration**: Add post-backup hooks to upload backups to S3, Azure Blob, Google Cloud Storage, etc.
+
+**Example: Adding custom directories programmatically**:
+
+```python
+# In app/services/backup.py
+def _get_all_backup_directories() -> List[str]:
+    """Get all directories to backup (from config + custom logic)"""
+    directories = list(settings.FOLDERS_TO_BACKUP)
+    
+    # Add custom directories based on business logic
+    if some_condition:
+        directories.append("/app/custom_data")
+    
+    return directories
+```
+
+### Security Considerations
+
+- **Admin-only access**: All backup/restore endpoints require admin authentication
+- **Optional encryption**: Backups can be password-protected using Fernet symmetric encryption
+- **No sensitive data in logs**: Passwords and connection strings are never logged
+- **Input validation**: Backup file size and format are validated
+- **File system security**: Uses secure temp directories, appropriate permissions
+- **Concurrent operation prevention**: File-based locking prevents multiple operations simultaneously
+
+### Testing
+
+The backup/restore system should be thoroughly tested:
+
+1. **Backup creation**:
+   - Database-only backup (no FOLDERS_TO_BACKUP configured)
+   - Database + files backup (FOLDERS_TO_BACKUP configured)
+   - Encrypted and unencrypted backups
+   - Test with missing directories (should skip gracefully)
+
+2. **Backup restoration**:
+   - Restore to same server
+   - Restore to different server (different DB name/user)
+   - Encrypted backup restore
+   - Error scenarios and rollback
+   - Test with and without files in backup
+
+3. **Maintenance mode**:
+   - Verify maintenance mode activation
+   - Test that GET requests still work
+   - Test that write requests are blocked
+   - Test that backup/restore endpoints still work
+
+4. **Concurrent operations**:
+   - Prevent multiple backup/restore operations simultaneously
+   - Test lock mechanism
+
+### Dependencies
+
+Add to `requirements.txt`:
+
+```
+cryptography>=41.0.0  # For optional backup encryption
+```
+
+### Notes
+
+- **Database user agnostic**: Backups can be restored with different MySQL credentials
+- **File paths**: On restore, files are restored to paths matching current `FOLDERS_TO_BACKUP` configuration
+- **Safety backups**: Automatic safety backup before restore, with rollback on failure
+- **Maintenance mode**: Automatically enabled during operations, blocks write operations
+- **Multi-worker support**: File-based flags work across multiple uvicorn workers
+- **No empty directories**: Template does not create empty directories. Developers create directories as needed for their application.
+
+---
+
 ## Minimal Functionality
 
 The template includes only essential endpoints:
@@ -5016,6 +5814,7 @@ This template provides:
 ✅ **CI/CD**: Automated testing and Docker builds
 ✅ **Security**: JWT auth, rate limiting, input validation
 ✅ **Metrics & Observability**: Prometheus metrics with optional Grafana, Loki, Sentry integration
+✅ **Backup & Restore**: Comprehensive backup/restore system with optional encryption and file backup
 ✅ **Best Practices**: Code organization, error handling, logging patterns
 ✅ **Minimal Logic**: Only essential endpoints, ready for customization
 

@@ -328,6 +328,8 @@ def delete_category(db: Session, category_id: int) -> bool:
     """
     Delete a category from the database.
     Also updates all products in this category to use the default "Uncategorized" category (ID 1).
+    Also updates all list-product ordering records (liste_au_produse_ordered) that reference this category.
+    Also removes all list-category ordering records (liste_au_categorii) that reference this category.
     
     Args:
         db: Database session
@@ -360,13 +362,29 @@ def delete_category(db: Session, category_id: int) -> bool:
         if db_category is None:
             return False
         
-        # Import Product model here to avoid circular imports
+        # Import models here to avoid circular imports
         from app.models.product import Product
+        from app.models.list_product_ordered import ListProductOrdered
+        from app.models.list_category import ListCategory
         
         # Update all products in this category to use the default "Uncategorized" category
         products_to_update = db.query(Product).filter(Product.category_id == category_id).all()
         for product in products_to_update:
             product.category_id = UNCATEGORIZED_CATEGORY_ID  # Default to "Uncategorized"
+        
+        # Update all list-product ordering records that reference this category
+        # This preserves historical order data by moving it to the uncategorized category
+        list_products_ordered = db.query(ListProductOrdered).filter(
+            ListProductOrdered.category_id == category_id
+        ).all()
+        for list_product in list_products_ordered:
+            list_product.category_id = UNCATEGORIZED_CATEGORY_ID
+        
+        # Delete all list-category ordering records that reference this category
+        # These are just ordering metadata, so we can safely delete them
+        db.query(ListCategory).filter(
+            ListCategory.category_id == category_id
+        ).delete()
         
         # Store the image directory path before deletion for cleanup
         image_dir_path = db_category.image_path

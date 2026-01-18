@@ -6,7 +6,7 @@
 set -e  # Exit on error
 
 # Configuration
-COMPOSE_SERVICE_NAME="pcma-db"  # Change this to match your service name in docker-compose.yml
+COMPOSE_SERVICE_NAME="db"  # Change this to match your service name in docker-compose.yml
 BACKUP_DIR="./backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="${BACKUP_DIR}/mysql_backup_${TIMESTAMP}.sql"
@@ -43,7 +43,7 @@ echo "Backing up to: $BACKUP_FILE"
 # Perform backup using docker compose exec (non-interactive)
 # The password is passed via MYSQL_PWD environment variable
 docker compose exec -T "$COMPOSE_SERVICE_NAME" \
-    sh -c "MYSQL_PWD=\$MYSQL_ROOT_PASSWORD mysqldump -u root --all-databases" > "$BACKUP_FILE"
+    sh -c "MYSQL_PWD=\$MYSQL_ROOT_PASSWORD mysqldump -u root $MYSQL_DATABASE" > "$BACKUP_FILE"
 
 # Check if backup was successful
 if [ $? -eq 0 ] && [ -s "$BACKUP_FILE" ]; then

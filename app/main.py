@@ -130,8 +130,14 @@ class DbTestResponse(BaseModel):
     unit_count: int
 
 
-@app.get("/", response_model=HealthResponse)
+@app.get("/")
 async def root():
+    """Root endpoint - returns 404"""
+    raise HTTPException(status_code=404, detail="Not Found")
+
+
+@app.get("/health", response_model=HealthResponse)
+async def health():
     """Health check endpoint"""
     return {"status": "online", "version": API_VERSION}
 

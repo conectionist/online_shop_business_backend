@@ -64,7 +64,7 @@ services:
       - ./config/placeholders:/app/config/placeholders
       - logs_data_test:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 5s
       timeout: 3s
       retries: 10

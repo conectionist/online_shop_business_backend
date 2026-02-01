@@ -177,6 +177,13 @@ def get_current_admin(
                 detail="Token has expired"
             )
         
+        # Require access token; reject refresh tokens when used for admin API access
+        if payload.get("type") != "access":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Access token required"
+            )
+        
         # Get admin ID from token
         admin_id = payload.get("sub")
         if not admin_id:

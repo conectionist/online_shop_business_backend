@@ -206,6 +206,23 @@ class TestAuthRefresh:
         assert "detail" in data
         assert "Invalid token type" in data["detail"]
 
+    def test_refresh_token_rejected_on_admin_endpoint(self):
+        """Refresh token must not be accepted as admin auth; only access tokens work on admin endpoints."""
+        login_response = auth_utils.login("admin", "adminpass123")
+        assert login_response.status_code == 200
+        login_data = login_response.json()
+        refresh_token = login_data["refresh_token"]
+        # Use an admin-only endpoint (list orders requires get_current_admin)
+        orders_url = f"{auth_utils.api_base_url}{auth_utils.api_v1_str}/orders/"
+        response = requests.get(
+            orders_url,
+            headers={"Authorization": f"Bearer {refresh_token}"}
+        )
+        assert response.status_code == 401, f"Expected 401 when using refresh token on admin endpoint, got {response.status_code}: {response.text}"
+        data = response.json()
+        assert "detail" in data
+        assert "Access token required" in data["detail"]
+
 
 # class TestAuthCreateAdmin:
 #     """Test admin creation functionality."""
@@ -520,6 +537,12 @@ def test_auth_refresh_success():
     """Test successful token refresh."""
     test = TestAuthRefresh()
     test.test_refresh_success()
+
+
+def test_refresh_token_rejected_on_admin_endpoint():
+    """Refresh token must not be accepted on admin endpoints."""
+    test = TestAuthRefresh()
+    test.test_refresh_token_rejected_on_admin_endpoint()
 
 
 # def test_auth_create_admin_success():

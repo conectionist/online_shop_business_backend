@@ -52,6 +52,8 @@ docker compose -f docker-compose.debug.yml down
 
 - `DEBUG=1`: Enables debugpy and starts the debug server
 - `ENVIRONMENT=development`: Sets the environment to development mode
+- `USE_PROXY_HEADERS`: When `true` (default), Uvicorn will trust `X-Forwarded-*` headers from configured proxy IPs.
+- `FORWARDED_ALLOW_IPS`: Comma-separated list of proxy IPs allowed to set `X-Forwarded-*` headers (defaults to `127.0.0.1`).
 
 ### Service Names
 

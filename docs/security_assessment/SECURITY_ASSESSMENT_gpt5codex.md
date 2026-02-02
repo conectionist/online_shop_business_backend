@@ -14,10 +14,6 @@ This document captures the security posture of the FastAPI backend as of the cur
 
 #### High
 
-2. **Host-header protection disabled by default**
-   - Without an explicit `ALLOWED_HOSTS` value, the middleware accepts any Host header.
-   - File reference: `app/core/config.py`
-
 3. **Unauthenticated order creation**
    - `POST /api/v1/orders/` accepts public requests, enabling spam, DB growth, and persistent push notifications.
    - File reference: `app/api/endpoints/orders.py`

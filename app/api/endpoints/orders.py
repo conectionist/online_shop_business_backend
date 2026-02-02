@@ -1,9 +1,11 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.services.auth import get_current_admin
 from app.models.admin import Admin
 from app.schemas.order import (
@@ -159,9 +161,12 @@ def read_orders(
         }
     },
     422: {"description": "Validation error - invalid input data"},
+    429: {"description": "Too many orders from this IP; try again later"},
     500: {"description": "Internal server error"},
 })
+@limiter.limit(settings.ORDER_RATE_LIMIT_STRING)
 def create_order_endpoint(
+    request: Request,
     order_in: OrderCreate,
     source: Optional[str] = Query(None, max_length=50, description="Optional request source identifier (e.g., 'ProductPage', 'Cart', 'Admin')"),
     background: BackgroundTasks = None,

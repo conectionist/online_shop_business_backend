@@ -8,7 +8,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - ENVIRONMENT=production
+      - ENVIRONMENT=${ENVIRONMENT:-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - FRONTEND_URL=${FRONTEND_URL}
       - DB_HOST=db
@@ -17,6 +17,8 @@ services:
       - DB_PASSWORD=${MYSQL_PASSWORD}
       - DB_NAME=${MYSQL_DATABASE}
       - UPLOAD_FOLDER=/app/uploads
+      # Image upload: max file size in MB (default 15)
+      - MAX_IMAGE_SIZE_MB=${MAX_IMAGE_SIZE_MB:-15}
       # Trusted Hosts for FastAPI TrustedHostMiddleware
       - ALLOWED_HOSTS=${ALLOWED_HOSTS}
       # CORS Configuration
@@ -35,6 +37,12 @@ services:
       - VAPID_SUBJECT=${VAPID_SUBJECT}
       # Disable OpenAPI docs in production for security
       - ENABLE_OPENAPI_DOCS=false
+      # Reverse proxy: which IPs may set X-Forwarded-* headers (default 127.0.0.1)
+      - USE_PROXY_HEADERS=${USE_PROXY_HEADERS:-true}
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      # Order creation rate limit (per-IP): max orders per IP per window (see docs/ORDER_RATE_LIMIT.md)
+      - ORDER_RATE_LIMIT_MAX=${ORDER_RATE_LIMIT_MAX:-10}
+      - ORDER_RATE_LIMIT_WINDOW=${ORDER_RATE_LIMIT_WINDOW:-24hour}
     depends_on:
       db:
         condition: service_healthy

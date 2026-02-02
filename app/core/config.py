@@ -12,7 +12,7 @@ logging.getLogger(__name__).setLevel(_log_level)
 logger = logging.getLogger(__name__)
 
 # API version information
-API_VERSION = "5.4.0"
+API_VERSION = "5.4.4"
 API_TITLE = "Online Shop API"
 API_DESCRIPTION = "API for online shop business"
 
@@ -37,6 +37,22 @@ if allowed_hosts_str:
 else:
     # Fallback to wildcard to preserve previous behavior that included "*"
     ALLOWED_HOSTS = ["*"]
+
+# Production must use explicit host(s) for host-header protection; do not allow "*"
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+if ENVIRONMENT == "production":
+    if not allowed_hosts_str or not allowed_hosts_str.strip():
+        logger.error(
+            "CRITICAL: Production requires ALLOWED_HOSTS to be set to explicit host(s) "
+            "(e.g. your API domain). Host-header protection cannot be disabled in production."
+        )
+        sys.exit(1)
+    if allowed_hosts_str.strip() == "*" or ALLOWED_HOSTS == ["*"]:
+        logger.error(
+            "CRITICAL: Production requires ALLOWED_HOSTS to be set to explicit host(s), not '*'. "
+            "Set ALLOWED_HOSTS to your API host(s), e.g. api.example.com"
+        )
+        sys.exit(1)
 
 # Frontend URL (used by clients, links in notifications, etc.)
 _frontend_url_raw = os.getenv("FRONTEND_URL", "").strip()
@@ -105,6 +121,16 @@ ALLOW_PUBLIC_PUSH_SUBSCRIBE = get_optional_env_var(
     "Allow unauthenticated public push subscriptions"
 ).lower() in ("true", "1", "yes")
 
+# Image upload: max file size in MB (product/category images)
+MAX_IMAGE_SIZE_MB = int(get_optional_env_var("MAX_IMAGE_SIZE_MB", "15", "Max image upload size in MB"))
+
+# Order creation rate limit (per-IP, slowapi). Limit string = ORDER_RATE_LIMIT_MAX/ORDER_RATE_LIMIT_WINDOW (no space).
+ORDER_RATE_LIMIT_MAX = int(get_optional_env_var("ORDER_RATE_LIMIT_MAX", "10", "Max orders per IP per window"))
+ORDER_RATE_LIMIT_WINDOW = get_optional_env_var(
+    "ORDER_RATE_LIMIT_WINDOW", "24hour", "Rate limit window: second, minute, hour, day, or Nhour, Nday, etc. (no space)"
+).strip()
+ORDER_RATE_LIMIT_STRING = f"{ORDER_RATE_LIMIT_MAX}/{ORDER_RATE_LIMIT_WINDOW}"
+
 # For compatibility with the rest of the application
 class Settings:
     def __init__(self):
@@ -136,5 +162,13 @@ class Settings:
 
         # Feature flags
         self.ALLOW_PUBLIC_PUSH_SUBSCRIBE = ALLOW_PUBLIC_PUSH_SUBSCRIBE
+
+        # Image upload
+        self.MAX_IMAGE_SIZE_MB = MAX_IMAGE_SIZE_MB
+
+        # Order creation rate limit (per-IP)
+        self.ORDER_RATE_LIMIT_MAX = ORDER_RATE_LIMIT_MAX
+        self.ORDER_RATE_LIMIT_WINDOW = ORDER_RATE_LIMIT_WINDOW
+        self.ORDER_RATE_LIMIT_STRING = ORDER_RATE_LIMIT_STRING
 
 settings = Settings()

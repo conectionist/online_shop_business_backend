@@ -6,37 +6,18 @@ This document captures the security posture of the FastAPI backend as of the cur
 
 ### Summary
 
-- **Overall recommendation:** Do **not** expose publicly yet. Address critical and high-severity findings first, then re-run the assessment.
-- **Critical findings:** 1
 - **High findings:** 4
 - **Medium findings:** 5
 - **Low findings / informational:** 2
 
 ### Findings by Severity
 
-#### Critical
-
-1. **Refresh tokens act as admin access tokens**
-   - `get_current_admin` trusts any valid JWT without checking the `type` claim, so refresh tokens function as full-access admin tokens.
-   - File reference: `app/services/auth.py`
-
 #### High
 
-1. **Reverse-proxy trust can be bypassed**
-   - Uvicorn starts with `--forwarded-allow-ips "*"`, allowing direct clients to spoof `X-Forwarded-*` headers.
-   - File reference: `docker-entrypoint.sh`
-
-2. **Host-header protection disabled by default**
-   - Without an explicit `ALLOWED_HOSTS` value, the middleware accepts any Host header.
-   - File reference: `app/core/config.py`
-
-3. **Unauthenticated order creation**
-   - `POST /api/v1/orders/` accepts public requests, enabling spam, DB growth, and persistent push notifications.
-   - File reference: `app/api/endpoints/orders.py`
-
-4. **Arbitrary file uploads**
+4. **Arbitrary file uploads** *(addressed)*
    - Product image uploads skip extension/MIME/size checks and read entire files into memory, permitting storage abuse and potential DoS.
    - Files referenced: `app/api/endpoints/product_images.py`, `app/core/image_processing.py`
+   - **Remediation**: Extension, MIME (when present), and size are validated before processing (`is_valid_image` in product and category upload endpoints). Upload read is size-capped (`MAX_IMAGE_SIZE_MB`, default 15 MB). Image content is validated with PIL before save; invalid content returns 400.
 
 #### Medium
 
@@ -53,9 +34,6 @@ This document captures the security posture of the FastAPI backend as of the cur
 
 ### Recommended Remediation Steps
 
-1. Enforce JWT `type` verification in `get_current_admin` and rotate refresh tokens immediately.
-2. Restrict proxy trust (`--forwarded-allow-ips`, `TrustedHostMiddleware`) and require explicit `ALLOWED_HOSTS` values.
-3. Protect order creation with authentication or throttling (e.g., rate limiting, CAPTCHA, queues).
 4. Harden file uploads: enforce size caps, verify MIME/extension, stream to disk, and sanitize content.
 5. Add login throttling and refresh-token revocation/rotation.
 6. Disable OpenAPI docs and the `/db-test` endpoint in production deployments.

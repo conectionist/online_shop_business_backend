@@ -36,6 +36,8 @@ services:
       - ENVIRONMENT=test
       - FRONTEND_URL=${TEST_FRONTEND_URL}
       - UPLOAD_FOLDER=/app/uploads
+      # Image upload: max file size in MB (default 15)
+      - MAX_IMAGE_SIZE_MB=${MAX_IMAGE_SIZE_MB:-15}
       # Allow public subscribe in test environment to satisfy push_api tests
       - ALLOW_PUBLIC_PUSH_SUBSCRIBE=true
       # Trusted Hosts for FastAPI TrustedHostMiddleware
@@ -56,6 +58,12 @@ services:
       - VAPID_SUBJECT=${TEST_VAPID_SUBJECT}
       # Enable OpenAPI docs in test environment
       - ENABLE_OPENAPI_DOCS=true
+      # Reverse proxy: tests talk directly to API, so disable proxy header trust by default
+      - USE_PROXY_HEADERS=${USE_PROXY_HEADERS:-false}
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      # Order creation rate limit: high limit for tests so integration tests don't hit it
+      - ORDER_RATE_LIMIT_MAX=${ORDER_RATE_LIMIT_MAX:-1000}
+      - ORDER_RATE_LIMIT_WINDOW=${ORDER_RATE_LIMIT_WINDOW:-24hour}
     depends_on:
       mysql_test:
         condition: service_healthy

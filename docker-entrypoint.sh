@@ -98,6 +98,23 @@ run_migrations
 # Seed data in test environment
 seed_test_data
 
+# Configure proxy header handling for Uvicorn
+# USE_PROXY_HEADERS controls whether we trust X-Forwarded-* headers at all.
+# FORWARDED_ALLOW_IPS is the list of proxy IPs allowed to set those headers.
+USE_PROXY_HEADERS="${USE_PROXY_HEADERS:-true}"
+FORWARDED_ALLOW_IPS="${FORWARDED_ALLOW_IPS:-127.0.0.1}"
+
+# Normalize USE_PROXY_HEADERS for comparison (true/1/yes are treated as enabled)
+USE_PROXY_HEADERS_NORMALIZED=$(echo "${USE_PROXY_HEADERS}" | tr '[:upper:]' '[:lower:]')
+
+UVICORN_PROXY_FLAGS=""
+if [ "${USE_PROXY_HEADERS_NORMALIZED}" = "true" ] || [ "${USE_PROXY_HEADERS_NORMALIZED}" = "1" ] || [ "${USE_PROXY_HEADERS_NORMALIZED}" = "yes" ]; then
+    UVICORN_PROXY_FLAGS="--proxy-headers --forwarded-allow-ips ${FORWARDED_ALLOW_IPS}"
+    echo "Uvicorn proxy headers ENABLED; trusting X-Forwarded-* from: ${FORWARDED_ALLOW_IPS}"
+else
+    echo "Uvicorn proxy headers DISABLED; ignoring X-Forwarded-* headers"
+fi
+
 # Start the application
 echo "Starting FastAPI application with 2 workers..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips "*" --log-config logging.ini
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 ${UVICORN_PROXY_FLAGS} --log-config logging.ini

@@ -22,10 +22,11 @@ Images are stored in the filesystem with the following setup:
 
 Core utilities for file handling are implemented in `app/core/file_upload.py`:
 
-1. **File Validation**:
-   - Size limits (default: 25MB)
-   - Allowed extensions (default: .jpg, .jpeg, .png, .gif)
-   - Content type validation
+1. **File Validation** (product and category image uploads enforce):
+   - **Allowed extensions**: .jpg, .jpeg, .png, .gif, .webp
+   - **Max file size**: configurable via `MAX_IMAGE_SIZE_MB` (default 15 MB)
+   - **Content-Type**: optional check when present (allowed: image/jpeg, image/png, image/gif, image/webp)
+   - **Server-side content validation**: image bytes are validated with PIL before save; non-image payloads are rejected with 400. Uploads are read with a size cap to avoid memory DoS.
 
 2. **Secure Filename Generation**:
    - Uses UUID to generate unique filenames
@@ -62,8 +63,8 @@ Categories can have a single image associated with them:
 - Required Field: `file` (image file)
 
 **Constraints**:
-- Supported formats: JPEG, PNG, GIF
-- Maximum file size: 25MB
+- Supported formats: JPEG, PNG, GIF, WEBP
+- Maximum file size: configurable via `MAX_IMAGE_SIZE_MB` (default 15 MB)
 
 **Response**:
 ```json

@@ -38,6 +38,22 @@ else:
     # Fallback to wildcard to preserve previous behavior that included "*"
     ALLOWED_HOSTS = ["*"]
 
+# Production must use explicit host(s) for host-header protection; do not allow "*"
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+if ENVIRONMENT == "production":
+    if not allowed_hosts_str or not allowed_hosts_str.strip():
+        logger.error(
+            "CRITICAL: Production requires ALLOWED_HOSTS to be set to explicit host(s) "
+            "(e.g. your API domain). Host-header protection cannot be disabled in production."
+        )
+        sys.exit(1)
+    if allowed_hosts_str.strip() == "*" or ALLOWED_HOSTS == ["*"]:
+        logger.error(
+            "CRITICAL: Production requires ALLOWED_HOSTS to be set to explicit host(s), not '*'. "
+            "Set ALLOWED_HOSTS to your API host(s), e.g. api.example.com"
+        )
+        sys.exit(1)
+
 # Frontend URL (used by clients, links in notifications, etc.)
 _frontend_url_raw = os.getenv("FRONTEND_URL", "").strip()
 FRONTEND_URL = _frontend_url_raw if _frontend_url_raw else "http://localhost:3000"

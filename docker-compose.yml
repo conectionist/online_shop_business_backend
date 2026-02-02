@@ -38,6 +38,9 @@ services:
       # Reverse proxy: which IPs may set X-Forwarded-* headers (default 127.0.0.1)
       - USE_PROXY_HEADERS=${USE_PROXY_HEADERS:-true}
       - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      # Order creation rate limit (per-IP): max orders per IP per window (see docs/ORDER_RATE_LIMIT.md)
+      - ORDER_RATE_LIMIT_MAX=${ORDER_RATE_LIMIT_MAX:-10}
+      - ORDER_RATE_LIMIT_WINDOW=${ORDER_RATE_LIMIT_WINDOW:-24hour}
     depends_on:
       db:
         condition: service_healthy

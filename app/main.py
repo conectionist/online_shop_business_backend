@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import asyncio
@@ -19,6 +21,7 @@ if os.getenv("DEBUG", "0") == "1":
 
 from app.core.config import API_VERSION, API_TITLE, API_DESCRIPTION, settings
 from app.core.database import get_db, SessionLocal
+from app.core.rate_limit import limiter
 from app.api.api import api_router
 from app.api.endpoints.system_config import mount_static_files
 from app.core.admin_init import initialize_default_admin
@@ -32,6 +35,21 @@ app = FastAPI(
     redoc_url="/redoc" if settings.ENABLE_OPENAPI_DOCS else None,
     openapi_url="/openapi.json" if settings.ENABLE_OPENAPI_DOCS else None
 )
+
+# Rate limiting (slowapi): per-IP order creation limit
+app.state.limiter = limiter
+
+
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    """Return 429 with a clear detail when order creation rate limit is exceeded."""
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Too many orders from this IP. Please try again later."},
+    )
+
+
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # Add TrustedHostMiddleware to handle proxy headers
 app.add_middleware(

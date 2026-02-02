@@ -121,6 +121,13 @@ ALLOW_PUBLIC_PUSH_SUBSCRIBE = get_optional_env_var(
     "Allow unauthenticated public push subscriptions"
 ).lower() in ("true", "1", "yes")
 
+# Order creation rate limit (per-IP, slowapi). Limit string = ORDER_RATE_LIMIT_MAX/ORDER_RATE_LIMIT_WINDOW (no space).
+ORDER_RATE_LIMIT_MAX = int(get_optional_env_var("ORDER_RATE_LIMIT_MAX", "10", "Max orders per IP per window"))
+ORDER_RATE_LIMIT_WINDOW = get_optional_env_var(
+    "ORDER_RATE_LIMIT_WINDOW", "24hour", "Rate limit window: second, minute, hour, day, or Nhour, Nday, etc. (no space)"
+).strip()
+ORDER_RATE_LIMIT_STRING = f"{ORDER_RATE_LIMIT_MAX}/{ORDER_RATE_LIMIT_WINDOW}"
+
 # For compatibility with the rest of the application
 class Settings:
     def __init__(self):
@@ -152,5 +159,10 @@ class Settings:
 
         # Feature flags
         self.ALLOW_PUBLIC_PUSH_SUBSCRIBE = ALLOW_PUBLIC_PUSH_SUBSCRIBE
+
+        # Order creation rate limit (per-IP)
+        self.ORDER_RATE_LIMIT_MAX = ORDER_RATE_LIMIT_MAX
+        self.ORDER_RATE_LIMIT_WINDOW = ORDER_RATE_LIMIT_WINDOW
+        self.ORDER_RATE_LIMIT_STRING = ORDER_RATE_LIMIT_STRING
 
 settings = Settings()

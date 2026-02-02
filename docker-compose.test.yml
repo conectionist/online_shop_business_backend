@@ -59,6 +59,9 @@ services:
       # Reverse proxy: tests talk directly to API, so disable proxy header trust by default
       - USE_PROXY_HEADERS=${USE_PROXY_HEADERS:-false}
       - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      # Order creation rate limit: high limit for tests so integration tests don't hit it
+      - ORDER_RATE_LIMIT_MAX=${ORDER_RATE_LIMIT_MAX:-1000}
+      - ORDER_RATE_LIMIT_WINDOW=${ORDER_RATE_LIMIT_WINDOW:-24hour}
     depends_on:
       mysql_test:
         condition: service_healthy

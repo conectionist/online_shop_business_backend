@@ -36,6 +36,8 @@ services:
       - ENVIRONMENT=test
       - FRONTEND_URL=${TEST_FRONTEND_URL}
       - UPLOAD_FOLDER=/app/uploads
+      # Image upload: max file size in MB (default 15)
+      - MAX_IMAGE_SIZE_MB=${MAX_IMAGE_SIZE_MB:-15}
       # Allow public subscribe in test environment to satisfy push_api tests
       - ALLOW_PUBLIC_PUSH_SUBSCRIBE=true
       # Trusted Hosts for FastAPI TrustedHostMiddleware

@@ -810,6 +810,50 @@ class ProductTestUtils(EntityTestUtils):
             except Exception as e:
                 print(f"Error during test cleanup: {e}")
 
+    def test_product_image_upload_validation(self):
+        """
+        Test that product image upload rejects disallowed extension, oversize files, and non-image content.
+        """
+        created_entity, entity_id = self.create_entity()
+        try:
+            # (a) Disallowed extension -> 400
+            files_bad_ext = {"file": ("script.exe", b"dummy", "application/octet-stream")}
+            r = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/{entity_id}/images",
+                files=files_bad_ext
+            )
+            assert r.status_code == 400, f"Expected 400 for disallowed extension, got {r.status_code}: {r.text}"
+            assert "extension" in r.json().get("detail", "").lower() or "allowed" in r.json().get("detail", "").lower()
+
+            # (b) Valid extension but non-image body -> 400 (content validation)
+            files_fake_jpg = {"file": ("fake.jpg", b"not an image", "image/jpeg")}
+            r = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/{entity_id}/images",
+                files=files_fake_jpg
+            )
+            assert r.status_code == 400, f"Expected 400 for non-image content, got {r.status_code}: {r.text}"
+            assert "invalid" in r.json().get("detail", "").lower() or "content" in r.json().get("detail", "").lower()
+
+            # (c) File over max size (default 15 MB) -> 400
+            max_mb = 15
+            over_size = (max_mb * 1024 * 1024) + 1
+            large_content = b"x" * over_size
+            files_oversize = {"file": ("large.jpg", large_content, "image/jpeg")}
+            r = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/{entity_id}/images",
+                files=files_oversize
+            )
+            assert r.status_code == 400, f"Expected 400 for oversize file, got {r.status_code}: {r.text}"
+            assert "size" in r.json().get("detail", "").lower() or "exceeds" in r.json().get("detail", "").lower()
+        finally:
+            try:
+                self.hard_delete_entity(entity_id)
+            except Exception as e:
+                print(f"Error during test cleanup: {e}")
+
 
 # Create a test utils instance for products
 product_utils = ProductTestUtils()
@@ -862,6 +906,13 @@ def test_reorder_product_images_error_cases():
     Tests error cases for reordering product images.
     """
     product_utils.test_reorder_product_images_error_cases()
+
+
+def test_product_image_upload_validation():
+    """
+    Tests that product image upload returns 400 for disallowed extension, oversize file, and non-image content.
+    """
+    product_utils.test_product_image_upload_validation()
 
 
 def test_create_product_without_category():

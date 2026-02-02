@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 })
 async def upload_product_image(
     product_id: int = Path(..., gt=0, description="The ID of the product to upload an image for"),
-    file: UploadFile = File(..., description="The image file to upload (JPEG, PNG, or GIF, max 25MB)"),
+    file: UploadFile = File(..., description="The image file to upload (JPEG, PNG, GIF, WEBP; max size configurable via MAX_IMAGE_SIZE_MB, default 15 MB)"),
     position: int = Form(None, description="Image position (0=primary, if not specified will be added at the end)"),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -45,8 +45,8 @@ async def upload_product_image(
     in the server's filesystem with multiple versions (original, medium, thumbnail) and 
     added to the product's image gallery.
     
-    - Supported file formats: JPEG, PNG, GIF
-    - Maximum file size: 25MB
+    - Supported file formats: JPEG, PNG, GIF, WEBP
+    - Maximum file size: configurable via MAX_IMAGE_SIZE_MB (default 15 MB)
     - Position 0 indicates primary image
     - If position is not specified, the image will be added at the end of the gallery
     
@@ -60,6 +60,11 @@ async def upload_product_image(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Product not found"
             )
+        
+        # Validate file (extension, size, optional MIME) before processing
+        is_valid, error_message = is_valid_image(file)
+        if not is_valid:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
         
         # Process and save multiple versions of the image
         image_dir_path = process_and_save_image_versions(file, subdirectory="products")

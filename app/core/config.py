@@ -121,6 +121,9 @@ ALLOW_PUBLIC_PUSH_SUBSCRIBE = get_optional_env_var(
     "Allow unauthenticated public push subscriptions"
 ).lower() in ("true", "1", "yes")
 
+# Image upload: max file size in MB (product/category images)
+MAX_IMAGE_SIZE_MB = int(get_optional_env_var("MAX_IMAGE_SIZE_MB", "15", "Max image upload size in MB"))
+
 # Order creation rate limit (per-IP, slowapi). Limit string = ORDER_RATE_LIMIT_MAX/ORDER_RATE_LIMIT_WINDOW (no space).
 ORDER_RATE_LIMIT_MAX = int(get_optional_env_var("ORDER_RATE_LIMIT_MAX", "10", "Max orders per IP per window"))
 ORDER_RATE_LIMIT_WINDOW = get_optional_env_var(
@@ -159,6 +162,9 @@ class Settings:
 
         # Feature flags
         self.ALLOW_PUBLIC_PUSH_SUBSCRIBE = ALLOW_PUBLIC_PUSH_SUBSCRIBE
+
+        # Image upload
+        self.MAX_IMAGE_SIZE_MB = MAX_IMAGE_SIZE_MB
 
         # Order creation rate limit (per-IP)
         self.ORDER_RATE_LIMIT_MAX = ORDER_RATE_LIMIT_MAX

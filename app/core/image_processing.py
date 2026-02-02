@@ -8,7 +8,11 @@ from typing import Tuple, Optional, Dict, List
 from PIL import Image, ImageOps
 from fastapi import UploadFile, HTTPException, status
 
+from app.core.config import MAX_IMAGE_SIZE_MB
 from app.core.file_upload import get_upload_dir
+
+# PIL format names (uppercase) for content validation
+ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG", "GIF", "WEBP"}
 
 
 def resize_image(
@@ -97,11 +101,32 @@ def process_and_save_image_versions(
         Path to the image directory (relative to upload folder)
     """
     try:
-        # Read file content
-        file_content = upload_file.file.read()
-        
+        # Read file content with size cap to avoid memory DoS
+        max_bytes = MAX_IMAGE_SIZE_MB * 1024 * 1024
+        file_content = upload_file.file.read(max_bytes)
+        if upload_file.file.read(1):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File exceeds maximum size"
+            )
+        # Validate that bytes are a valid image (PIL can decode them)
+        try:
+            img = Image.open(io.BytesIO(file_content))
+            img.load()
+            if img.format and img.format.upper() not in ALLOWED_IMAGE_FORMATS:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid image content"
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid image content"
+            )
         # Get file extension from content type or filename
-        ext = os.path.splitext(upload_file.filename)[1].lower()
+        ext = os.path.splitext(upload_file.filename or "")[1].lower()
         if not ext:
             ext = ".jpg"  # Default to jpg if no extension
             

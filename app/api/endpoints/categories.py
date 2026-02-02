@@ -59,7 +59,7 @@ def upload_category_image(
     in the server's filesystem and the path will be saved in the category record.
     
     - Supported file formats: JPEG, PNG, GIF
-    - Maximum file size: 25MB
+    - Maximum file size: configurable via MAX_IMAGE_SIZE_MB (default 15 MB)
     - If the category already has an image, the old image will be replaced
     - The image directory will have a UUID-based name
     - Multiple versions of the image will be created (original, medium, thumbnail)
@@ -74,6 +74,11 @@ def upload_category_image(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Category not found"
             )
+        
+        # Validate file (extension, size, optional MIME) before processing
+        is_valid, error_message = is_valid_image(file)
+        if not is_valid:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
         
         # Process and save multiple versions of the image
         # This will create a directory with the original, medium, and thumbnail versions

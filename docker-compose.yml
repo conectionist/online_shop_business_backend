@@ -17,6 +17,8 @@ services:
       - DB_PASSWORD=${MYSQL_PASSWORD}
       - DB_NAME=${MYSQL_DATABASE}
       - UPLOAD_FOLDER=/app/uploads
+      # Image upload: max file size in MB (default 15)
+      - MAX_IMAGE_SIZE_MB=${MAX_IMAGE_SIZE_MB:-15}
       # Trusted Hosts for FastAPI TrustedHostMiddleware
       - ALLOWED_HOSTS=${ALLOWED_HOSTS}
       # CORS Configuration

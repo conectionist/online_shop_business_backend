@@ -6,10 +6,12 @@ from typing import List, Optional, Set, Tuple
 
 from fastapi import HTTPException, UploadFile, status
 
+from app.core.config import MAX_IMAGE_SIZE_MB
+
 
 # Configuration
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
-MAX_IMAGE_SIZE_MB = 25  # Maximum file size in MB
+ALLOWED_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 
 
 def get_upload_dir() -> Path:
@@ -37,6 +39,11 @@ def is_valid_image(file: UploadFile) -> Tuple[bool, Optional[str]]:
     extension = get_file_extension(file.filename or "")
     if not extension or extension not in ALLOWED_IMAGE_EXTENSIONS:
         return False, f"File extension not allowed. Allowed extensions: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}"
+    
+    # Optional MIME check: if Content-Type is set, it must be in the allowed set
+    content_type = (file.content_type or "").strip().lower()
+    if content_type and content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
+        return False, f"Content-Type not allowed. Allowed: {', '.join(sorted(ALLOWED_IMAGE_CONTENT_TYPES))}"
     
     # Check file size (FastAPI's UploadFile has file.file.seek and file.file.tell)
     try:

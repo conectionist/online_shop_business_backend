@@ -56,6 +56,9 @@ services:
       - VAPID_SUBJECT=${TEST_VAPID_SUBJECT}
       # Enable OpenAPI docs in test environment
       - ENABLE_OPENAPI_DOCS=true
+      # Reverse proxy: tests talk directly to API, so disable proxy header trust by default
+      - USE_PROXY_HEADERS=${USE_PROXY_HEADERS:-false}
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
     depends_on:
       mysql_test:
         condition: service_healthy

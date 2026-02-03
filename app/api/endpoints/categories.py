@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from app.core.database import get_db
 from app.core.file_upload import delete_file, is_valid_image, get_upload_dir
 from app.core.image_processing import process_and_save_image_versions
+from app.core.staging_uploads import resolve_staged_image, delete_staged_image
 from app.services.auth import get_current_admin
 from app.models.admin import Admin
 from app.schemas.category import Category, CategoryCreate, CategoryUpdate
@@ -170,43 +171,106 @@ def reorder_categories_endpoint(
 def create_category_endpoint(
     name: str = Form(..., description="The name of the category"),
     order_index: int = Form(..., ge=1, le=127, description="Manual ordering index (1-127), unique"),
-    primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
+    primary_image: Optional[UploadFile] = File(
+        None,
+        description=(
+            "Image file for the category. "
+            "Deprecated in favor of primary_image_upload_id from /uploads/images."
+        ),
+    ),
+    primary_image_upload_id: Optional[str] = Form(
+        None,
+        description=(
+            "Opaque upload_id returned by POST /api/v1/uploads/images. "
+            "If provided, the staged image will be processed and linked as the primary image."
+        ),
+    ),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new category
     
-    Accepts multipart/form-data with a name field, order_index field, and optional image file.
+    Accepts multipart/form-data with a name field, order_index field, and optional image:
+    - Either a direct `primary_image` file (deprecated) or a `primary_image_upload_id`
+      returned from POST /uploads/images.
     If no image is provided, a placeholder image will be used.
     """
     try:
         # Initialize image_path to None (will use placeholder)
         primary_image_path = None
+        staged_upload_id: Optional[str] = None
         
-        # Process and save image if provided
+        # It is ambiguous and likely an error if both a direct file and an upload_id are provided.
+        if primary_image and primary_image_upload_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provide either primary_image or primary_image_upload_id, not both.",
+            )
+
+        # Process and save image if provided directly
         if primary_image:
-            # Validate image
-            from app.core.file_upload import is_valid_image
-            if not is_valid_image(primary_image):
+            is_valid, error_message = is_valid_image(primary_image)
+            if not is_valid:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=[
-                        {
-                            "loc": ["body", "primary_image"],
-                            "msg": "Invalid image format",
-                            "type": "value_error.image"
-                        }
-                    ]
+                    detail=error_message,
                 )
-                
-            # Process and save multiple versions of the image
-            primary_image_path = process_and_save_image_versions(primary_image, subdirectory="categories")
+
+            primary_image_path = process_and_save_image_versions(
+                primary_image, subdirectory="categories"
+            )
+        # Or via a staged upload_id
+        elif primary_image_upload_id:
+            from fastapi import UploadFile as _UploadFile
+
+            staged_upload_id = primary_image_upload_id
+            upload_dir, meta = resolve_staged_image(primary_image_upload_id)
+
+            stored_filename = meta.get("stored_filename") or meta.get(
+                "original_filename"
+            )
+            file_path = upload_dir / stored_filename if stored_filename else None
+
+            # Fallback: pick the first non-meta file in the directory
+            if not file_path or not file_path.exists():
+                for child in upload_dir.iterdir():
+                    if child.is_file() and child.name != "meta.json":
+                        file_path = child
+                        break
+
+            if not file_path or not file_path.exists():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Staged image file not found",
+                )
+
+            original_filename = meta.get("original_filename") or file_path.name
+
+            try:
+                with open(file_path, "rb") as f:
+                    staged_upload = _UploadFile(
+                        filename=original_filename,
+                        file=f,
+                    )
+                    primary_image_path = process_and_save_image_versions(
+                        staged_upload, subdirectory="categories"
+                    )
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Error processing staged image: {exc}",
+                )
         
         # Create category object
         category = CategoryCreate(name=name, order_index=order_index, image_path=primary_image_path)
         
         # Create the category in the database
         created_category = create_category(db=db, category=category)
+        # If we successfully linked a staged image, clean up the staging directory.
+        if staged_upload_id:
+            delete_staged_image(staged_upload_id)
         return created_category
     except HTTPException as e:
         # If an HTTP exception occurred and an image directory was created, clean it up
@@ -219,6 +283,8 @@ def create_category_endpoint(
             full_dir_path = os.path.join(get_upload_dir(), primary_image_path)
             if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
                 shutil.rmtree(full_dir_path)
+        if "staged_upload_id" in locals() and staged_upload_id:
+            delete_staged_image(staged_upload_id)
         raise
     except ValidationError as e:
         raise HTTPException(
@@ -235,6 +301,8 @@ def create_category_endpoint(
             full_dir_path = os.path.join(get_upload_dir(), primary_image_path)
             if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
                 shutil.rmtree(full_dir_path)
+        if "staged_upload_id" in locals() and staged_upload_id:
+            delete_staged_image(staged_upload_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)}"

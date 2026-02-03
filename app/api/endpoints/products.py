@@ -6,22 +6,31 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-
 from app.core.database import get_db
 from app.core.constants import UNCATEGORIZED_CATEGORY_ID
 from app.services.auth import get_current_admin
 from app.models.admin import Admin
 from app.core.file_upload import (
-    delete_file, save_upload_file, is_valid_image, get_upload_dir
+    delete_file,
+    save_upload_file,
+    is_valid_image,
+    get_upload_dir,
 )
 from app.core.image_processing import process_and_save_image_versions
+from app.core.staging_uploads import resolve_staged_image, delete_staged_image
 from app.models.product import Product
 from app.schemas.product import Product as ProductSchema
 from app.schemas.product import ProductCreate, ProductUpdate
+from app.schemas.product_image import ProductImageCreate
 from app.services.product import (
-    create_product, get_product_by_id, get_products,
-    hard_delete_product, soft_delete_product, update_product
+    create_product,
+    get_product_by_id,
+    get_products,
+    hard_delete_product,
+    soft_delete_product,
+    update_product,
 )
+from app.services.product_image import create_product_image
 
 router = APIRouter()
 
@@ -159,8 +168,22 @@ def create_product_endpoint(
     cantitate: str = Form(...),  # Changed to str to handle validation manually
     pret: str = Form(...),       # Changed to str to handle validation manually
     description: Optional[str] = Form(None),
-    category_id: Optional[str] = Form(None), # Made optional, defaults to "Uncategorized"
+    category_id: Optional[str] = Form(None),  # Made optional, defaults to "Uncategorized"
     unitati_id: str = Form(...),  # Changed to str to handle validation manually
+    primary_image: Optional[UploadFile] = File(
+        None,
+        description=(
+            "Optional image file for the product (validated before product is created). "
+            "Deprecated in favor of primary_image_upload_id from /uploads/images."
+        ),
+    ),
+    primary_image_upload_id: Optional[str] = Form(
+        None,
+        description=(
+            "Opaque upload_id returned by POST /api/v1/uploads/images. "
+            "If provided, the staged image will be processed and linked as the primary image."
+        ),
+    ),
     current_admin: Admin = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -174,15 +197,86 @@ def create_product_endpoint(
     - **description**: Optional product description
     - **category_id**: ID of the associated category
     - **unitati_id**: ID of the associated unit
+    - **primary_image**: Optional image file; if provided, it is validated before the product
+      is created so that an invalid image does not leave an orphan product in the database.
+      (Deprecated in favor of **primary_image_upload_id**.)
+    - **primary_image_upload_id**: Optional `upload_id` from POST /uploads/images; when
+      provided, the staged image is processed and linked as the primary image for the product.
     
-    Note: To add images to this product, use the /products/{product_id}/images endpoint 
-    after creating the product. Multiple images can be associated with a product,
-    with the ability to set image order and designate a primary image.
+    Additional images can be added via POST /products/{product_id}/images after creation.
     
     Returns the created product.
     """
-    
+    image_dir_path = None
+    staged_upload_id: Optional[str] = None
     try:
+        # It is ambiguous and likely an error if both a direct file and an upload_id are provided.
+        if primary_image and primary_image.filename and primary_image_upload_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provide either primary_image or primary_image_upload_id, not both.",
+            )
+
+        # If an image is provided directly, validate and process it BEFORE creating the product.
+        # This way an invalid image returns 400 without creating the product.
+        if primary_image and primary_image.filename:
+            is_valid, error_message = is_valid_image(primary_image)
+            if not is_valid:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=error_message,
+                )
+            image_dir_path = process_and_save_image_versions(
+                primary_image, subdirectory="products"
+            )
+        # Alternatively, if a staged upload_id is provided, resolve and process it now.
+        elif primary_image_upload_id:
+            from fastapi import UploadFile as _UploadFile
+
+            staged_upload_id = primary_image_upload_id
+            upload_dir, meta = resolve_staged_image(primary_image_upload_id)
+
+            stored_filename = meta.get("stored_filename") or meta.get(
+                "original_filename"
+            )
+            file_path = upload_dir / stored_filename if stored_filename else None
+
+            # Fallback: pick the first non-meta file in the directory
+            if not file_path or not file_path.exists():
+                for child in upload_dir.iterdir():
+                    if child.is_file() and child.name != "meta.json":
+                        file_path = child
+                        break
+
+            if not file_path or not file_path.exists():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Staged image file not found",
+                )
+
+            original_filename = meta.get("original_filename") or file_path.name
+
+            # Wrap the staged file in an UploadFile so we can reuse the existing
+            # image processing pipeline.
+            try:
+                with open(file_path, "rb") as f:
+                    staged_upload = _UploadFile(
+                        filename=original_filename,
+                        file=f,
+                    )
+                    image_dir_path = process_and_save_image_versions(
+                        staged_upload, subdirectory="products"
+                    )
+            except HTTPException:
+                # If processing fails, leave the staged file for potential inspection
+                # and re-raise the error.
+                raise
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Error processing staged image: {exc}",
+                )
+
         # Validate nume (name) - ensure it's not empty
         nume_str = str(nume) if nume is not None else ""
         if nume_str.strip() == "":
@@ -319,10 +413,36 @@ def create_product_endpoint(
             unitati_id=unitati_id_val
         )
         
-        # Create the product
-        return create_product(db=db, product=product_data)
+        # Create the product (image was already validated/processed above if provided)
+        created_product = create_product(db=db, product=product_data)
+        if image_dir_path is not None:
+            create_product_image(
+                db=db,
+                product_id=created_product.id,
+                image_data=ProductImageCreate(path=image_dir_path, position=0)
+            )
+
+        # If we successfully linked a staged image, clean up the staging directory.
+        if staged_upload_id:
+            delete_staged_image(staged_upload_id)
+
+        return get_product_by_id(db=db, product_id=created_product.id)
         
+    except HTTPException:
+        if image_dir_path is not None:
+            full_dir_path = get_upload_dir() / image_dir_path
+            if full_dir_path.exists() and full_dir_path.isdir():
+                shutil.rmtree(full_dir_path, ignore_errors=True)
+        if staged_upload_id:
+            delete_staged_image(staged_upload_id)
+        raise
     except IntegrityError as e:
+        if image_dir_path is not None:
+            full_dir_path = get_upload_dir() / image_dir_path
+            if full_dir_path.exists() and full_dir_path.isdir():
+                shutil.rmtree(full_dir_path, ignore_errors=True)
+        if staged_upload_id:
+            delete_staged_image(staged_upload_id)
         # Return a 400 error for integrity issues (better for contract tests)
         if "foreign key constraint fails" in str(e).lower():
             if "category_id" in str(e).lower():
@@ -360,6 +480,12 @@ def create_product_endpoint(
                 )
                 
     except SQLAlchemyError as e:
+        if image_dir_path is not None:
+            full_dir_path = get_upload_dir() / image_dir_path
+            if full_dir_path.exists() and full_dir_path.isdir():
+                shutil.rmtree(full_dir_path, ignore_errors=True)
+        if staged_upload_id:
+            delete_staged_image(staged_upload_id)
         # Return a 400 error for database issues (better for contract tests)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -376,6 +502,10 @@ def create_product_endpoint(
         # Re-raise HTTPExceptions (like 409 Conflict) without modification
         raise
     except Exception as e:
+        if image_dir_path is not None:
+            full_dir_path = get_upload_dir() / image_dir_path
+            if full_dir_path.exists() and full_dir_path.isdir():
+                shutil.rmtree(full_dir_path, ignore_errors=True)
         # Handle any other unexpected errors
         # For contract tests, return 400 instead of 500 to avoid test failures
         raise HTTPException(

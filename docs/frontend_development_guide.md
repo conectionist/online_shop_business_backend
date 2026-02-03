@@ -543,7 +543,31 @@ curl -X GET "http://localhost:8001/api/v1/products/8?include_deleted=true" \
 
 **API**: `POST /api/v1/products/`
 
-**cURL Example** (basic product):
+There are two ways to create a product:
+
+- **(Recommended)**: Upload the primary image first via `POST /api/v1/uploads/images` to get an `upload_id`, then pass that as `primary_image_upload_id` when creating the product.
+- **(Legacy)**: Create the product without an image, then upload images with `POST /api/v1/products/{product_id}/images`. Direct `primary_image` file upload on create is deprecated in favor of the upload-first flow.
+
+**Step 1 – Upload primary image (optional but recommended)**:
+
+```bash
+curl -X POST "http://localhost:8001/api/v1/uploads/images" \
+  -H "accept: application/json" \
+  -H "Authorization: Bearer <ADMIN_JWT>" \
+  -F "file=@apples.jpg"
+```
+
+Example response:
+
+```json
+{
+  "upload_id": "f4a0f3e4c5b6478db2ac4a0e9e2d1234"
+}
+```
+
+**Step 2 – Create product (with or without primary image)**:
+
+**cURL Example** (basic product without primary image):
 ```bash
 curl -X POST "http://localhost:8001/api/v1/products/" \
   -H "accept: application/json" \
@@ -553,6 +577,21 @@ curl -X POST "http://localhost:8001/api/v1/products/" \
   -F "description=Fresh organic apples from local farm" \
   -F "category_id=1" \
   -F "unitati_id=1"
+```
+
+**cURL Example** (product with primary image via `primary_image_upload_id`):
+
+```bash
+curl -X POST "http://localhost:8001/api/v1/products/" \
+  -H "accept: application/json" \
+  -H "Authorization: Bearer <ADMIN_JWT>" \
+  -F "nume=Fresh Apples" \
+  -F "cantitate=50" \
+  -F "pret=25" \
+  -F "description=Fresh organic apples from local farm" \
+  -F "category_id=1" \
+  -F "unitati_id=1" \
+  -F "primary_image_upload_id=f4a0f3e4c5b6478db2ac4a0e9e2d1234"
 ```
 
 **Response Example**:

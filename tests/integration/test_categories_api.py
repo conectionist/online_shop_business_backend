@@ -454,6 +454,69 @@ class CategoryTestUtils(EntityTestUtils):
             # Clean up
             self.hard_delete_entity(entity_id)
             
+    def test_upload_first_then_create_category_with_primary_image(self):
+        """
+        Test the upload-first flow for creating a category with a primary image:
+        - First upload image via POST /uploads/images to get upload_id
+        - Then create category with primary_image_upload_id
+        """
+        entity_id = None
+        try:
+            # Ensure we're authenticated
+            if not auth_utils.access_token:
+                auth_utils.login()
+
+            # 1. Upload image to staging
+            image_content = get_test_image_content()
+            files = {"file": ("test_image.jpg", image_content, "image/jpeg")}
+
+            upload_response = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.api_base_url}{self.api_v1_str}/uploads/images",
+                files=files,
+            )
+            assert upload_response.status_code == 201, (
+                f"Expected 201 when uploading image to staging, "
+                f"got {upload_response.status_code}: {upload_response.text}"
+            )
+            upload_body = upload_response.json()
+            upload_id = upload_body.get("upload_id")
+            assert upload_id, f"upload_id should be present in response, got: {upload_body}"
+
+            # 2. Create category using primary_image_upload_id
+            name = self.generate_unique_name("UploadFirstCategory")
+            form_data = {
+                "name": name,
+                "order_index": "1",
+                "primary_image_upload_id": upload_id,
+            }
+
+            create_response = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/",
+                data=form_data,
+            )
+            assert create_response.status_code == 201, (
+                f"Expected 201 when creating category with primary_image_upload_id, "
+                f"got {create_response.status_code}: {create_response.text}"
+            )
+            created_entity = create_response.json()
+            entity_id = created_entity["id"]
+            assert created_entity["name"] == name
+            # Category with image should have non-null image_path and image_versions
+            assert created_entity["image_path"] is not None
+            assert "image_versions" in created_entity
+            assert created_entity["image_versions"] is not None
+            assert "original" in created_entity["image_versions"]
+            assert "medium" in created_entity["image_versions"]
+            assert "thumbnail" in created_entity["image_versions"]
+        finally:
+            try:
+                if entity_id:
+                    self.hard_delete_entity(entity_id)
+            except Exception as e:
+                print(f"Error during test cleanup: {e}")
+            
     def test_optional_image_path(self):
         """
         Test creating and updating categories with optional image uploads.

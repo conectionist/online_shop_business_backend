@@ -4,6 +4,7 @@ from typing import Dict, Optional
 from datetime import datetime
 import os
 from pathlib import Path
+from app.core.config import MAX_IMAGE_SIZE_MB
 from app.core.constants import UNCATEGORIZED_CATEGORY_ID, UNCATEGORIZED_CATEGORY_NAME
 from app.utils.macro_processor import _compute_next_delivery_date, _format_date_ro_long
 
@@ -20,6 +21,7 @@ class SystemConfigResponse(BaseModel):
     product_placeholder: str
     default_category_id: int
     default_category_name: str
+    max_image_size_mb: int
 
 class NextDeliveryDateResponse(BaseModel):
     next_delivery_date: str
@@ -37,7 +39,8 @@ async def get_system_config():
         "category_placeholder": f"{PLACEHOLDER_URL_BASE}/category_placeholder.jpg",
         "product_placeholder": f"{PLACEHOLDER_URL_BASE}/product_placeholder.jpg",
         "default_category_id": UNCATEGORIZED_CATEGORY_ID,
-        "default_category_name": UNCATEGORIZED_CATEGORY_NAME
+        "default_category_name": UNCATEGORIZED_CATEGORY_NAME,
+        "max_image_size_mb": MAX_IMAGE_SIZE_MB,
     }
 
 @router.get("/next-delivery-date", response_model=NextDeliveryDateResponse)

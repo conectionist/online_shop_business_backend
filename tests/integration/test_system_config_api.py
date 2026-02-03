@@ -101,7 +101,8 @@ class SystemConfigTestUtils:
         assert "product_placeholder" in config, "Response should contain product_placeholder"
         assert "default_category_id" in config, "Response should contain default_category_id"
         assert "default_category_name" in config, "Response should contain default_category_name"
-        
+        assert "max_image_size_mb" in config, "Response should contain max_image_size_mb"
+
         # Verify that the paths are strings and have the expected format
         assert isinstance(config["category_placeholder"], str), "category_placeholder should be a string"
         assert isinstance(config["product_placeholder"], str), "product_placeholder should be a string"
@@ -111,7 +112,9 @@ class SystemConfigTestUtils:
         assert config["default_category_id"] == 1, "default_category_id should be 1"
         assert isinstance(config["default_category_name"], str), "default_category_name should be a string"
         assert config["default_category_name"] == "Uncategorized", "default_category_name should be 'Uncategorized'"
-        
+        assert isinstance(config["max_image_size_mb"], int), "max_image_size_mb should be an integer"
+        assert config["max_image_size_mb"] >= 1, "max_image_size_mb should be at least 1"
+
         # Check that the paths start with the expected prefix
         assert config["category_placeholder"].startswith("/api/v1/static/placeholders/"), (
             f"Expected category_placeholder to start with '/api/v1/static/placeholders/', "

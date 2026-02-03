@@ -12,10 +12,11 @@ from app.services.auth import get_current_admin
 from app.models.admin import Admin
 from app.core.file_upload import (
     delete_file,
-    save_upload_file,
-    is_valid_image,
     get_upload_dir,
+    is_valid_image,
+    save_upload_file,
 )
+from app.core.image_errors import image_validation_detail
 from app.core.image_processing import process_and_save_image_versions
 from app.core.staging_uploads import resolve_staged_image, delete_staged_image
 from app.models.product import Product
@@ -220,14 +221,20 @@ def create_product_endpoint(
         # If an image is provided directly, validate and process it BEFORE creating the product.
         # This way an invalid image returns 400 without creating the product.
         if primary_image and primary_image.filename:
-            is_valid, error_message = is_valid_image(primary_image)
+            is_valid, error_detail = is_valid_image(primary_image)
             if not is_valid:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=error_message,
+                    detail=image_validation_detail(
+                        error_detail["type"],
+                        error_detail["msg"],
+                        ["body", "primary_image"],
+                    ),
                 )
             image_dir_path = process_and_save_image_versions(
-                primary_image, subdirectory="products"
+                primary_image,
+                subdirectory="products",
+                loc=["body", "primary_image"],
             )
         # Alternatively, if a staged upload_id is provided, resolve and process it now.
         elif primary_image_upload_id:
@@ -265,7 +272,9 @@ def create_product_endpoint(
                         file=f,
                     )
                     image_dir_path = process_and_save_image_versions(
-                        staged_upload, subdirectory="products"
+                        staged_upload,
+                        subdirectory="products",
+                        loc=["body", "primary_image"],
                     )
             except HTTPException:
                 # If processing fails, leave the staged file for potential inspection

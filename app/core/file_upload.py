@@ -7,6 +7,13 @@ from typing import List, Optional, Set, Tuple
 from fastapi import HTTPException, UploadFile, status
 
 from app.core.config import MAX_IMAGE_SIZE_MB
+from app.core.image_errors import (
+    TYPE_IMAGE_CONTENT_TYPE_NOT_ALLOWED,
+    TYPE_IMAGE_EXTENSION_NOT_ALLOWED,
+    TYPE_IMAGE_PROCESSING_ERROR,
+    TYPE_IMAGE_TOO_LARGE,
+    image_validation_detail,
+)
 
 
 # Configuration
@@ -30,32 +37,46 @@ def get_file_extension(filename: str) -> str:
     return filename.rsplit(".", 1)[1].lower() if "." in filename else ""
 
 
-def is_valid_image(file: UploadFile) -> Tuple[bool, Optional[str]]:
+def is_valid_image(file: UploadFile) -> Tuple[bool, Optional[dict]]:
     """
-    Validate if the uploaded file is a valid image
-    Returns a tuple of (is_valid, error_message)
+    Validate if the uploaded file is a valid image.
+
+    Returns (True, None) or (False, {"type": "<error_type>", "msg": "..."}).
+    Callers build the 422-like detail list with the correct loc (e.g. ["body", "primary_image"] or ["body", "file"]).
     """
     # Check file extension
     extension = get_file_extension(file.filename or "")
     if not extension or extension not in ALLOWED_IMAGE_EXTENSIONS:
-        return False, f"File extension not allowed. Allowed extensions: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}"
-    
+        return False, {
+            "type": TYPE_IMAGE_EXTENSION_NOT_ALLOWED,
+            "msg": f"File extension not allowed. Allowed extensions: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}",
+        }
+
     # Optional MIME check: if Content-Type is set, it must be in the allowed set
     content_type = (file.content_type or "").strip().lower()
     if content_type and content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
-        return False, f"Content-Type not allowed. Allowed: {', '.join(sorted(ALLOWED_IMAGE_CONTENT_TYPES))}"
-    
+        return False, {
+            "type": TYPE_IMAGE_CONTENT_TYPE_NOT_ALLOWED,
+            "msg": f"Content-Type not allowed. Allowed: {', '.join(sorted(ALLOWED_IMAGE_CONTENT_TYPES))}",
+        }
+
     # Check file size (FastAPI's UploadFile has file.file.seek and file.file.tell)
     try:
         file.file.seek(0, 2)  # Seek to the end of the file
         file_size = file.file.tell()  # Get the file size
         file.file.seek(0)  # Reset file pointer to the beginning
-        
+
         if file_size > MAX_IMAGE_SIZE_MB * 1024 * 1024:
-            return False, f"File size exceeds the {MAX_IMAGE_SIZE_MB}MB limit"
+            return False, {
+                "type": TYPE_IMAGE_TOO_LARGE,
+                "msg": f"File size exceeds the {MAX_IMAGE_SIZE_MB}MB limit",
+            }
     except Exception as e:
-        return False, f"Error validating file: {str(e)}"
-    
+        return False, {
+            "type": TYPE_IMAGE_PROCESSING_ERROR,
+            "msg": f"Error validating file: {str(e)}",
+        }
+
     return True, None
 
 
@@ -78,12 +99,14 @@ def save_upload_file(upload_file: UploadFile, subdirectory: str = "") -> str:
     Save an uploaded file to the upload directory
     Returns the relative path to the saved file
     """
-    # Validate the file
-    is_valid, error_message = is_valid_image(upload_file)
+    # Validate the file (loc "file" for save_upload_file callers)
+    is_valid, error_detail = is_valid_image(upload_file)
     if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_message
+            detail=image_validation_detail(
+                error_detail["type"], error_detail["msg"], ["body", "file"]
+            ),
         )
     
     # Generate a secure filename

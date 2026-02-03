@@ -383,6 +383,8 @@ curl -X POST "http://localhost:8000/api/v1/categories" \
 # Response: 409 {"detail":"Category with name 'Fruits' already exists"}
 ```
 
+**400 Image validation error** (invalid or oversized image): Image upload 400s use the same structure as 422: `detail` is a list of `{loc, msg, type}`. Use `detail[0].type` (e.g. `image_extension_not_allowed`, `image_too_large`, `image_invalid_content`) to show the right message; see [IMAGE_UPLOAD_FUNCTIONALITY.md](IMAGE_UPLOAD_FUNCTIONALITY.md#image-validation-error-response).
+
 ### Produse
 
 **What is this?** Products are the core items in your online shop - the actual goods that customers can browse, view, and purchase.

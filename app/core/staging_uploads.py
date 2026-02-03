@@ -7,6 +7,7 @@ from typing import Dict, Tuple
 from fastapi import HTTPException, UploadFile, status
 
 from app.core.file_upload import get_upload_dir, is_valid_image
+from app.core.image_errors import image_validation_detail
 
 
 STAGING_SUBDIR = "staging"
@@ -31,11 +32,13 @@ def save_staged_image(upload_file: UploadFile) -> str:
         staged image when creating an entity.
     """
     # Reuse existing validation logic (extension, content-type, size)
-    is_valid, error_message = is_valid_image(upload_file)
+    is_valid, error_detail = is_valid_image(upload_file)
     if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_message,
+            detail=image_validation_detail(
+                error_detail["type"], error_detail["msg"], ["body", "file"]
+            ),
         )
 
     upload_id = uuid.uuid4().hex

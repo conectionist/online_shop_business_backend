@@ -3,13 +3,19 @@
 import io
 import os
 import uuid
-from typing import Tuple, Optional, Dict, List
+from typing import Dict, List, Optional, Tuple
 
 from PIL import Image, ImageOps
 from fastapi import UploadFile, HTTPException, status
 
 from app.core.config import MAX_IMAGE_SIZE_MB
 from app.core.file_upload import get_upload_dir
+from app.core.image_errors import (
+    TYPE_IMAGE_INVALID_CONTENT,
+    TYPE_IMAGE_PROCESSING_ERROR,
+    TYPE_IMAGE_TOO_LARGE,
+    image_validation_detail,
+)
 
 # PIL format names (uppercase) for content validation
 ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG", "GIF", "WEBP"}
@@ -86,20 +92,23 @@ def process_and_save_image_versions(
         "original": None,  # No resizing for original
         "medium": (800, 800),
         "thumbnail": (200, 200)
-    }
+    },
+    loc: Optional[List[str]] = None,
 ) -> str:
     """
     Process an uploaded image and save multiple versions in a single directory.
-    
+
     Args:
         upload_file: The uploaded file
         subdirectory: Subdirectory to save in
         versions: Dictionary of version name to size tuple
                  (None means keep original size)
-    
+        loc: Location for 422-like error detail (default ["body", "file"])
+
     Returns:
         Path to the image directory (relative to upload folder)
     """
+    error_loc = loc if loc is not None else ["body", "file"]
     try:
         # Read file content with size cap to avoid memory DoS
         max_bytes = MAX_IMAGE_SIZE_MB * 1024 * 1024
@@ -107,7 +116,11 @@ def process_and_save_image_versions(
         if upload_file.file.read(1):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File exceeds maximum size"
+                detail=image_validation_detail(
+                    TYPE_IMAGE_TOO_LARGE,
+                    "File exceeds maximum size",
+                    error_loc,
+                ),
             )
         # Validate that bytes are a valid image (PIL can decode them)
         try:
@@ -116,14 +129,22 @@ def process_and_save_image_versions(
             if img.format and img.format.upper() not in ALLOWED_IMAGE_FORMATS:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid image content"
+                    detail=image_validation_detail(
+                        TYPE_IMAGE_INVALID_CONTENT,
+                        "Invalid image content",
+                        error_loc,
+                    ),
                 )
         except HTTPException:
             raise
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid image content"
+                detail=image_validation_detail(
+                    TYPE_IMAGE_INVALID_CONTENT,
+                    "Invalid image content",
+                    error_loc,
+                ),
             )
         # Get file extension from content type or filename
         ext = os.path.splitext(upload_file.filename or "")[1].lower()
@@ -160,9 +181,15 @@ def process_and_save_image_versions(
         
         # Return the relative path to the image directory
         return image_dir
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error processing image versions: {str(e)}"
+            detail=image_validation_detail(
+                TYPE_IMAGE_PROCESSING_ERROR,
+                f"Error processing image versions: {str(e)}",
+                error_loc,
+            ),
         )

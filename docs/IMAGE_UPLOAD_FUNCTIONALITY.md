@@ -106,10 +106,43 @@ To support upload-first workflows and eliminate orphan entities when uploads fai
 ```
 
 **Error Responses**:
-- 400: Bad request (invalid file format or size)
+- 400: Bad request (invalid file format or size) — see **Image validation error response** below for body shape
 - 404: Category not found
 - 422: Validation error
 - 500: Internal server error
+
+### Image validation error response
+
+Image validation 400 responses use the **same structure as 422 validation errors**, so the frontend can use one handler (e.g. loop over `detail`, show each `msg` or map `type` to a message).
+
+**Response body** (HTTP 400):
+
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "file"],
+      "msg": "File extension not allowed. Allowed extensions: jpg, jpeg, png, gif, webp",
+      "type": "image_extension_not_allowed"
+    }
+  ]
+}
+```
+
+- `detail` is a **list** of objects (one item per validation failure).
+- Each item has: `loc` (field location, e.g. `["body", "primary_image"]` or `["body", "file"]`), `msg` (human-readable message), `type` (machine-readable code).
+
+**Type values** (frontend can switch on `detail[0].type` to show the right message):
+
+| type | When |
+|------|------|
+| `image_extension_not_allowed` | File extension is not allowed (e.g. .exe, .txt). |
+| `image_content_type_not_allowed` | Content-Type header is set and not in the allowed set. |
+| `image_too_large` | File size exceeds the configured limit. |
+| `image_invalid_content` | File bytes are not a valid image or format not allowed. |
+| `image_processing_error` | Generic processing failure (e.g. I/O or decode error). |
+
+All image upload endpoints (category image, product images, staging upload, product/category create with image) use this shape for validation failures.
 
 ## Testing
 

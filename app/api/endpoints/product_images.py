@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.auth import get_current_admin
 from app.core.file_upload import is_valid_image, get_upload_dir
+from app.core.image_errors import image_validation_detail
 from app.core.image_processing import process_and_save_image_versions
 from app.models.admin import Admin
 from app.models.product import Product
@@ -62,9 +63,14 @@ async def upload_product_image(
             )
         
         # Validate file (extension, size, optional MIME) before processing
-        is_valid, error_message = is_valid_image(file)
+        is_valid, error_detail = is_valid_image(file)
         if not is_valid:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=image_validation_detail(
+                    error_detail["type"], error_detail["msg"], ["body", "file"]
+                ),
+            )
         
         # Process and save multiple versions of the image
         image_dir_path = process_and_save_image_versions(file, subdirectory="products")

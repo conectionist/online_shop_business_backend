@@ -524,6 +524,17 @@ export const productsApi = {
     return response.data;
   }
 };
+
+// Upload image to staging (upload-first flow)
+export const uploadImageToStaging = async (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await apiClient.post<{ upload_id: string }>('/uploads/images', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return response.data.upload_id;
+};
 ```
 
 ## 🎨 **UI/UX Implementation**

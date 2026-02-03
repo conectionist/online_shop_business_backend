@@ -149,6 +149,19 @@ Use the VS Code debug console to evaluate expressions and inspect variables duri
    docker compose -f docker-compose.debug.yml restart api_debug
    ```
 
+## Staging Upload Cleanup
+
+The image upload system uses a staging area under the main uploads directory (e.g. `/app/uploads/staging`) for the upload-first flow (`POST /api/v1/uploads/images`). These staged uploads are temporary and should be cleaned up periodically.
+
+- Cleanup helper script: `scripts/cleanup_staging_uploads.py`
+- Environment variable: `STAGING_UPLOAD_TTL_HOURS` (default: 24)
+
+Example cron entry (run once per day):
+
+```cron
+0 3 * * * cd /app && STAGING_UPLOAD_TTL_HOURS=24 python scripts/cleanup_staging_uploads.py >> /var/log/cleanup_staging_uploads.log 2>&1
+```
+
 ## Alternative IDEs
 
 ### PyCharm

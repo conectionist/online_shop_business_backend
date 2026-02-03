@@ -4,7 +4,7 @@ This document describes the image upload functionality implemented for the Onlin
 
 ## Overview
 
-The image upload functionality allows storing and managing images for entities in the system. Currently, it is implemented for the Categories entity, with plans to extend to other entities like Products in the future.
+The image upload functionality allows storing and managing images for entities in the system. It is implemented for Categories and Products, and now supports an **upload-first staging flow** where images are uploaded and validated before the corresponding entity is created.
 
 ## Technical Implementation
 
@@ -45,12 +45,40 @@ Core utilities for file handling are implemented in `app/core/file_upload.py`:
 Categories can have a single image associated with them:
 
 - **Database Field**: `image_path` in the `category` table stores the relative path
-- **API Endpoint**: `POST /api/v1/categories/{category_id}/image`
+- **API Endpoints**:
+  - `POST /api/v1/categories/{category_id}/image` – upload/replace image for an existing category
+  - `POST /api/v1/categories/` – can accept a `primary_image_upload_id` from the staging upload endpoint to set the initial image during creation
 - **Storage Location**: Files are stored in the `categories` subdirectory
-- **Image Replacement**: When uploading a new image, any existing image is automatically deleted
+- **Image Replacement**: When uploading a new image (either via `/image` or via update), any existing image directory is automatically deleted
 - **Deletion Behavior**:
-  - Soft Delete: Image file is preserved to allow restoration
-  - Hard Delete: Image file is permanently deleted along with the category
+  - Soft Delete: Image files are preserved to allow restoration
+  - Hard Delete: Image files are permanently deleted along with the category
+
+#### Products
+
+Products can have multiple images associated with them via a `product_images` table:
+
+- **Database Model**: `ProductImage` stores `path`, `position`, and `is_primary`
+- **API Endpoints**:
+  - `POST /api/v1/products/`:
+    - Optional `primary_image` (legacy) – direct file upload on create (now deprecated)
+    - Optional `primary_image_upload_id` – preferred upload-first flow using staged image
+  - `POST /api/v1/products/{product_id}/images` – upload additional images or manage galleries
+- **Storage Location**: Files are stored in the `products` subdirectory, with one directory per image set (original, medium, thumbnail).
+
+### Staging Uploads
+
+To support upload-first workflows and eliminate orphan entities when uploads fail, a staging mechanism is provided:
+
+- **Endpoint**: `POST /api/v1/uploads/images`
+- **Purpose**: Upload and validate an image **before** creating or updating an entity.
+- **Behavior**:
+  - Validates extension, size, content-type (optional), and image content.
+  - Saves the raw file into a staging directory under `uploads/staging/{upload_id}/`.
+  - Returns an opaque `upload_id` that can be used by entity creation endpoints as `primary_image_upload_id`.
+- **Consumers**:
+  - `POST /api/v1/products/` – accepts `primary_image_upload_id` and processes the staged image into final product image versions.
+  - `POST /api/v1/categories/` – accepts `primary_image_upload_id` and processes the staged image into the category image directory.
 
 ## API Usage
 

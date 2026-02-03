@@ -64,7 +64,7 @@ class ProductTestUtils(EntityTestUtils):
             "unitati_id": str(unitati_id)
         }
         
-        # Note: primary_image has been removed, we now use the dedicated product_images endpoints
+        # primary_image is optional on create; these tests typically add images via product_images endpoints
             
         # Ensure we're authenticated
         if not auth_utils.access_token:
@@ -810,6 +810,165 @@ class ProductTestUtils(EntityTestUtils):
             except Exception as e:
                 print(f"Error during test cleanup: {e}")
 
+    def test_create_product_with_primary_image(self):
+        """
+        Test creating a product with a valid primary_image in one request (happy path).
+        Product is created with image; response includes images list.
+        """
+        entity_id = None
+        try:
+            prod_name = self.generate_unique_name("ProductWithPrimaryImage")
+            form_data = {
+                "nume": prod_name,
+                "cantitate": "10",
+                "pret": "100",
+                "description": f"Description for {prod_name}",
+                "category_id": "1",
+                "unitati_id": "1",
+            }
+            test_image_content = get_test_image_content()
+            files = {"primary_image": ("test_image.jpg", test_image_content, "image/jpeg")}
+
+            if not auth_utils.access_token:
+                auth_utils.login()
+
+            create_response = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/",
+                data=form_data,
+                files=files,
+            )
+            assert create_response.status_code == 201, (
+                f"Expected 201 when creating product with valid primary_image, "
+                f"got {create_response.status_code}: {create_response.text}"
+            )
+            created = create_response.json()
+            entity_id = created["id"]
+            assert created["nume"] == prod_name
+            assert "images" in created
+            assert len(created["images"]) > 0, "Product created with primary_image should have at least one image"
+            first_image = created["images"][0]
+            assert "path" in first_image
+            assert "position" in first_image
+        finally:
+            try:
+                if entity_id:
+                    self.hard_delete_entity(entity_id)
+            except Exception as e:
+                print(f"Error during test cleanup: {e}")
+
+    def test_create_product_invalid_primary_image_no_product_created(self):
+        """
+        Test that creating a product with an invalid primary_image returns 400 and does NOT create
+        the product, so a retry with the same name (without file) succeeds.
+        """
+        prod_name = self.generate_unique_name("InvalidImageProduct")
+        form_data = {
+            "nume": prod_name,
+            "cantitate": "10",
+            "pret": "100",
+            "description": f"Description for {prod_name}",
+            "category_id": "1",
+            "unitati_id": "1",
+        }
+        # Invalid: valid extension but non-image content
+        files_invalid = {"primary_image": ("fake.jpg", b"not an image", "image/jpeg")}
+
+        if not auth_utils.access_token:
+            auth_utils.login()
+
+        create_with_bad_image = auth_utils.make_authenticated_request(
+            "POST",
+            f"{self.base_url}/",
+            data=form_data,
+            files=files_invalid,
+        )
+        assert create_with_bad_image.status_code == 400, (
+            f"Expected 400 for invalid primary_image, got {create_with_bad_image.status_code}: {create_with_bad_image.text}"
+        )
+        detail = create_with_bad_image.json().get("detail", "")
+        assert "invalid" in detail.lower() or "content" in detail.lower() or "image" in detail.lower()
+
+        # Retry with same name, no file: should succeed (proves no product was created)
+        create_without_file = auth_utils.make_authenticated_request(
+            "POST",
+            f"{self.base_url}/",
+            data=form_data,
+        )
+        assert create_without_file.status_code == 201, (
+            f"Retry with same name without file should succeed (no product created on first attempt). "
+            f"Got {create_without_file.status_code}: {create_without_file.text}"
+        )
+        created = create_without_file.json()
+        entity_id = created["id"]
+        try:
+            self.hard_delete_entity(entity_id)
+        except Exception as e:
+            print(f"Error during test cleanup: {e}")
+
+    def test_upload_first_then_create_product_with_primary_image(self):
+        """
+        Test the upload-first flow for creating a product with a primary image:
+        - First upload image via POST /uploads/images to get upload_id
+        - Then create product with primary_image_upload_id
+        """
+        entity_id = None
+        try:
+            # 1. Upload image to staging
+            test_image_content = get_test_image_content()
+            files = {"file": ("test_image.jpg", test_image_content, "image/jpeg")}
+
+            if not auth_utils.access_token:
+                auth_utils.login()
+
+            upload_response = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.api_base_url}{self.api_v1_str}/uploads/images",
+                files=files,
+            )
+            assert upload_response.status_code == 201, (
+                f"Expected 201 when uploading image to staging, "
+                f"got {upload_response.status_code}: {upload_response.text}"
+            )
+            upload_body = upload_response.json()
+            upload_id = upload_body.get("upload_id")
+            assert upload_id, f"upload_id should be present in response, got: {upload_body}"
+
+            # 2. Create product using primary_image_upload_id
+            prod_name = self.generate_unique_name("UploadFirstProduct")
+            form_data = {
+                "nume": prod_name,
+                "cantitate": "10",
+                "pret": "100",
+                "description": f"Description for {prod_name}",
+                "category_id": "1",
+                "unitati_id": "1",
+                "primary_image_upload_id": upload_id,
+            }
+
+            create_response = auth_utils.make_authenticated_request(
+                "POST",
+                f"{self.base_url}/",
+                data=form_data,
+            )
+            assert create_response.status_code == 201, (
+                f"Expected 201 when creating product with primary_image_upload_id, "
+                f"got {create_response.status_code}: {create_response.text}"
+            )
+            created = create_response.json()
+            entity_id = created["id"]
+            assert created["nume"] == prod_name
+            assert "images" in created
+            assert len(created["images"]) > 0, (
+                "Product created with primary_image_upload_id should have at least one image"
+            )
+        finally:
+            try:
+                if entity_id:
+                    self.hard_delete_entity(entity_id)
+            except Exception as e:
+                print(f"Error during test cleanup: {e}")
+
     def test_product_image_upload_validation(self):
         """
         Test that product image upload rejects disallowed extension, oversize files, and non-image content.
@@ -914,6 +1073,26 @@ def test_product_image_upload_validation():
     """
     product_utils.test_product_image_upload_validation()
 
+
+def test_create_product_with_primary_image():
+    """
+    Tests creating a product with a valid primary_image in one request (happy path).
+    """
+    product_utils.test_create_product_with_primary_image()
+
+
+def test_create_product_invalid_primary_image_no_product_created():
+    """
+    Tests that invalid primary_image on create returns 400 and does not create the product.
+    """
+    product_utils.test_create_product_invalid_primary_image_no_product_created()
+
+
+def test_upload_first_then_create_product_with_primary_image():
+    """
+    Tests upload-first flow for creating a product with a primary image.
+    """
+    product_utils.test_upload_first_then_create_product_with_primary_image()
 
 def test_create_product_without_category():
     """

@@ -359,7 +359,12 @@ class CategoryTestUtils(EntityTestUtils):
         )
         # Could be 400 (invalid image) or 422 (validation error) depending on which validation runs first
         assert invalid_image_response.status_code in (400, 422)
-        
+        if invalid_image_response.status_code == 400:
+            detail = invalid_image_response.json().get("detail")
+            assert isinstance(detail, list) and len(detail) > 0, f"Expected 400 detail to be a non-empty list, got {detail}"
+            assert detail[0].get("type", "").startswith("image_"), f"Expected image error type, got {detail[0].get('type')}"
+            assert "msg" in detail[0]
+
         # Test duplicate name validation
         unique_name = self.generate_unique_name("Unique")
         created_entity, entity_id = self.create_entity(name=unique_name)
@@ -813,9 +818,14 @@ def test_category_invalid_image_uploads():
             f"{category_utils.base_url}/{category_id}/image",
             files=files
         )
-        # The server should reject invalid files
+        # The server should reject invalid files (400 with 422-like detail or 422)
         assert invalid_type_response.status_code in [400, 422], "Should reject non-image files"
-        
+        if invalid_type_response.status_code == 400:
+            detail = invalid_type_response.json().get("detail")
+            assert isinstance(detail, list) and len(detail) > 0, f"Expected 400 detail to be a non-empty list, got {detail}"
+            assert detail[0].get("type", "").startswith("image_"), f"Expected image error type, got {detail[0].get('type')}"
+            assert "msg" in detail[0]
+
         # Test with non-existent category
         non_existent_id = 99999  # Assuming this ID doesn't exist
         test_image = get_test_image_content()

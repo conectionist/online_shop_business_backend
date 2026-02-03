@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from app.core.database import get_db
 from app.core.file_upload import delete_file, is_valid_image, get_upload_dir
+from app.core.image_errors import image_validation_detail
 from app.core.image_processing import process_and_save_image_versions
 from app.core.staging_uploads import resolve_staged_image, delete_staged_image
 from app.services.auth import get_current_admin
@@ -77,9 +78,14 @@ def upload_category_image(
             )
         
         # Validate file (extension, size, optional MIME) before processing
-        is_valid, error_message = is_valid_image(file)
+        is_valid, error_detail = is_valid_image(file)
         if not is_valid:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=image_validation_detail(
+                    error_detail["type"], error_detail["msg"], ["body", "file"]
+                ),
+            )
         
         # Process and save multiple versions of the image
         # This will create a directory with the original, medium, and thumbnail versions
@@ -209,15 +215,21 @@ def create_category_endpoint(
 
         # Process and save image if provided directly
         if primary_image:
-            is_valid, error_message = is_valid_image(primary_image)
+            is_valid, error_detail = is_valid_image(primary_image)
             if not is_valid:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=error_message,
+                    detail=image_validation_detail(
+                        error_detail["type"],
+                        error_detail["msg"],
+                        ["body", "primary_image"],
+                    ),
                 )
 
             primary_image_path = process_and_save_image_versions(
-                primary_image, subdirectory="categories"
+                primary_image,
+                subdirectory="categories",
+                loc=["body", "primary_image"],
             )
         # Or via a staged upload_id
         elif primary_image_upload_id:
@@ -253,7 +265,9 @@ def create_category_endpoint(
                         file=f,
                     )
                     primary_image_path = process_and_save_image_versions(
-                        staged_upload, subdirectory="categories"
+                        staged_upload,
+                        subdirectory="categories",
+                        loc=["body", "primary_image"],
                     )
             except HTTPException:
                 raise
@@ -395,30 +409,29 @@ def update_category_endpoint(
         
         elif primary_image:
             # If image is provided, process it
-            # Validate image
-            from app.core.file_upload import is_valid_image
-            if not is_valid_image(primary_image):
+            is_valid, error_detail = is_valid_image(primary_image)
+            if not is_valid:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=[
-                        {
-                            "loc": ["body", "primary_image"],
-                            "msg": "Invalid image format",
-                            "type": "value_error.image"
-                        }
-                    ]
+                    detail=image_validation_detail(
+                        error_detail["type"],
+                        error_detail["msg"],
+                        ["body", "primary_image"],
+                    ),
                 )
-                
             # Process and save multiple versions of the image
-            primary_image_path = process_and_save_image_versions(primary_image, subdirectory="categories")
+            primary_image_path = process_and_save_image_versions(
+                primary_image,
+                subdirectory="categories",
+                loc=["body", "primary_image"],
+            )
             update_dict["image_path"] = primary_image_path
-            
             # Clean up old image directory if it exists
             if existing_category.image_path:
                 import os
                 import shutil
                 from app.core.file_upload import get_upload_dir
-                
+
                 full_dir_path = os.path.join(get_upload_dir(), existing_category.image_path)
                 if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
                     shutil.rmtree(full_dir_path)
@@ -523,30 +536,29 @@ def patch_category_endpoint(
         
         elif primary_image:
             # If image is provided, process it
-            # Validate image
-            from app.core.file_upload import is_valid_image
-            if not is_valid_image(primary_image):
+            is_valid, error_detail = is_valid_image(primary_image)
+            if not is_valid:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=[
-                        {
-                            "loc": ["body", "primary_image"],
-                            "msg": "Invalid image format",
-                            "type": "value_error.image"
-                        }
-                    ]
+                    detail=image_validation_detail(
+                        error_detail["type"],
+                        error_detail["msg"],
+                        ["body", "primary_image"],
+                    ),
                 )
-                
             # Process and save multiple versions of the image
-            primary_image_path = process_and_save_image_versions(primary_image, subdirectory="categories")
+            primary_image_path = process_and_save_image_versions(
+                primary_image,
+                subdirectory="categories",
+                loc=["body", "primary_image"],
+            )
             update_dict["image_path"] = primary_image_path
-            
             # Clean up old image directory if it exists
             if existing_category.image_path:
                 import os
                 import shutil
                 from app.core.file_upload import get_upload_dir
-                
+
                 full_dir_path = os.path.join(get_upload_dir(), existing_category.image_path)
                 if os.path.exists(full_dir_path) and os.path.isdir(full_dir_path):
                     shutil.rmtree(full_dir_path)

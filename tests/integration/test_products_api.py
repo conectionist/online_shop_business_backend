@@ -886,8 +886,11 @@ class ProductTestUtils(EntityTestUtils):
         assert create_with_bad_image.status_code == 400, (
             f"Expected 400 for invalid primary_image, got {create_with_bad_image.status_code}: {create_with_bad_image.text}"
         )
-        detail = create_with_bad_image.json().get("detail", "")
-        assert "invalid" in detail.lower() or "content" in detail.lower() or "image" in detail.lower()
+        detail = create_with_bad_image.json().get("detail")
+        assert isinstance(detail, list) and len(detail) > 0, f"Expected detail to be a non-empty list, got {detail}"
+        first = detail[0]
+        assert first.get("type") in ("image_invalid_content", "image_processing_error"), f"Expected image error type, got {first.get('type')}"
+        assert "msg" in first
 
         # Retry with same name, no file: should succeed (proves no product was created)
         create_without_file = auth_utils.make_authenticated_request(
@@ -983,7 +986,10 @@ class ProductTestUtils(EntityTestUtils):
                 files=files_bad_ext
             )
             assert r.status_code == 400, f"Expected 400 for disallowed extension, got {r.status_code}: {r.text}"
-            assert "extension" in r.json().get("detail", "").lower() or "allowed" in r.json().get("detail", "").lower()
+            detail = r.json().get("detail")
+            assert isinstance(detail, list) and len(detail) > 0, f"Expected detail to be a non-empty list, got {detail}"
+            assert detail[0].get("type") == "image_extension_not_allowed", f"Expected image_extension_not_allowed, got {detail[0].get('type')}"
+            assert "msg" in detail[0] and "loc" in detail[0]
 
             # (b) Valid extension but non-image body -> 400 (content validation)
             files_fake_jpg = {"file": ("fake.jpg", b"not an image", "image/jpeg")}
@@ -993,7 +999,10 @@ class ProductTestUtils(EntityTestUtils):
                 files=files_fake_jpg
             )
             assert r.status_code == 400, f"Expected 400 for non-image content, got {r.status_code}: {r.text}"
-            assert "invalid" in r.json().get("detail", "").lower() or "content" in r.json().get("detail", "").lower()
+            detail = r.json().get("detail")
+            assert isinstance(detail, list) and len(detail) > 0, f"Expected detail to be a non-empty list, got {detail}"
+            assert detail[0].get("type") in ("image_invalid_content", "image_processing_error"), f"Expected image error type, got {detail[0].get('type')}"
+            assert "msg" in detail[0]
 
             # (c) File over max size (default 15 MB) -> 400
             max_mb = 15
@@ -1006,7 +1015,10 @@ class ProductTestUtils(EntityTestUtils):
                 files=files_oversize
             )
             assert r.status_code == 400, f"Expected 400 for oversize file, got {r.status_code}: {r.text}"
-            assert "size" in r.json().get("detail", "").lower() or "exceeds" in r.json().get("detail", "").lower()
+            detail = r.json().get("detail")
+            assert isinstance(detail, list) and len(detail) > 0, f"Expected detail to be a non-empty list, got {detail}"
+            assert detail[0].get("type") == "image_too_large", f"Expected image_too_large, got {detail[0].get('type')}"
+            assert "msg" in detail[0]
         finally:
             try:
                 self.hard_delete_entity(entity_id)

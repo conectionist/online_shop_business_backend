@@ -94,8 +94,13 @@ ADMIN_PASSWORD = get_required_env_var(
 )
 
 # OpenAPI Documentation Configuration
-# Disable OpenAPI docs in production for security, enable in dev/test
-ENABLE_OPENAPI_DOCS = get_optional_env_var("ENABLE_OPENAPI_DOCS", "true", "Enable/disable OpenAPI documentation endpoints").lower() in ("true", "1", "yes")
+# Disable OpenAPI docs by default in production for security, enable in dev/test
+_default_openapi_docs = "false" if ENVIRONMENT == "production" else "true"
+ENABLE_OPENAPI_DOCS = get_optional_env_var(
+    "ENABLE_OPENAPI_DOCS",
+    _default_openapi_docs,
+    "Enable/disable OpenAPI documentation endpoints"
+).lower() in ("true", "1", "yes")
 
 # Web Push (VAPID) Configuration - optional for now; required when sending notifications
 VAPID_PUBLIC_KEY = get_optional_env_var(
@@ -130,6 +135,25 @@ ORDER_RATE_LIMIT_WINDOW = get_optional_env_var(
     "ORDER_RATE_LIMIT_WINDOW", "24hour", "Rate limit window: second, minute, hour, day, or Nhour, Nday, etc. (no space)"
 ).strip()
 ORDER_RATE_LIMIT_STRING = f"{ORDER_RATE_LIMIT_MAX}/{ORDER_RATE_LIMIT_WINDOW}"
+
+# Admin login brute-force protection (per-IP, slowapi).
+# Limit string = LOGIN_RATE_LIMIT_MAX/LOGIN_RATE_LIMIT_WINDOW (no space).
+# Defaults:
+# - Production: conservative (5 attempts / 5 minutes)
+# - Non-production (dev/test): very high ceiling to avoid interfering with tests
+_default_login_limit_max = "5" if ENVIRONMENT == "production" else "1000"
+_default_login_window = "5minute"
+LOGIN_RATE_LIMIT_MAX = int(get_optional_env_var(
+    "LOGIN_RATE_LIMIT_MAX",
+    _default_login_limit_max,
+    "Max admin login attempts per IP per window"
+))
+LOGIN_RATE_LIMIT_WINDOW = get_optional_env_var(
+    "LOGIN_RATE_LIMIT_WINDOW",
+    _default_login_window,
+    "Login rate limit window: second, minute, hour, day, or Nhour, Nday, etc. (no space)"
+).strip()
+LOGIN_RATE_LIMIT_STRING = f"{LOGIN_RATE_LIMIT_MAX}/{LOGIN_RATE_LIMIT_WINDOW}"
 
 # For compatibility with the rest of the application
 class Settings:
@@ -170,5 +194,10 @@ class Settings:
         self.ORDER_RATE_LIMIT_MAX = ORDER_RATE_LIMIT_MAX
         self.ORDER_RATE_LIMIT_WINDOW = ORDER_RATE_LIMIT_WINDOW
         self.ORDER_RATE_LIMIT_STRING = ORDER_RATE_LIMIT_STRING
+
+        # Admin login brute-force protection
+        self.LOGIN_RATE_LIMIT_MAX = LOGIN_RATE_LIMIT_MAX
+        self.LOGIN_RATE_LIMIT_WINDOW = LOGIN_RATE_LIMIT_WINDOW
+        self.LOGIN_RATE_LIMIT_STRING = LOGIN_RATE_LIMIT_STRING
 
 settings = Settings()

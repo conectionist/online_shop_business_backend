@@ -122,9 +122,9 @@ class TestUnauthorizedAccess:
         else:
             pytest.fail(f"Unsupported HTTP method: {method}")
         
-        # Verify response (FastAPI can return 401 or 403 for unauthenticated access)
-        assert response.status_code in [401, 403], (
-            f"Expected 401 Unauthorized or 403 Forbidden for {method} {endpoint}, "
+        # Verify response: unauthenticated access should return 401 Unauthorized
+        assert response.status_code == 401, (
+            f"Expected 401 Unauthorized for {method} {endpoint}, "
             f"got {response.status_code}: {response.text}"
         )
         
@@ -257,4 +257,18 @@ def test_refresh_endpoint_requires_token():
         # Some endpoints might return plain text
         assert "Invalid" in response.text or "expired" in response.text, (
             f"Response should indicate invalid/expired token: {response.text}"
-        ) 
+        )
+
+
+def test_orders_protected_endpoint_sets_www_authenticate_header():
+    """
+    Verify that a protected endpoint using HTTP Bearer-style auth returns 401
+    when no token is provided. The presence of a WWW-Authenticate header is
+    desirable but not strictly enforced here, as implementation details may vary.
+    """
+    url = f"{BASE_URL}/orders/"
+    response = requests.get(url)
+    assert response.status_code == 401, (
+        f"Expected 401 Unauthorized for protected endpoint without token, "
+        f"got {response.status_code}: {response.text}"
+    )

@@ -85,13 +85,13 @@ def test_orders_list_and_get_require_auth():
 
     # List without auth
     resp = requests.get(f"{API_V1}/orders/")
-    # No Authorization header → HTTPBearer returns 403
-    assert resp.status_code == 403
+    # No Authorization header → HTTPBearer returns 401
+    assert resp.status_code == 401
 
     # Get without auth
     resp = requests.get(f"{API_V1}/orders/{order_id}")
-    # No Authorization header → HTTPBearer returns 403
-    assert resp.status_code == 403
+    # No Authorization header → HTTPBearer returns 401
+    assert resp.status_code == 401
 
 
 def test_orders_endpoints_invalid_token_returns_401():

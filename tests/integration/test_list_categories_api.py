@@ -318,19 +318,19 @@ def test_unauthorized_access():
     
     # Test unauthorized GET
     response = requests.get(f"{list_category_utils.base_url}/{list_id}/categories")
-    assert response.status_code == 403
+    assert response.status_code == 401
     
     # Test unauthorized POST
     response = requests.post(f"{list_category_utils.base_url}/{list_id}/categories/{category_id}")
-    assert response.status_code == 403
+    assert response.status_code == 401
     
     # Test unauthorized PATCH
     response = requests.patch(f"{list_category_utils.base_url}/{list_id}/categories/{category_id}/position")
-    assert response.status_code == 403
+    assert response.status_code == 401
     
     # Test unauthorized DELETE
     response = requests.delete(f"{list_category_utils.base_url}/{list_id}/categories/{category_id}")
-    assert response.status_code == 403
+    assert response.status_code == 401
     
     # Restore authentication
     auth_utils.login() 

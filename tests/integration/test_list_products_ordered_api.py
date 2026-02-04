@@ -461,19 +461,19 @@ def test_unauthorized_access():
     
     # Test unauthorized POST (management endpoint - should be protected)
     response = requests.post(f"{list_product_ordered_utils.base_url}/{list_id}/categories/{category_id}/products/{product_id}")
-    assert response.status_code == 403
+    assert response.status_code == 401
     
     # Test unauthorized PATCH (position) (management endpoint - should be protected)
     response = requests.patch(f"{list_product_ordered_utils.base_url}/{list_id}/products/{product_id}/position")
-    assert response.status_code == 403
+    assert response.status_code == 401
     
     # Test unauthorized PATCH (move) (management endpoint - should be protected)
     response = requests.patch(f"{list_product_ordered_utils.base_url}/{list_id}/products/{product_id}/move")
-    assert response.status_code == 403
+    assert response.status_code == 401
     
     # Test unauthorized DELETE (management endpoint - should be protected)
     response = requests.delete(f"{list_product_ordered_utils.base_url}/{list_id}/products/{product_id}")
-    assert response.status_code == 403
+    assert response.status_code == 401
     
     # Restore authentication
     auth_utils.login()
@@ -662,7 +662,7 @@ def test_bulk_update_positions_unauthorized():
         f"{list_product_ordered_utils.base_url}/{list_id}/positions",
         json=bulk_update_data
     )
-    assert response.status_code == 403
+    assert response.status_code == 401
     
     # Restore authentication
     auth_utils.login() 

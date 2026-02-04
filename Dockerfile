@@ -17,11 +17,14 @@ COPY db/ ./db/
 COPY alembic.ini.template logging.ini docker-entrypoint.sh ./
 COPY test/test_data/seed_data_complete.sql ./test/test_data/seed_data_complete.sql
 
-# Create a non-root user for running the application and fix permissions
-RUN groupadd -r appuser && useradd -r -g appuser appuser \
-    && mkdir -p /app/logs /app/uploads \
-    && chown -R appuser:appuser /app \
-    && chmod +x docker-entrypoint.sh
+ARG UID=1000
+ARG GID=1000
+
+RUN groupadd --gid $GID appuser \
+ && useradd --uid $UID --gid $GID --create-home appuser \
+ && mkdir -p /app/logs /app/uploads \
+ && chown -R appuser:appuser /app \
+ && chmod +x docker-entrypoint.sh
 
 # Run the application as the unprivileged user
 USER appuser

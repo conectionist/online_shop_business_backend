@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        UID: 1000
+        GID: 1000
     container_name: online_shop_api
     restart: unless-stopped
     ports:
@@ -52,7 +55,7 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./config/placeholders:/app/config/placeholders
-      - logs_data:/app/logs
+      - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

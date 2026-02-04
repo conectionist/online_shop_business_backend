@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 import os
 import requests
 from integration.test_auth_utils import auth_utils
@@ -23,8 +23,8 @@ def _get_any_list_id_or_skip():
 def test_orders_create_public_success():
     list_id = _get_any_list_id_or_skip()
     payload = {
-        "nume_client": f"John Doe {int(datetime.utcnow().timestamp()*1000)}",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "nume_client": f"John Doe {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -43,8 +43,8 @@ def test_orders_create_public_success():
 def test_orders_create_public_and_read_with_auth():
     list_id = _get_any_list_id_or_skip()
     payload = {
-        "nume_client": f"John Doe Auth {int(datetime.utcnow().timestamp()*1000)}",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "nume_client": f"John Doe Auth {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 2,  # Ridicare de la punct fix
         "payment_method_id": 6,  # Card
@@ -73,8 +73,8 @@ def test_orders_list_and_get_require_auth():
     # Create an order without auth (public) to have an ID
     list_id = _get_any_list_id_or_skip()
     payload = {
-        "nume_client": f"Jane Doe {int(datetime.utcnow().timestamp()*1000)}",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "nume_client": f"Jane Doe {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu (pickup)
         "payment_method_id": 7,  # Transfer Bancar
@@ -127,8 +127,8 @@ def test_orders_create_with_items_success():
         auth_utils.login()
 
     payload = {
-        "nume_client": f"Order With Items {int(datetime.utcnow().timestamp()*1000)}",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "nume_client": f"Order With Items {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": liste_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -160,8 +160,8 @@ def _create_minimal_order_and_return_id():
     liste_id = lists[0]["id"]
 
     payload = {
-        "nume_client": f"Patch/Delete Target {int(datetime.utcnow().timestamp()*1000)}",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "nume_client": f"Patch/Delete Target {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": liste_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -231,7 +231,7 @@ def test_orders_items_crud_lifecycle():
         auth_utils.login()
     order_payload = {
         "nume_client": "Items Lifecycle",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -274,10 +274,10 @@ def test_orders_filters_nume_client_list_id_date_range():
     if not auth_utils.access_token:
         auth_utils.login()
     list_id = _get_any_list_id_or_skip()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     iso = now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     # Create two orders
-    for name in [f"Filter Alice {int(datetime.utcnow().timestamp()*1000)}", f"Filter Bob {int(datetime.utcnow().timestamp()*1000)}"]:
+    for name in [f"Filter Alice {int(datetime.now(timezone.utc).timestamp()*1000)}", f"Filter Bob {int(datetime.now(timezone.utc).timestamp()*1000)}"]:
         payload = {"nume_client": name, "data_plasarii": iso, "liste_id": list_id, "delivery_type_id": 1, "payment_method_id": 5}
         r = requests.post(f"{API_V1}/orders/", json=payload)
         assert r.status_code == 201, r.text
@@ -303,8 +303,8 @@ def test_orders_filters_nume_client_list_id_date_range():
 def test_orders_write_with_invalid_token_returns_401():
     list_id = _get_any_list_id_or_skip()
     payload = {
-        "nume_client": f"Invalid Token Write {int(datetime.utcnow().timestamp()*1000)}",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "nume_client": f"Invalid Token Write {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -321,8 +321,8 @@ def test_orders_validation_errors():
     list_id = _get_any_list_id_or_skip()
     # Create order
     order_payload = {
-        "nume_client": f"Validation Target {int(datetime.utcnow().timestamp()*1000)}",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "nume_client": f"Validation Target {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -356,8 +356,8 @@ def test_orders_attempt_change_liste_id_ignored():
     list_id = _get_any_list_id_or_skip()
     # Create
     payload = {
-        "nume_client": f"Immutable List {int(datetime.utcnow().timestamp()*1000)}",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "nume_client": f"Immutable List {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -385,7 +385,7 @@ def test_orders_create_without_required_fields_fails():
     # Test missing delivery_type_id
     payload_missing_delivery = {
         "nume_client": "Missing Delivery",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "payment_method_id": 5,  # Cash
     }
@@ -395,7 +395,7 @@ def test_orders_create_without_required_fields_fails():
     # Test missing payment_method_id
     payload_missing_payment = {
         "nume_client": "Missing Payment",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
     }
@@ -410,7 +410,7 @@ def test_orders_create_with_home_delivery_requires_address():
     # Test home delivery without address (should fail)
     payload_home_no_address = {
         "nume_client": "Home Delivery No Address",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 3,  # Livrare la domiciliu
         "payment_method_id": 5,  # Cash
@@ -422,7 +422,7 @@ def test_orders_create_with_home_delivery_requires_address():
     # Test home delivery with address (should succeed)
     payload_home_with_address = {
         "nume_client": "Home Delivery With Address",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 3,  # Livrare la domiciliu
         "payment_method_id": 5,  # Cash
@@ -470,8 +470,8 @@ def test_orders_filter_by_delivery_and_payment_methods():
     
     for i, (dt_id, pm_id) in enumerate(orders_data):
         payload = {
-            "nume_client": f"Filter Test {i+1} {int(datetime.utcnow().timestamp()*1000)}",
-            "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "nume_client": f"Filter Test {i+1} {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "liste_id": list_id,
             "delivery_type_id": dt_id,
             "payment_method_id": pm_id,
@@ -521,9 +521,9 @@ def test_orders_phone_number_validation_valid_formats():
     
     for phone in valid_phones:
         payload = {
-            "nume_client": f"Test Customer {phone} {int(datetime.utcnow().timestamp()*1000)}",
+            "nume_client": f"Test Customer {phone} {int(datetime.now(timezone.utc).timestamp()*1000)}",
             "phone_number": phone,
-            "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "liste_id": list_id,
             "delivery_type_id": 1,  # Ridicare de la sediu
             "payment_method_id": 5,  # Cash
@@ -553,9 +553,9 @@ def test_orders_phone_number_validation_invalid_formats():
     
     for phone in invalid_phones:
         payload = {
-            "nume_client": f"Test Customer {phone} {int(datetime.utcnow().timestamp()*1000)}",
+            "nume_client": f"Test Customer {phone} {int(datetime.now(timezone.utc).timestamp()*1000)}",
             "phone_number": phone,
-            "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "liste_id": list_id,
             "delivery_type_id": 1,  # Ridicare de la sediu
             "payment_method_id": 5,  # Cash
@@ -575,7 +575,7 @@ def test_orders_phone_number_optional_field():
     # Test without phone_number field
     payload_no_phone = {
         "nume_client": "Customer Without Phone",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -590,7 +590,7 @@ def test_orders_phone_number_optional_field():
     payload_null_phone = {
         "nume_client": "Customer With Null Phone",
         "phone_number": None,
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -613,7 +613,7 @@ def test_orders_phone_number_update_validation():
     payload = {
         "nume_client": "Update Test Customer",
         "phone_number": "+40712345678",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -651,9 +651,9 @@ def test_orders_phone_number_max_length_validation():
     # Test exactly 20 characters (should work)
     phone_20_chars = "12345678901234567890"  # 20 digits
     payload = {
-        "nume_client": f"Max Length Test {int(datetime.utcnow().timestamp()*1000)}",
+        "nume_client": f"Max Length Test {int(datetime.now(timezone.utc).timestamp()*1000)}",
         "phone_number": phone_20_chars,
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -674,9 +674,9 @@ def test_orders_phone_number_whitespace_handling():
     
     # Test phone number with leading/trailing whitespace (should be trimmed)
     payload = {
-        "nume_client": f"Whitespace Test {int(datetime.utcnow().timestamp()*1000)}",
+        "nume_client": f"Whitespace Test {int(datetime.now(timezone.utc).timestamp()*1000)}",
         "phone_number": "  40712345678  ",  # With spaces
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,  # Ridicare de la sediu
         "payment_method_id": 5,  # Cash
@@ -712,7 +712,7 @@ def test_orders_merge_similar_basic_merge():
 
     produse_id, unitati_id, pret = _discover_product_and_unit_or_skip()
     # Create oldest order
-    older_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    older_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     payload_old = {
         "nume_client": "Ştefan Pop",
         "phone_number": None,
@@ -735,7 +735,7 @@ def test_orders_merge_similar_basic_merge():
     old_order = r1.json()
 
     # Create newest order (different delivery/payment, has phone and note)
-    newer_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    newer_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     payload_new = {
         "nume_client": "stefan pop",
         "phone_number": "+40123456789",
@@ -801,7 +801,7 @@ def test_orders_merge_similar_different_lists_not_merged():
     list_a = lists[0]["id"]
     list_b = lists[1]["id"]
 
-    now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     base_payload = {
         "nume_client": "Ștefan Same",
         "data_plasarii": now_iso,
@@ -827,10 +827,10 @@ def test_orders_merge_similar_different_lists_not_merged():
 
 def test_orders_create_duplicate_without_items_returns_409():
     list_id = _get_any_list_id_or_skip()
-    name = f"Dup No Items {int(datetime.utcnow().timestamp()*1000)}"
+    name = f"Dup No Items {int(datetime.now(timezone.utc).timestamp()*1000)}"
     payload = {
         "nume_client": name,
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,
         "payment_method_id": 5,
@@ -862,8 +862,8 @@ def test_orders_create_duplicate_with_items_returns_409():
     pret = p["pret"]
 
     base = {
-        "nume_client": f"Dup With Items {int(datetime.utcnow().timestamp()*1000)}",
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "nume_client": f"Dup With Items {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,
         "payment_method_id": 5,
@@ -896,10 +896,10 @@ def test_orders_create_same_products_split_items_still_409():
     unitati_id = p["unitati_id"]
     pret = p["pret"]
 
-    name = f"Dup Split {int(datetime.utcnow().timestamp()*1000)}"
+    name = f"Dup Split {int(datetime.now(timezone.utc).timestamp()*1000)}"
     base_one_line = {
         "nume_client": name,
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,
         "payment_method_id": 5,
@@ -939,10 +939,10 @@ def test_orders_create_different_quantities_returns_201():
     unitati_id = p["unitati_id"]
     pret = p["pret"]
 
-    name = f"Dup Different Qty {int(datetime.utcnow().timestamp()*1000)}"
+    name = f"Dup Different Qty {int(datetime.now(timezone.utc).timestamp()*1000)}"
     base_qty2 = {
         "nume_client": name,
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,
         "payment_method_id": 5,
@@ -1050,12 +1050,12 @@ def test_orders_update_soft_deleted_order_fails():
 def test_orders_duplicate_detection_excludes_soft_deleted():
     """Test that duplicate detection excludes soft-deleted orders"""
     list_id = _get_any_list_id_or_skip()
-    name = f"Dup Exclude Deleted {int(datetime.utcnow().timestamp()*1000)}"
+    name = f"Dup Exclude Deleted {int(datetime.now(timezone.utc).timestamp()*1000)}"
     
     # Create first order
     payload = {
         "nume_client": name,
-        "data_plasarii": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         "liste_id": list_id,
         "delivery_type_id": 1,
         "payment_method_id": 5,

@@ -1,10 +1,12 @@
 """Authentication endpoints for admin login and token management"""
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -46,11 +48,14 @@ router = APIRouter()
             }
         }
     },
+    429: {"description": "Too many login attempts from this IP; try again later"},
     401: {"description": "Invalid credentials"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
+@limiter.limit(settings.LOGIN_RATE_LIMIT_STRING)
 def login(
+    request: Request,
     login_data: LoginRequest,
     background: BackgroundTasks,
     db: Session = Depends(get_db)

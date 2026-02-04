@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        UID: 1000
+        GID: 1000
     container_name: online_shop_api
     restart: unless-stopped
     ports:
@@ -43,13 +46,16 @@ services:
       # Order creation rate limit (per-IP): max orders per IP per window (see docs/ORDER_RATE_LIMIT.md)
       - ORDER_RATE_LIMIT_MAX=${ORDER_RATE_LIMIT_MAX:-10}
       - ORDER_RATE_LIMIT_WINDOW=${ORDER_RATE_LIMIT_WINDOW:-24hour}
+      # Admin login brute-force protection (per-IP): max login attempts per IP per window
+      - LOGIN_RATE_LIMIT_MAX=${LOGIN_RATE_LIMIT_MAX:-5}
+      - LOGIN_RATE_LIMIT_WINDOW=${LOGIN_RATE_LIMIT_WINDOW:-5minute}
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ./uploads:/app/uploads
       - ./config/placeholders:/app/config/placeholders
-      - logs_data:/app/logs
+      - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

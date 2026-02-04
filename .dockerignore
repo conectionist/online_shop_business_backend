@@ -1,0 +1,31 @@
+.git
+.cursor
+.windsurf
+.github/
+.vscode/
+.idea/
+
+# Documentation and large design files
+docs/
+db/diagrams/
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+*.log
+
+# Environment and secret files
+.env
+.env.*
+*.pem
+*.key
+
+# Local build and test artifacts
+test-reports/
+dist/
+build/
+

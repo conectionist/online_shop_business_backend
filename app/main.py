@@ -143,11 +143,6 @@ class HealthResponse(BaseModel):
     version: str
 
 
-class DbTestResponse(BaseModel):
-    status: str
-    unit_count: int
-
-
 @app.get("/")
 async def root():
     """Root endpoint - returns 404"""
@@ -158,16 +153,3 @@ async def root():
 async def health():
     """Health check endpoint"""
     return {"status": "online", "version": API_VERSION}
-
-
-@app.get("/db-test", response_model=DbTestResponse)
-async def db_test(db: Session = Depends(get_db)):
-    """Test database connection"""
-    try:
-        # Execute a simple query to check the database connection
-        result = db.execute(text("SELECT COUNT(*) FROM unitati"))
-        unit_count = result.scalar()
-        return {"status": "connected", "unit_count": unit_count}
-    except Exception as e:
-        return {"status": f"error: {str(e)}", "unit_count": 0}
-

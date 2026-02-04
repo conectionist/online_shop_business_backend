@@ -677,7 +677,7 @@ def test_list_products_patch_error_handling():
                 f"{utils.base_url}/{list_id}/products",
                 json=[product_id]
             )
-            assert response.status_code == 403, "Should require authentication"  # Changed from 401 to 403
+            assert response.status_code == 401, "Should require authentication"
         finally:
             # Restore auth token
             auth_utils.access_token = original_token

@@ -306,14 +306,14 @@ This is a suggested sequence to implement and validate the new auth model with m
   - With valid `access_token` cookie: returns 200 and correct admin.
   - Without cookie or with invalid/expired token: returns 401.
 
-### Step 5 – Add `POST /auth/logout`
+### Step 5 – Add `POST /auth/logout` (Completed)
 
 - Implement endpoint that:
   - Sends `Set-Cookie` clear instructions for `access_token` and `refresh_token`.
   - Returns 204 or a simple JSON message.
 - Tests:
   - With cookies set: response clears both cookies (check `Set-Cookie`).
-  - Idempotent behavior: calling logout when already “logged out” is safe.
+  - Idempotent behavior: calling logout when already "logged out" is safe.
 
 ### Step 6 – Switch protected endpoints to cookie‑based auth
 

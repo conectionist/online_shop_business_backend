@@ -50,7 +50,7 @@ services:
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT}
       # Disable OpenAPI docs in production for security
-      - ENABLE_OPENAPI_DOCS=false
+      - ENABLE_OPENAPI_DOCS=true
       # Reverse proxy: which IPs may set X-Forwarded-* headers (default 127.0.0.1)
       - USE_PROXY_HEADERS=${USE_PROXY_HEADERS:-true}
       - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}

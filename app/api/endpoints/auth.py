@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.core.auth_cookies import set_auth_cookies
+from app.core.auth_cookies import set_auth_cookies, clear_auth_cookies
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -15,7 +15,8 @@ from app.schemas.auth import (
     TokenRefreshResponse,
     AdminInfo,
     PasswordChangeRequest,
-    PasswordChangeResponse
+    PasswordChangeResponse,
+    LogoutResponse
 )
 from app.schemas.admin import AdminCreate, AdminResponse
 from app.services.auth import (
@@ -312,4 +313,46 @@ def change_password(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Password change error: {str(e)}"
+        ) 
+
+
+@router.post("/logout", response_model=LogoutResponse, responses={
+    200: {
+        "description": "Logout successful",
+        "content": {
+            "application/json": {
+                "example": {
+                    "message": "Logged out successfully"
+                }
+            }
+        }
+    },
+    401: {"description": "Not authenticated"},
+    500: {"description": "Internal server error"}
+})
+def logout(
+    response: Response,
+    current_admin: Admin = Depends(get_current_admin_from_cookie)
+):
+    """
+    Logout the current admin user by clearing authentication cookies.
+    
+    This endpoint:
+    - Clears both access_token and refresh_token cookies
+    - Returns a success message
+    - Requires valid authentication (cookies must be present)
+    """
+    try:
+        # Clear auth cookies (access + refresh) on the response
+        clear_auth_cookies(response)
+        
+        return LogoutResponse(
+            message="Logged out successfully"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Logout error: {str(e)}"
         ) 

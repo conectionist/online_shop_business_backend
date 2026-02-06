@@ -51,6 +51,11 @@ class PasswordChangeResponse(BaseModel):
     message: str = Field(..., description="Success message")
 
 
+class LogoutResponse(BaseModel):
+    """Schema for logout response"""
+    message: str = Field(..., description="Success message")
+
+
 class ErrorResponse(BaseModel):
     """Schema for error responses"""
     detail: str = Field(..., description="Error message") 

@@ -263,7 +263,7 @@ If the CORS setup is currently centralized (e.g. via FastAPI’s `CORSMiddleware
 
 This is a suggested sequence to implement and validate the new auth model with minimal risk.
 
-### Step 1 – Add cookie helpers and constants
+### Step 1 – Add cookie helpers and constants (Completed)
 
 - Define:
   - Cookie names: e.g. `ACCESS_TOKEN_COOKIE_NAME = "access_token"`, `REFRESH_TOKEN_COOKIE_NAME = "refresh_token"`.

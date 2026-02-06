@@ -18,6 +18,8 @@ class AuthTestUtils:
         self.api_base_url = os.environ.get("API_BASE_URL", "http://localhost:8000")
         self.api_v1_str = "/api/v1"
         self.auth_url = f"{self.api_base_url}{self.api_v1_str}/auth"
+        # Use a session to track cookies across requests
+        self.session = requests.Session()
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
         
@@ -37,15 +39,17 @@ class AuthTestUtils:
             "password": password
         }
         
-        response = requests.post(
+        response = self.session.post(
             f"{self.auth_url}/login",
             json=login_data
         )
         
         if response.status_code == 200:
-            data = response.json()
-            self.access_token = data.get("access_token")
-            self.refresh_token = data.get("refresh_token")
+            # Tokens are now issued via httpOnly cookies; extract them so that
+            # existing tests, which still rely on Authorization headers, can
+            # continue to function while the API migrates to cookie-based auth.
+            self.access_token = response.cookies.get("access_token")
+            self.refresh_token = response.cookies.get("refresh_token")
             return True
         else:
             self.access_token = None

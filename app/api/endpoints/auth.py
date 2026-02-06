@@ -1,12 +1,13 @@
 """Authentication endpoints for admin login and token management"""
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, Response
 from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.rate_limit import limiter
+from app.core.auth_cookies import set_auth_cookies
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -36,14 +37,12 @@ router = APIRouter()
         "content": {
             "application/json": {
                 "example": {
-                    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                    "token_type": "bearer",
                     "expires_in": 1800,
                     "admin": {
                         "id": 1,
                         "username": "admin"
-                    }
+                    },
+                    "note": "Auth tokens are returned via httpOnly cookies, not in this JSON body."
                 }
             }
         }
@@ -58,19 +57,17 @@ def login(
     request: Request,
     login_data: LoginRequest,
     background: BackgroundTasks,
+    response: Response,
     db: Session = Depends(get_db)
 ):
     """
-    Authenticate an admin user and return access and refresh tokens.
-    
-    This endpoint authenticates an admin user with username and password.
-    If authentication is successful, it returns:
-    - Access token (short-lived, for API access)
-    - Refresh token (longer-lived, for getting new access tokens)
-    - Admin user information
-    
-    The access token should be included in the Authorization header
-    for subsequent API requests: `Authorization: Bearer <access_token>`
+    Authenticate an admin user with username and password.
+
+    On successful authentication, this endpoint:
+    - Issues access and refresh JWTs using the existing token helpers.
+    - Stores those tokens in secure httpOnly cookies on the response.
+    - Returns admin information (and optional metadata) in the JSON body,
+      without exposing the raw tokens.
     """
     try:
         # Authenticate the admin
@@ -84,6 +81,9 @@ def login(
         
         # Create tokens
         tokens = create_admin_tokens(admin)
+
+        # Set auth cookies (access + refresh) on the response
+        set_auth_cookies(response, tokens["access_token"], tokens["refresh_token"])
 
         # Fire-and-forget: notify admins subscribed to admin_login topic
         def _notify_admin_login(admin_id: int, admin_username: str):
@@ -116,13 +116,11 @@ def login(
                 pass
 
         background.add_task(_notify_admin_login, admin.id, admin.username)
-        
+
+        # Return admin info and metadata only; tokens are delivered via cookies
         return LoginResponse(
-            access_token=tokens["access_token"],
-            refresh_token=tokens["refresh_token"],
-            token_type=tokens["token_type"],
             expires_in=tokens["expires_in"],
-            admin=tokens["admin"]
+            admin=tokens["admin"],
         )
     except HTTPException:
         raise

@@ -106,16 +106,21 @@ class TestAuthLogin:
         response = auth_utils.login("admin", "adminpass123")
         
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-        
+
+        # Response JSON should no longer contain raw tokens
         data = response.json()
-        assert "access_token" in data
-        assert "refresh_token" in data
-        assert "token_type" in data
-        assert data["token_type"] == "bearer"
+        assert "access_token" not in data
+        assert "refresh_token" not in data
+        assert "token_type" not in data
         assert "expires_in" in data
         assert "admin" in data
         assert data["admin"]["username"] == "admin"
         assert "id" in data["admin"]
+
+        # Tokens should be delivered via cookies instead
+        set_cookie_headers = response.headers.get("set-cookie", "")
+        assert "access_token=" in set_cookie_headers, "Expected access_token cookie to be set on login"
+        assert "refresh_token=" in set_cookie_headers, "Expected refresh_token cookie to be set on login"
     
     def test_login_invalid_credentials(self):
         """Test login with invalid credentials."""
@@ -158,12 +163,13 @@ class TestAuthRefresh:
     
     def test_refresh_success(self):
         """Test successful token refresh."""
-        # First login to get tokens
+        # First login to get tokens (from JSON) and to establish cookies
         login_response = auth_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
         
         login_data = login_response.json()
-        refresh_token = login_data["refresh_token"]
+        # For now refresh endpoint still expects the refresh token in the body
+        refresh_token = login_data.get("refresh_token")
         
         # Refresh the token
         refresh_response = auth_utils.refresh_token(refresh_token)
@@ -195,7 +201,9 @@ class TestAuthRefresh:
         assert login_response.status_code == 200
         
         login_data = login_response.json()
-        access_token = login_data["access_token"]
+        # This test still relies on access_token in the JSON response.
+        # It will be fully migrated to cookie-based auth in later steps.
+        access_token = login_data.get("access_token")
         
         # Try to use access token as refresh token
         response = auth_utils.refresh_token(access_token)
@@ -211,7 +219,9 @@ class TestAuthRefresh:
         login_response = auth_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
         login_data = login_response.json()
-        refresh_token = login_data["refresh_token"]
+        # This test still relies on refresh_token in the JSON response.
+        # It will be fully migrated to cookie-based auth in later steps.
+        refresh_token = login_data.get("refresh_token")
         # Use an admin-only endpoint (list orders requires get_current_admin)
         orders_url = f"{auth_utils.api_base_url}{auth_utils.api_v1_str}/orders/"
         response = requests.get(
@@ -328,7 +338,10 @@ class TestAuthChangePassword:
         assert login_response.status_code == 200
         
         login_data = login_response.json()
-        access_token = login_data["access_token"]
+        # For now, change-password tests still rely on access_token from JSON.
+        # These will be migrated to cookie-based auth when protected endpoints
+        # switch to reading tokens from cookies in a later step.
+        access_token = login_data.get("access_token")
         
         # Change password
         response = auth_utils.change_password(access_token, "adminpass123", "newpass123")
@@ -349,7 +362,7 @@ class TestAuthChangePassword:
         
         # Change password back for other tests
         new_login_data = new_login_response.json()
-        new_access_token = new_login_data["access_token"]
+        new_access_token = new_login_data.get("access_token")
         revert_response = auth_utils.change_password(new_access_token, "newpass123", "adminpass123")
         assert revert_response.status_code == 200
     
@@ -370,7 +383,7 @@ class TestAuthChangePassword:
         assert login_response.status_code == 200
         
         login_data = login_response.json()
-        access_token = login_data["access_token"]
+        access_token = login_data.get("access_token")
         
         # Try to change password with wrong current password
         response = auth_utils.change_password(access_token, "wrongpass", "newpass123")
@@ -388,7 +401,7 @@ class TestAuthChangePassword:
         assert login_response.status_code == 200
         
         login_data = login_response.json()
-        access_token = login_data["access_token"]
+        access_token = login_data.get("access_token")
         
         # Try to change password with short new password
         response = requests.post(

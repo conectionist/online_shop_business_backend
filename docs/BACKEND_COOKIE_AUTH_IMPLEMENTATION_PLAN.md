@@ -274,7 +274,7 @@ This is a suggested sequence to implement and validate the new auth model with m
     - `max_age` for access and refresh.
 - Optionally centralize cookie setting/clearing in small utility functions to avoid duplication.
 
-### Step 2 – Implement cookie‑setting in `POST /auth/login`
+### Step 2 – Implement cookie‑setting in `POST /auth/login` (Completed)
 
 - Modify `login` endpoint to:
   - After `create_admin_tokens`, set both cookies on the response.

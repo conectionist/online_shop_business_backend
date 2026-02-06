@@ -163,30 +163,45 @@ class TestAuthRefresh:
     
     def test_refresh_success(self):
         """Test successful token refresh."""
-        # First login to get tokens (from JSON) and to establish cookies
-        login_response = auth_utils.login("admin", "adminpass123")
-        assert login_response.status_code == 200
-        
-        login_data = login_response.json()
-        # For now refresh endpoint still expects the refresh token in the body
-        refresh_token = login_data.get("refresh_token")
-        
-        # Refresh the token
-        refresh_response = auth_utils.refresh_token(refresh_token)
+        # Use a session to simulate browser behavior: login sets cookies, then
+        # refresh uses the refresh_token cookie only.
+        session = requests.Session()
+
+        login_response = session.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"}
+        )
+        assert login_response.status_code == 200, f"Expected 200 on login, got {login_response.status_code}: {login_response.text}"
+        # Ensure refresh_token cookie is present after login
+        assert "refresh_token" in login_response.cookies, "Expected refresh_token cookie after login"
+
+        # Refresh the token using the cookie-based flow
+        refresh_response = session.post(
+            f"{auth_utils.auth_base_url}/refresh",
+            json={}
+        )
         
         assert refresh_response.status_code == 200, f"Expected 200, got {refresh_response.status_code}: {refresh_response.text}"
         
         data = refresh_response.json()
-        assert "access_token" in data
-        assert "token_type" in data
-        assert data["token_type"] == "bearer"
-        assert "expires_in" in data
-        # Should not include refresh_token in response
+        # Response body should no longer expose raw tokens
+        assert "access_token" not in data
+        assert "token_type" not in data
         assert "refresh_token" not in data
+        assert "expires_in" in data
+
+        # New access token must be set via cookies
+        set_cookie_headers = refresh_response.headers.get("set-cookie", "")
+        assert "access_token=" in set_cookie_headers, "Expected access_token cookie to be set on refresh"
     
     def test_refresh_invalid_token(self):
         """Test refresh with invalid token."""
-        response = auth_utils.refresh_token("invalid_token")
+        # Simulate an invalid refresh token cookie
+        response = requests.post(
+            f"{auth_utils.auth_base_url}/refresh",
+            json={},
+            cookies={"refresh_token": "invalid_token"}
+        )
         
         assert response.status_code == 401, f"Expected 401, got {response.status_code}: {response.text}"
         
@@ -196,17 +211,23 @@ class TestAuthRefresh:
     
     def test_refresh_access_token_as_refresh(self):
         """Test using access token as refresh token (should fail)."""
-        # First login to get tokens
-        login_response = auth_utils.login("admin", "adminpass123")
+        # First login to get a valid access token cookie
+        session = requests.Session()
+        login_response = session.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"}
+        )
         assert login_response.status_code == 200
-        
-        login_data = login_response.json()
-        # This test still relies on access_token in the JSON response.
-        # It will be fully migrated to cookie-based auth in later steps.
-        access_token = login_data.get("access_token")
-        
-        # Try to use access token as refresh token
-        response = auth_utils.refresh_token(access_token)
+
+        access_token_cookie = login_response.cookies.get("access_token")
+        assert access_token_cookie, "Expected access_token cookie after login"
+
+        # Try to use access token value as the refresh token cookie
+        response = requests.post(
+            f"{auth_utils.auth_base_url}/refresh",
+            json={},
+            cookies={"refresh_token": access_token_cookie}
+        )
         
         assert response.status_code == 401, f"Expected 401, got {response.status_code}: {response.text}"
         
@@ -216,12 +237,16 @@ class TestAuthRefresh:
 
     def test_refresh_token_rejected_on_admin_endpoint(self):
         """Refresh token must not be accepted as admin auth; only access tokens work on admin endpoints."""
-        login_response = auth_utils.login("admin", "adminpass123")
+        # Login to obtain a refresh token cookie, then misuse it as an
+        # Authorization header on an admin-only endpoint.
+        session = requests.Session()
+        login_response = session.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"}
+        )
         assert login_response.status_code == 200
-        login_data = login_response.json()
-        # This test still relies on refresh_token in the JSON response.
-        # It will be fully migrated to cookie-based auth in later steps.
-        refresh_token = login_data.get("refresh_token")
+        refresh_token = login_response.cookies.get("refresh_token")
+        assert refresh_token, "Expected refresh_token cookie after login"
         # Use an admin-only endpoint (list orders requires get_current_admin)
         orders_url = f"{auth_utils.api_base_url}{auth_utils.api_v1_str}/orders/"
         response = requests.get(

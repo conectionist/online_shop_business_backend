@@ -137,36 +137,50 @@ def login(
         "content": {
             "application/json": {
                 "example": {
-                    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                    "token_type": "bearer",
-                    "expires_in": 1800
+                    "expires_in": 1800,
+                    "note": "Auth tokens are returned via httpOnly cookies, not in this JSON body."
                 }
             }
         }
     },
-    401: {"description": "Invalid or expired refresh token"},
+    401: {"description": "Invalid, missing, or expired refresh token"},
     422: {"description": "Validation error"},
     500: {"description": "Internal server error"}
 })
 def refresh_token(
     refresh_data: TokenRefreshRequest,
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db)
 ):
     """
-    Refresh an access token using a refresh token.
-    
-    This endpoint allows getting a new access token using a valid refresh token.
-    This is useful when the access token expires but the refresh token is still valid.
-    
-    The new access token will have the same expiration time as the original.
+    Refresh an access token using the refresh token stored in cookies.
+
+    This endpoint:
+    - Reads the refresh token from the httpOnly `refresh_token` cookie.
+    - Uses existing refresh logic to validate and issue a new access token.
+    - Updates auth cookies on success.
+    - Returns only metadata (e.g. expires_in) in the JSON body, without raw tokens.
     """
     try:
-        # Refresh the access token
-        tokens = refresh_access_token(refresh_data.refresh_token, db)
-        
+        # Read refresh token from cookies
+        refresh_token_cookie = request.cookies.get("refresh_token")
+        if not refresh_token_cookie:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing refresh token cookie"
+            )
+
+        # Refresh the access token using the cookie value
+        tokens = refresh_access_token(refresh_token_cookie, db)
+
+        # Update auth cookies (access + optionally refresh) on the response
+        # If refresh_access_token does not rotate the refresh token, keep the
+        # existing cookie value; otherwise, prefer the new one.
+        new_refresh_token = tokens.get("refresh_token", refresh_token_cookie)
+        set_auth_cookies(response, tokens["access_token"], new_refresh_token)
+
         return TokenRefreshResponse(
-            access_token=tokens["access_token"],
-            token_type=tokens["token_type"],
             expires_in=tokens["expires_in"]
         )
     except HTTPException:

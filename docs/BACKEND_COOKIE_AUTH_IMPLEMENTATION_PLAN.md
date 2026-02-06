@@ -283,7 +283,7 @@ This is a suggested sequence to implement and validate the new auth model with m
   - Assert `Set-Cookie` headers are present with correct attributes.
   - Assert response JSON no longer includes tokens.
 
-### Step 3 – Implement cookie‑based `POST /auth/refresh`
+### Step 3 – Implement cookie‑based `POST /auth/refresh` (Completed)
 
 - Modify `refresh_token` endpoint to:
   - Read `refresh_token` from `request.cookies`.

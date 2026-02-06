@@ -95,19 +95,23 @@ class AuthTestUtils:
         """
         if not self.refresh_token:
             return False
-            
-        refresh_data = {
-            "refresh_token": self.refresh_token
-        }
-        
-        response = requests.post(
+
+        # Refresh now relies on the refresh_token httpOnly cookie set during login.
+        # Use the same session so cookies are attached automatically; the JSON
+        # body is unused but kept explicit.
+        response = self.session.post(
             f"{self.auth_url}/refresh",
-            json=refresh_data
+            json={}
         )
-        
+
         if response.status_code == 200:
-            data = response.json()
-            self.access_token = data.get("access_token")
+            # Updated access token (and optionally refresh token) are delivered
+            # via cookies. Extract them so existing tests that use Authorization
+            # headers continue to function.
+            self.access_token = response.cookies.get("access_token", self.access_token)
+            new_refresh = response.cookies.get("refresh_token")
+            if new_refresh:
+                self.refresh_token = new_refresh
             return True
         else:
             return False

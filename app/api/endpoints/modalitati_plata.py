@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.modalitati_plata import (
     ModalitatePlata, 
@@ -71,7 +71,7 @@ def read_modalitati_plata(
 )
 def create_modalitati_plata(
     modalitate: ModalitatePlataCreate, 
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Create a new payment method"""
@@ -153,7 +153,7 @@ def read_modalitate_plata(
 def update_modalitati_plata(
     modalitate_id: int = Path(..., gt=0, description="The ID of the payment method to update"),
     modalitate: ModalitatePlataUpdate = ...,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Update an existing payment method (PUT - full replacement)"""
@@ -205,7 +205,7 @@ def update_modalitati_plata(
 def patch_modalitati_plata(
     modalitate_id: int = Path(..., gt=0, description="The ID of the payment method to update"),
     modalitate: ModalitatePlataUpdate = ...,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Partially update a payment method (PATCH - only update provided fields)"""
@@ -256,7 +256,7 @@ def patch_modalitati_plata(
 })
 def delete_modalitati_plata(
     modalitate_id: int = Path(..., gt=0, description="The ID of the payment method to delete"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Delete a payment method by ID"""

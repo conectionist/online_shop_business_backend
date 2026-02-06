@@ -69,7 +69,7 @@ class AuthTestUtils:
     
     def make_authenticated_request(self, method: str, url: str, **kwargs) -> requests.Response:
         """
-        Make an authenticated request with the current access token.
+        Make an authenticated request using cookies.
         
         Args:
             method: HTTP method (GET, POST, PUT, DELETE, etc.)
@@ -79,12 +79,8 @@ class AuthTestUtils:
         Returns:
             Response object
         """
-        headers = kwargs.get("headers", {})
-        auth_headers = self.get_auth_headers()
-        headers.update(auth_headers)
-        kwargs["headers"] = headers
-        
-        return requests.request(method, url, **kwargs)
+        # Use the session which automatically includes cookies from login
+        return self.session.request(method, url, **kwargs)
     
     def refresh_access_token(self) -> bool:
         """

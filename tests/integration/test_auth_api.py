@@ -14,6 +14,8 @@ class AuthTestUtils:
         self.api_base_url = os.environ.get("API_BASE_URL", "http://localhost:8000")
         self.api_v1_str = "/api/v1"
         self.auth_base_url = f"{self.api_base_url}{self.api_v1_str}/auth"
+        # Use a session to track cookies across requests
+        self.session = requests.Session()
     
     def login(self, username: str, password: str) -> Dict[str, Any]:
         """
@@ -26,7 +28,7 @@ class AuthTestUtils:
         Returns:
             Login response data
         """
-        response = requests.post(
+        response = self.session.post(
             f"{self.auth_base_url}/login",
             json={"username": username, "password": password}
         )
@@ -73,23 +75,20 @@ class AuthTestUtils:
         short_uuid = str(uuid.uuid4())[:8]
         return f"{prefix}_{short_uuid}"
     
-    def change_password(self, access_token: str, current_password: str, new_password: str) -> requests.Response:
+    def change_password(self, current_password: str, new_password: str) -> requests.Response:
         """
         Change the current admin's password.
         
         Args:
-            access_token: JWT access token
             current_password: Current password
             new_password: New password
             
         Returns:
             Password change response
         """
-        headers = {"Authorization": f"Bearer {access_token}"}
-        response = requests.post(
+        response = self.session.post(
             f"{self.auth_base_url}/change-password",
-            json={"current_password": current_password, "new_password": new_password},
-            headers=headers
+            json={"current_password": current_password, "new_password": new_password}
         )
         return response
 
@@ -256,7 +255,7 @@ class TestAuthRefresh:
         assert response.status_code == 401, f"Expected 401 when using refresh token on admin endpoint, got {response.status_code}: {response.text}"
         data = response.json()
         assert "detail" in data
-        assert "Access token required" in data["detail"]
+        assert "Not authenticated" in data["detail"]
 
 
 class TestAuthMe:
@@ -401,7 +400,7 @@ class TestAuthChangePassword:
         assert access_token, "Expected access_token cookie after login"
         
         # Change password
-        response = auth_utils.change_password(access_token, "adminpass123", "newpass123")
+        response = auth_utils.change_password("adminpass123", "newpass123")
         
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         
@@ -420,18 +419,21 @@ class TestAuthChangePassword:
         # Change password back for other tests
         new_access_token = new_login_response.cookies.get("access_token")
         assert new_access_token, "Expected access_token cookie after login"
-        revert_response = auth_utils.change_password(new_access_token, "newpass123", "adminpass123")
+        revert_response = auth_utils.change_password("newpass123", "adminpass123")
         assert revert_response.status_code == 200
     
     def test_change_password_unauthorized(self):
         """Test password change without authentication."""
-        response = auth_utils.change_password("invalid_token", "oldpass", "newpass")
+        # Clear session cookies to ensure no authentication
+        auth_utils.session.cookies.clear()
+        
+        response = auth_utils.change_password("oldpass", "newpass")
         
         assert response.status_code == 401, f"Expected 401, got {response.status_code}: {response.text}"
         
         data = response.json()
         assert "detail" in data
-        assert "Invalid authentication token" in data["detail"]
+        assert "Not authenticated" in data["detail"]
     
     def test_change_password_wrong_current_password(self):
         """Test password change with wrong current password."""
@@ -443,7 +445,7 @@ class TestAuthChangePassword:
         assert access_token, "Expected access_token cookie after login"
         
         # Try to change password with wrong current password
-        response = auth_utils.change_password(access_token, "wrongpass", "newpass123")
+        response = auth_utils.change_password("wrongpass", "newpass123")
         
         assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
         
@@ -460,11 +462,13 @@ class TestAuthChangePassword:
         access_token = login_response.cookies.get("access_token")
         assert access_token, "Expected access_token cookie after login"
         
+        session = requests.Session()
+        session.cookies.set("access_token", access_token)
+        
         # Try to change password with short new password
-        response = requests.post(
+        response = session.post(
             f"{auth_utils.auth_base_url}/change-password",
             json={"current_password": "adminpass123", "new_password": "123"},
-            headers={"Authorization": f"Bearer {access_token}"}
         )
         
         assert response.status_code == 422, f"Expected 422, got {response.status_code}: {response.text}"
@@ -479,10 +483,9 @@ class TestAuthChangePassword:
         assert access_token, "Expected access_token cookie after login"
         
         # Try to change password with missing new_password
-        response = requests.post(
+        response = auth_utils.session.post(
             f"{auth_utils.auth_base_url}/change-password",
-            json={"current_password": "adminpass123"},
-            headers={"Authorization": f"Bearer {access_token}"}
+            json={"current_password": "adminpass123"}
         )
         
         assert response.status_code == 422, f"Expected 422, got {response.status_code}: {response.text}"

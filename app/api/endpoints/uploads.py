@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, UploadFile, status
 
 from app.core.staging_uploads import save_staged_image
 from app.models.admin import Admin
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin_from_cookie
 
 
 router = APIRouter()
@@ -25,7 +25,7 @@ async def upload_image_for_staging(
             "max size configurable via MAX_IMAGE_SIZE_MB, default 15 MB)"
         ),
     ),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
 ):
     """
     Upload an image to temporary staging storage.

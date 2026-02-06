@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, UploadF
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin_from_cookie
 from app.core.file_upload import is_valid_image, get_upload_dir
 from app.core.image_errors import image_validation_detail
 from app.core.image_processing import process_and_save_image_versions
@@ -36,7 +36,7 @@ async def upload_product_image(
     product_id: int = Path(..., gt=0, description="The ID of the product to upload an image for"),
     file: UploadFile = File(..., description="The image file to upload (JPEG, PNG, GIF, WEBP; max size configurable via MAX_IMAGE_SIZE_MB, default 15 MB)"),
     position: int = Form(None, description="Image position (0=primary, if not specified will be added at the end)"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -167,7 +167,7 @@ async def update_product_image_position(
     product_id: int = Path(..., gt=0, description="The ID of the product"),
     image_id: int = Path(..., gt=0, description="The ID of the image to update"),
     position: int = Form(..., ge=0, description="New position for the image (0=primary)"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -207,7 +207,7 @@ async def update_product_image_position(
 async def set_product_image_as_primary(
     product_id: int = Path(..., gt=0, description="The ID of the product"),
     image_id: int = Path(..., gt=0, description="The ID of the image to set as primary"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -246,7 +246,7 @@ async def set_product_image_as_primary(
 async def delete_product_image_endpoint(
     product_id: int = Path(..., gt=0, description="The ID of the product"),
     image_id: int = Path(..., gt=0, description="The ID of the image to delete"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -299,7 +299,7 @@ async def delete_product_image_endpoint(
 async def reorder_product_images_endpoint(
     product_id: int = Path(..., gt=0, description="The ID of the product"),
     image_order: List[Dict[str, int]] = Body(..., description="List of image IDs and positions to reorder"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """

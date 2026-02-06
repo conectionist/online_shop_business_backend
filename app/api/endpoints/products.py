@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.core.database import get_db
 from app.core.constants import UNCATEGORIZED_CATEGORY_ID
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.core.file_upload import (
     delete_file,
@@ -185,7 +185,7 @@ def create_product_endpoint(
             "If provided, the staged image will be processed and linked as the primary image."
         ),
     ),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -544,7 +544,7 @@ def update_product_endpoint(
     description: Optional[str] = Form(None),
     category_id: Optional[int] = Form(None),
     unitati_id: Optional[int] = Form(None),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     """
@@ -683,7 +683,7 @@ def update_product_endpoint(
 def delete_product(
     product_id: int,
     permanent: bool = Query(False, description="If true, performs a hard delete (default: False)"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     """

@@ -310,21 +310,19 @@ This is a suggested sequence to implement and validate the new auth model with m
 
 - Implement endpoint that:
   - Sends `Set-Cookie` clear instructions for `access_token` and `refresh_token`.
-  - Returns 204 or a simple JSON message.
 - Tests:
   - With cookies set: response clears both cookies (check `Set-Cookie`).
   - Idempotent behavior: calling logout when already "logged out" is safe.
 
-### Step 6 – Switch protected endpoints to cookie‑based auth
+### Step 6 – Switch protected endpoints to cookie-based auth (Completed)
 
-- Update all admin‑protected routes to use the new cookie‑based dependency (`get_current_admin_from_cookie`).
-- Ensure:
-  - No SPA code depends on `Authorization: Bearer` anymore.
-  - Integration tests that use `Authorization` headers can either:
-    - Keep using the old dependency in tests only, or
-    - Be updated to simulate cookie auth (preferred for end‑to‑end realism).
-
-Given the small admin user base, it is acceptable for tests to still use header‑based auth temporarily, but for full alignment, they should be migrated to cookies as a later step.
+- Migrate all admin-protected endpoints from `get_current_admin` to `get_current_admin_from_cookie`.
+- Update test utilities to use cookies instead of Authorization headers.
+- Keep public endpoints (e.g., payment types) without authentication requirements.
+- Tests:
+  - All 315 integration tests pass with cookie-based authentication.
+  - Authentication flow works: login → protected endpoints → logout.
+  - Public endpoints remain accessible without authentication.
 
 ### Step 7 – CORS and environment validation
 

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.business_details import BusinessDetails, BusinessDetailsCreate, BusinessDetailsUpdate
 from app.services.business_details import (
@@ -46,7 +46,7 @@ def read_business_details(
 })
 def create_business_details_endpoint(
     business_details: BusinessDetailsCreate = Body(..., description="Business details data"), 
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Create a new business details record (fails with 409 if a record already exists)"""
@@ -94,7 +94,7 @@ def read_business_details_by_id(
 def update_business_details_endpoint(
     business_details_id: int = Path(..., gt=0, description="The ID of the business details to update"),
     business_details: BusinessDetailsUpdate = Body(..., description="Updated business details data"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Update a business details record (PUT - full replacement)"""
@@ -120,7 +120,7 @@ def update_business_details_endpoint(
 def patch_business_details_endpoint(
     business_details_id: int = Path(..., gt=0, description="The ID of the business details to update"),
     business_details: BusinessDetailsUpdate = Body(..., description="Partial business details data"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Partially update a business details record (PATCH - only update provided fields)"""
@@ -144,7 +144,7 @@ def patch_business_details_endpoint(
 })
 def delete_business_details_endpoint(
     business_details_id: int = Path(..., gt=0, description="The ID of the business details to delete"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Delete a business details record"""

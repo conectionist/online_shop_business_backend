@@ -24,7 +24,6 @@ from app.services.auth import (
     create_admin_tokens,
     refresh_access_token,
     get_current_admin_from_cookie,
-    get_current_admin,
     verify_password,
     get_password_hash
 )
@@ -279,7 +278,7 @@ def get_me(current_admin: Admin = Depends(get_current_admin_from_cookie)):
 })
 def change_password(
     password_data: PasswordChangeRequest,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """

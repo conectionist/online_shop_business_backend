@@ -5,7 +5,7 @@ refresh token cookies. It does NOT change any endpoint behavior by itself;
 endpoints will opt in to using these helpers in later roadmap steps.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from fastapi import Response
 
@@ -92,63 +92,3 @@ def clear_auth_cookies(response: Response) -> None:
         max_age=0,
         **{k: v for k, v in refresh_params.items() if k not in {"max_age"}},
     )
-
-"""Helpers for setting and clearing authentication cookies.
-
-These utilities centralize how access and refresh token cookies are managed,
-using configuration from app.core.config.settings.
-"""
-
-from fastapi import Response
-
-from app.core.config import settings
-
-
-def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
-    """Set access and refresh token cookies on the response."""
-    common_kwargs = {
-        "httponly": True,
-        "secure": settings.COOKIE_SECURE,
-        "samesite": settings.COOKIE_SAMESITE,
-        "path": settings.COOKIE_PATH,
-    }
-    if settings.COOKIE_DOMAIN:
-        common_kwargs["domain"] = settings.COOKIE_DOMAIN
-
-    response.set_cookie(
-        key=settings.ACCESS_TOKEN_COOKIE_NAME,
-        value=access_token,
-        max_age=settings.ACCESS_TOKEN_COOKIE_MAX_AGE,
-        **common_kwargs,
-    )
-    response.set_cookie(
-        key=settings.REFRESH_TOKEN_COOKIE_NAME,
-        value=refresh_token,
-        max_age=settings.REFRESH_TOKEN_COOKIE_MAX_AGE,
-        **common_kwargs,
-    )
-
-
-def clear_auth_cookies(response: Response) -> None:
-    """Clear access and refresh token cookies on the response."""
-    common_kwargs = {
-        "httponly": True,
-        "secure": settings.COOKIE_SECURE,
-        "samesite": settings.COOKIE_SAMESITE,
-        "path": settings.COOKIE_PATH,
-        "max_age": 0,
-    }
-    if settings.COOKIE_DOMAIN:
-        common_kwargs["domain"] = settings.COOKIE_DOMAIN
-
-    response.set_cookie(
-        key=settings.ACCESS_TOKEN_COOKIE_NAME,
-        value="",
-        **common_kwargs,
-    )
-    response.set_cookie(
-        key=settings.REFRESH_TOKEN_COOKIE_NAME,
-        value="",
-        **common_kwargs,
-    )
-

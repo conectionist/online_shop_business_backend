@@ -259,6 +259,39 @@ class TestAuthRefresh:
         assert "Access token required" in data["detail"]
 
 
+class TestAuthMe:
+    """Test /auth/me session check endpoint."""
+
+    def test_me_returns_current_admin_with_valid_cookie(self):
+        session = requests.Session()
+
+        login_resp = session.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"},
+        )
+        assert login_resp.status_code == 200, f"Expected 200 on login, got {login_resp.status_code}: {login_resp.text}"
+        assert "access_token" in login_resp.cookies, "Expected access_token cookie after login"
+
+        me_resp = session.get(f"{auth_utils.auth_base_url}/me")
+        assert me_resp.status_code == 200, f"Expected 200, got {me_resp.status_code}: {me_resp.text}"
+        data = me_resp.json()
+        assert data["id"] > 0
+        assert data["username"] == "admin"
+
+    def test_me_without_cookie_returns_401(self):
+        resp = requests.get(f"{auth_utils.auth_base_url}/me")
+        assert resp.status_code == 401, f"Expected 401, got {resp.status_code}: {resp.text}"
+
+    def test_me_with_invalid_token_returns_401(self):
+        resp = requests.get(
+            f"{auth_utils.auth_base_url}/me",
+            cookies={"access_token": "invalid"},
+        )
+        assert resp.status_code == 401, f"Expected 401, got {resp.status_code}: {resp.text}"
+        data = resp.json()
+        assert "detail" in data
+
+
 # class TestAuthCreateAdmin:
 #     """Test admin creation functionality."""
 #     
@@ -361,12 +394,11 @@ class TestAuthChangePassword:
         # First login to get access token
         login_response = auth_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
-        
-        login_data = login_response.json()
-        # For now, change-password tests still rely on access_token from JSON.
-        # These will be migrated to cookie-based auth when protected endpoints
-        # switch to reading tokens from cookies in a later step.
-        access_token = login_data.get("access_token")
+
+        # Protected endpoints are still header-based until Step 6, so extract
+        # the access token from the cookie and send it as a Bearer token.
+        access_token = login_response.cookies.get("access_token")
+        assert access_token, "Expected access_token cookie after login"
         
         # Change password
         response = auth_utils.change_password(access_token, "adminpass123", "newpass123")
@@ -386,8 +418,8 @@ class TestAuthChangePassword:
         assert new_login_response.status_code == 200
         
         # Change password back for other tests
-        new_login_data = new_login_response.json()
-        new_access_token = new_login_data.get("access_token")
+        new_access_token = new_login_response.cookies.get("access_token")
+        assert new_access_token, "Expected access_token cookie after login"
         revert_response = auth_utils.change_password(new_access_token, "newpass123", "adminpass123")
         assert revert_response.status_code == 200
     
@@ -406,9 +438,9 @@ class TestAuthChangePassword:
         # First login to get access token
         login_response = auth_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
-        
-        login_data = login_response.json()
-        access_token = login_data.get("access_token")
+
+        access_token = login_response.cookies.get("access_token")
+        assert access_token, "Expected access_token cookie after login"
         
         # Try to change password with wrong current password
         response = auth_utils.change_password(access_token, "wrongpass", "newpass123")
@@ -424,9 +456,9 @@ class TestAuthChangePassword:
         # First login to get access token
         login_response = auth_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
-        
-        login_data = login_response.json()
-        access_token = login_data.get("access_token")
+
+        access_token = login_response.cookies.get("access_token")
+        assert access_token, "Expected access_token cookie after login"
         
         # Try to change password with short new password
         response = requests.post(
@@ -442,9 +474,9 @@ class TestAuthChangePassword:
         # First login to get access token
         login_response = auth_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
-        
-        login_data = login_response.json()
-        access_token = login_data["access_token"]
+
+        access_token = login_response.cookies.get("access_token")
+        assert access_token, "Expected access_token cookie after login"
         
         # Try to change password with missing new_password
         response = requests.post(

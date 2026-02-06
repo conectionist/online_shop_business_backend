@@ -296,7 +296,7 @@ This is a suggested sequence to implement and validate the new auth model with m
   - Assert new cookies are set.
   - Assert correct 401 behavior when cookie is invalid/missing.
 
-### Step 4 – Add `GET /auth/me`
+### Step 4 – Add `GET /auth/me` (Completed)
 
 - Implement a simple endpoint that:
   - Uses the cookie‑based auth dependency.

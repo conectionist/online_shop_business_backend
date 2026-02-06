@@ -22,6 +22,7 @@ from app.services.auth import (
     authenticate_admin,
     create_admin_tokens,
     refresh_access_token,
+    get_current_admin_from_cookie,
     get_current_admin,
     verify_password,
     get_password_hash
@@ -190,6 +191,26 @@ def refresh_token(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Token refresh error: {str(e)}"
         )
+
+
+@router.get(
+    "/me",
+    response_model=AdminInfo,
+    responses={
+        200: {
+            "description": "Current authenticated admin",
+            "content": {
+                "application/json": {
+                    "example": {"id": 1, "username": "admin"},
+                }
+            },
+        },
+        401: {"description": "Not authenticated or token invalid"},
+    },
+)
+def get_me(current_admin: Admin = Depends(get_current_admin_from_cookie)):
+    """Return the currently authenticated admin based on the access_token cookie."""
+    return {"id": current_admin.id, "username": current_admin.username}
 
 
 # @router.post("/create-admin", response_model=AdminResponse, status_code=status.HTTP_201_CREATED, responses={

@@ -12,3 +12,4 @@ debugpy==1.8.20
 alembic==1.18.3
 pywebpush==2.2.0
 slowapi==0.1.9
+user-agents==2.2.0

@@ -122,14 +122,24 @@ async def startup_event():
     except Exception as e:
         # Log the error but don't prevent the app from starting
         # This allows the app to start even if admin creation fails
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Failed to initialize application: {str(e)}")
+    
+    # Clean up expired sessions
+    try:
+        from app.services.auth import cleanup_expired_sessions
+        
+        db = SessionLocal()
+        try:
+            deleted_count = cleanup_expired_sessions(db, days_to_keep=30)
+            db.commit()
+            logger.info(f"Startup: Cleaned up {deleted_count} expired sessions")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Startup: Failed to clean up expired sessions: {e}")
 
     # Start background prune task (non-blocking)
     async def prune_loop():
-        import logging
-        logger = logging.getLogger(__name__)
         while True:
             try:
                 db = SessionLocal()

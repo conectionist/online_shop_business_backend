@@ -258,8 +258,17 @@ def store_refresh_token(
     expires_at: datetime,
     request: Optional[Request] = None,
 ) -> RefreshToken:
+    from app.utils.user_agent_parser import parse_user_agent
+    from app.utils.ip_geolocation import get_location_from_ip
+    
     token_hash = hash_refresh_token(refresh_token)
     ip_address, user_agent = _get_request_meta(request)
+    
+    # Parse user agent for device/browser/OS info
+    ua_info = parse_user_agent(user_agent)
+    
+    # Get location from IP (optional)
+    location_info = get_location_from_ip(ip_address)
 
     row = RefreshToken(
         admin_id=admin_id,
@@ -267,6 +276,13 @@ def store_refresh_token(
         expires_at=expires_at,
         ip_address=ip_address,
         user_agent=user_agent,
+        # Enhanced session metadata
+        session_name=ua_info["session_name"],
+        device_type=ua_info["device_type"],
+        browser_name=ua_info["browser_name"],
+        os_name=ua_info["os_name"],
+        location_city=location_info["city"],
+        location_country=location_info["country"],
     )
     db.add(row)
     return row
@@ -417,4 +433,126 @@ def refresh_access_token(refresh_token: str, db: Session, request: Optional[Requ
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Token refresh error: {str(e)}"
-        ) 
+        )
+
+
+# ============================================================================
+# Session Management Functions
+# ============================================================================
+
+def get_active_sessions(db: Session, admin_id: int) -> list[RefreshToken]:
+    """
+    Get all active (non-revoked, non-expired) sessions for an admin.
+    
+    Args:
+        db: Database session
+        admin_id: Admin ID
+        
+    Returns:
+        List of active RefreshToken objects, ordered by last_used_at descending
+    """
+    now = datetime.utcnow()
+    return (
+        db.query(RefreshToken)
+        .filter(RefreshToken.admin_id == admin_id)
+        .filter(RefreshToken.revoked_at.is_(None))
+        .filter(RefreshToken.expires_at > now)
+        .order_by(RefreshToken.last_used_at.desc())
+        .all()
+    )
+
+
+def get_session_by_id(
+    db: Session, 
+    session_id: int, 
+    admin_id: int
+) -> Optional[RefreshToken]:
+    """
+    Get a specific session by ID, ensuring it belongs to the admin.
+    
+    Args:
+        db: Database session
+        session_id: Session (RefreshToken) ID
+        admin_id: Admin ID
+        
+    Returns:
+        RefreshToken object if found and belongs to admin, None otherwise
+    """
+    return (
+        db.query(RefreshToken)
+        .filter(RefreshToken.id == session_id)
+        .filter(RefreshToken.admin_id == admin_id)
+        .one_or_none()
+    )
+
+
+def revoke_session_by_id(
+    db: Session, 
+    session_id: int, 
+    admin_id: int
+) -> bool:
+    """
+    Revoke a specific session by ID.
+    
+    Args:
+        db: Database session
+        session_id: Session (RefreshToken) ID
+        admin_id: Admin ID
+        
+    Returns:
+        True if session was revoked, False if not found or already revoked
+    """
+    session = get_session_by_id(db, session_id, admin_id)
+    if not session or session.revoked_at is not None:
+        return False
+    
+    session.revoked_at = datetime.utcnow()
+    return True
+
+
+def get_current_session(
+    db: Session, 
+    refresh_token: str
+) -> Optional[RefreshToken]:
+    """
+    Get the current session from the refresh token cookie.
+    
+    Args:
+        db: Database session
+        refresh_token: Refresh token string
+        
+    Returns:
+        RefreshToken object if found, None otherwise
+    """
+    token_hash = hash_refresh_token(refresh_token)
+    return (
+        db.query(RefreshToken)
+        .filter(RefreshToken.token_hash == token_hash)
+        .one_or_none()
+    )
+
+
+def cleanup_expired_sessions(db: Session, days_to_keep: int = 30) -> int:
+    """
+    Delete expired sessions older than the specified number of days.
+    
+    This function removes expired refresh tokens from the database to keep
+    it clean and maintain performance. Only tokens that have been expired
+    for longer than the specified retention period are deleted.
+    
+    Args:
+        db: Database session
+        days_to_keep: Number of days to keep expired sessions (default: 30)
+        
+    Returns:
+        Number of sessions deleted
+    """
+    cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
+    
+    deleted = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.expires_at < cutoff_date)
+        .delete(synchronize_session=False)
+    )
+    
+    return int(deleted or 0) 

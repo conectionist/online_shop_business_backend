@@ -25,9 +25,18 @@ class RefreshToken(Base):
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(String(512), nullable=True)
 
+    # Enhanced session metadata
+    session_name = Column(String(100), nullable=True)
+    device_type = Column(String(50), nullable=True)  # desktop, mobile, tablet, unknown
+    browser_name = Column(String(50), nullable=True)  # Chrome, Firefox, Safari, etc.
+    os_name = Column(String(50), nullable=True)  # Windows, macOS, Linux, iOS, Android
+    location_city = Column(String(100), nullable=True)
+    location_country = Column(String(2), nullable=True)  # ISO country code
+
     __table_args__ = (
         Index("idx_refresh_tokens_admin_id", "admin_id"),
         Index("idx_refresh_tokens_expires_at", "expires_at"),
+        Index("idx_refresh_tokens_admin_active", "admin_id", "revoked_at", "expires_at"),
         {
             "mysql_engine": "InnoDB",
             "mysql_charset": "utf8mb4",

@@ -11,6 +11,7 @@ In particular, the backend:
 - Login, refresh, and logout set/clear httpOnly cookies on the **API origin**.
 - Authenticated requests read the access token from a cookie, not from an `Authorization` header.
 - A `session/me`-style endpoint exists to validate the session and return current user/admin info.
+- Session management endpoints (`/auth/sessions*`) exist for listing and revoking sessions.
 
 ---
 
@@ -74,7 +75,7 @@ The frontend expects the following behavior from the API (exact paths may differ
 - `POST /auth/refresh`
   - Request: no tokens in body; cookies are sent automatically.
   - Response:
-    - If refresh succeeds: sets new access (and possibly refresh) cookies.
+    - If refresh succeeds: sets new access **and rotated refresh** cookies.
     - If refresh fails: returns 401; cookies may be cleared.
 
 - `GET /auth/me` (or similar)
@@ -88,6 +89,16 @@ The frontend expects the following behavior from the API (exact paths may differ
   - Response:
     - Clears auth cookies on the API origin.
     - Returns a success status (e.g. 204).
+
+- `POST /auth/logout-all`
+  - Request: no tokens in body; cookies are sent automatically.
+  - Response:
+    - Revokes all sessions for the current admin and clears cookies.
+
+- Session management endpoints (`/auth/sessions*`)
+  - `GET /auth/sessions` to list active sessions.
+  - `GET /auth/sessions/current` for current session.
+  - `GET /auth/sessions/{id}` and `DELETE /auth/sessions/{id}` to inspect/revoke another session.
 
 ---
 
@@ -234,6 +245,15 @@ The frontend never sees the refresh token; it only triggers a refresh request.
 
 - Clear any non-auth persistent state that should not survive logout (e.g. admin-only settings cached locally).
 
+### 3.8 Optional: Session management UI
+
+If the frontend exposes session/device management:
+
+- Use `GET /auth/sessions` to show active sessions.
+- Use `GET /auth/sessions/current` to display the current session details.
+- Use `DELETE /auth/sessions/{id}` to revoke another session.
+- After revocation, refresh the list; a revoked session should lose access and receive 401s.
+
 **Constraints:**
 
 - Do not attempt to manipulate auth cookies directly from frontend code (they should be httpOnly).
@@ -341,13 +361,17 @@ This roadmap describes **what to implement in which order**, not how to structur
      - Clear all local auth state.
      - Redirect to login or a public route.
 
-6. **Remove legacy token handling**
+6. **(Optional) Add logout-all and session management UI**
+   - Call `POST /auth/logout-all` for "log out everywhere".
+   - Use `/auth/sessions*` endpoints to list and revoke sessions if the UI needs it.
+
+7. **Remove legacy token handling**
    - Remove any usage of:
      - `localStorage` / `sessionStorage` for access or refresh tokens.
      - `Authorization: Bearer` headers derived from stored tokens.
      - Helper functions specifically designed to read/write tokens in JS storage.
 
-7. **Review tests and documentation**
+8. **Review tests and documentation**
    - Update automated tests to:
      - Reflect cookie-based auth (e.g. mocking `session/me` and login success).
      - Avoid setting tokens directly in storage to simulate auth.
@@ -380,6 +404,13 @@ The frontend should verify the following scenarios once the migration is impleme
     - Results in auth cookies being cleared.
     - Clears local auth state and navigates the user to the login/public area.
 
+- **Logout-all / Sessions (if implemented)**
+  - Calling logout-all:
+    - Revokes all sessions and clears cookies.
+    - Subsequent requests from other devices return 401.
+  - Revoking a specific session:
+    - That device loses access (401 on next request).
+
 - **Reload**
   - Reloading the app while “logged in”:
     - Calls the `session/me` endpoint with credentials.
@@ -404,4 +435,3 @@ By following this plan, the frontend will:
   - Synchronizing UI state with the actual backend session.
 
 This aligns with the backend’s cookie-based authentication model and significantly improves the overall security posture of the application without imposing unnecessary complexity on the frontend codebase.
-

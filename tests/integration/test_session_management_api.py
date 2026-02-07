@@ -62,6 +62,16 @@ def second_session():
     return SessionTestUtils()
 
 
+@pytest.fixture(autouse=True)
+def reset_admin_sessions():
+    """Ensure a clean session slate for admin before each test."""
+    utils = SessionTestUtils()
+    login_response = utils.login("admin", "adminpass123")
+    if login_response.status_code == 200:
+        utils.logout_all()
+    yield
+
+
 class TestSessionManagement:
     """Test suite for session management endpoints."""
     
@@ -73,7 +83,7 @@ class TestSessionManagement:
     def test_list_sessions_single_session(self, session_utils):
         """Test listing sessions with a single active session."""
         # Login
-        login_response = session_utils.login("admin", "admin")
+        login_response = session_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
         
         # List sessions
@@ -102,11 +112,11 @@ class TestSessionManagement:
     def test_list_sessions_multiple_sessions(self, session_utils, second_session):
         """Test listing sessions with multiple active sessions."""
         # Login from first session
-        login1 = session_utils.login("admin", "admin")
+        login1 = session_utils.login("admin", "adminpass123")
         assert login1.status_code == 200
         
         # Login from second session
-        login2 = second_session.login("admin", "admin")
+        login2 = second_session.login("admin", "adminpass123")
         assert login2.status_code == 200
         
         # List sessions from first session
@@ -124,7 +134,7 @@ class TestSessionManagement:
     def test_get_current_session(self, session_utils):
         """Test getting current session details."""
         # Login
-        login_response = session_utils.login("admin", "admin")
+        login_response = session_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
         
         # Get current session
@@ -147,7 +157,7 @@ class TestSessionManagement:
     def test_get_session_by_id(self, session_utils):
         """Test getting a specific session by ID."""
         # Login
-        login_response = session_utils.login("admin", "admin")
+        login_response = session_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
         
         # List sessions to get session ID
@@ -167,7 +177,7 @@ class TestSessionManagement:
     def test_get_session_by_id_not_found(self, session_utils):
         """Test getting a non-existent session returns 404."""
         # Login
-        login_response = session_utils.login("admin", "admin")
+        login_response = session_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
         
         # Try to get non-existent session
@@ -177,11 +187,11 @@ class TestSessionManagement:
     def test_revoke_session_other_device(self, session_utils, second_session):
         """Test revoking a session from another device."""
         # Login from first session
-        login1 = session_utils.login("admin", "admin")
+        login1 = session_utils.login("admin", "adminpass123")
         assert login1.status_code == 200
         
         # Login from second session
-        login2 = second_session.login("admin", "admin")
+        login2 = second_session.login("admin", "adminpass123")
         assert login2.status_code == 200
         
         # List sessions from first session
@@ -215,7 +225,7 @@ class TestSessionManagement:
     def test_revoke_current_session_fails(self, session_utils):
         """Test that revoking the current session returns an error."""
         # Login
-        login_response = session_utils.login("admin", "admin")
+        login_response = session_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
         
         # List sessions to get current session ID
@@ -233,7 +243,7 @@ class TestSessionManagement:
     def test_revoke_session_not_found(self, session_utils):
         """Test revoking a non-existent session returns 404."""
         # Login
-        login_response = session_utils.login("admin", "admin")
+        login_response = session_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
         
         # Try to revoke non-existent session
@@ -243,7 +253,7 @@ class TestSessionManagement:
     def test_session_lifecycle(self, session_utils):
         """Test complete session lifecycle: login -> list -> logout."""
         # Login
-        login_response = session_utils.login("admin", "admin")
+        login_response = session_utils.login("admin", "adminpass123")
         assert login_response.status_code == 200
         
         # List sessions - should have 1 active session
@@ -262,11 +272,11 @@ class TestSessionManagement:
     def test_logout_all_revokes_all_sessions(self, session_utils, second_session):
         """Test that logout-all revokes all sessions."""
         # Login from first session
-        login1 = session_utils.login("admin", "admin")
+        login1 = session_utils.login("admin", "adminpass123")
         assert login1.status_code == 200
         
         # Login from second session
-        login2 = second_session.login("admin", "admin")
+        login2 = second_session.login("admin", "adminpass123")
         assert login2.status_code == 200
         
         # Verify both sessions are active
@@ -293,7 +303,7 @@ class TestSessionManagement:
         }
         login_response = session_utils.session.post(
             f"{session_utils.auth_base_url}/login",
-            json={"username": "admin", "password": "admin"},
+            json={"username": "admin", "password": "adminpass123"},
             headers=custom_headers
         )
         assert login_response.status_code == 200

@@ -80,7 +80,21 @@ class AuthTestUtils:
             Response object
         """
         # Use the session which automatically includes cookies from login
-        return self.session.request(method, url, **kwargs)
+        response = self.session.request(method, url, **kwargs)
+        if response.status_code != 401:
+            return response
+
+        # If the session was revoked/expired by another test, re-login and retry once.
+        try:
+            detail = response.json().get("detail")
+        except Exception:
+            detail = None
+
+        if detail in {"Session revoked", "Session expired", "Session not found"}:
+            if self.login():
+                return self.session.request(method, url, **kwargs)
+
+        return response
     
     def refresh_access_token(self) -> bool:
         """

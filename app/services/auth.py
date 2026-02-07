@@ -180,12 +180,42 @@ def get_current_admin_from_cookie(
             detail="Access token required",
         )
 
+    # If a refresh token cookie is present, require a valid, active session.
+    # Otherwise, fall back to access-token-only auth for legacy test helpers.
+    refresh_token = request.cookies.get("refresh_token")
+    session = None
+    if refresh_token:
+        session = get_current_session(db, refresh_token)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session not found",
+            )
+
+        if session.revoked_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session revoked",
+            )
+
+        if session.expires_at <= datetime.utcnow():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session expired",
+            )
+
     # Get admin ID from token
     admin_id = payload.get("sub")
     if not admin_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
+        )
+
+    if session and session.admin_id != int(admin_id):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session does not match token",
         )
 
     # Get admin from database

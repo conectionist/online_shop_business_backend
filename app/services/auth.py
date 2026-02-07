@@ -3,7 +3,6 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import HTTPException, status, Depends, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -19,9 +18,6 @@ from app.core.security import (
 from app.core.config import settings
 from app.models.admin import Admin
 from app.schemas.admin import AdminCreate, AdminLogin, AdminResponse
-
-# Security scheme for JWT tokens
-security = HTTPBearer()
 
 
 def authenticate_admin(db: Session, username: str, password: str) -> Optional[Admin]:

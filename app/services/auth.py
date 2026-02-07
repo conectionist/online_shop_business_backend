@@ -1,6 +1,7 @@
 """Authentication service for admin users"""
 
 from datetime import datetime, timedelta
+import hashlib
 from typing import Optional
 from fastapi import HTTPException, status, Depends, Request
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from app.core.security import (
 )
 from app.core.config import settings
 from app.models.admin import Admin
+from app.models.refresh_token import RefreshToken
 from app.schemas.admin import AdminCreate, AdminLogin, AdminResponse
 
 
@@ -236,7 +238,65 @@ def create_admin_tokens(admin: Admin) -> dict:
     }
 
 
-def refresh_access_token(refresh_token: str, db: Session) -> dict:
+def hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _get_request_meta(request: Optional[Request]) -> tuple[Optional[str], Optional[str]]:
+    if not request:
+        return None, None
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    return ip_address, user_agent
+
+
+def store_refresh_token(
+    db: Session,
+    admin_id: int,
+    refresh_token: str,
+    *,
+    expires_at: datetime,
+    request: Optional[Request] = None,
+) -> RefreshToken:
+    token_hash = hash_refresh_token(refresh_token)
+    ip_address, user_agent = _get_request_meta(request)
+
+    row = RefreshToken(
+        admin_id=admin_id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.add(row)
+    return row
+
+
+def revoke_refresh_token(db: Session, refresh_token: str) -> None:
+    token_hash = hash_refresh_token(refresh_token)
+    now = datetime.utcnow()
+
+    row = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.token_hash == token_hash)
+        .one_or_none()
+    )
+    if row and row.revoked_at is None:
+        row.revoked_at = now
+
+
+def revoke_all_refresh_tokens(db: Session, admin_id: int) -> int:
+    now = datetime.utcnow()
+    updated = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.admin_id == admin_id)
+        .filter(RefreshToken.revoked_at.is_(None))
+        .update({RefreshToken.revoked_at: now}, synchronize_session=False)
+    )
+    return int(updated or 0)
+
+
+def refresh_access_token(refresh_token: str, db: Session, request: Optional[Request] = None) -> dict:
     """
     Refresh an access token using a refresh token.
     
@@ -251,7 +311,6 @@ def refresh_access_token(refresh_token: str, db: Session) -> dict:
         HTTPException: If refresh token is invalid or expired
     """
     try:
-        # Verify refresh token
         payload = verify_token(refresh_token)
         if not payload:
             raise HTTPException(
@@ -266,12 +325,35 @@ def refresh_access_token(refresh_token: str, db: Session) -> dict:
                 detail="Invalid token type"
             )
         
-        # Check if token is expired
         if is_token_expired(refresh_token):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token has expired"
             )
+
+        token_hash = hash_refresh_token(refresh_token)
+        token_row = (
+            db.query(RefreshToken)
+            .filter(RefreshToken.token_hash == token_hash)
+            .one_or_none()
+        )
+        if not token_row:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token"
+            )
+        if token_row.revoked_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token has been revoked"
+            )
+        now = datetime.utcnow()
+        if token_row.expires_at <= now:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token has expired"
+            )
+        token_row.last_used_at = now
         
         # Get admin ID from token
         admin_id = payload.get("sub")
@@ -297,9 +379,35 @@ def refresh_access_token(refresh_token: str, db: Session) -> dict:
         }
         
         access_token = create_access_token(token_data)
-        
+
+        new_refresh_token = create_refresh_token({
+            "sub": str(admin.id),
+            "username": admin.username,
+            "type": "refresh",
+        })
+        new_payload = verify_token(new_refresh_token)
+        if not new_payload or not new_payload.get("exp"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token refresh error"
+            )
+        new_expires_at = datetime.utcfromtimestamp(int(new_payload["exp"]))
+
+        new_row = store_refresh_token(
+            db,
+            admin.id,
+            new_refresh_token,
+            expires_at=new_expires_at,
+            request=request,
+        )
+
+        token_row.revoked_at = now
+        db.flush()
+        token_row.replaced_by_token_id = new_row.id
+
         return {
             "access_token": access_token,
+            "refresh_token": new_refresh_token,
             "token_type": "bearer",
             "expires_in": settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
         }

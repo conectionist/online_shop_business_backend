@@ -24,6 +24,9 @@ from app.services.auth import (
     create_admin_tokens,
     refresh_access_token,
     get_current_admin_from_cookie,
+    store_refresh_token,
+    revoke_refresh_token,
+    revoke_all_refresh_tokens,
     verify_password,
     get_password_hash
 )
@@ -82,6 +85,31 @@ def login(
         
         # Create tokens
         tokens = create_admin_tokens(admin)
+
+        refresh_payload = None
+        try:
+            from app.core.security import verify_token
+            refresh_payload = verify_token(tokens["refresh_token"])
+        except Exception:
+            refresh_payload = None
+
+        if not refresh_payload or not refresh_payload.get("exp"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Login error: Failed to create refresh token"
+            )
+
+        from datetime import datetime
+        refresh_expires_at = datetime.utcfromtimestamp(int(refresh_payload["exp"]))
+
+        store_refresh_token(
+            db,
+            admin.id,
+            tokens["refresh_token"],
+            expires_at=refresh_expires_at,
+            request=request,
+        )
+        db.commit()
 
         # Set auth cookies (access + refresh) on the response
         set_auth_cookies(response, tokens["access_token"], tokens["refresh_token"])
@@ -173,7 +201,9 @@ def refresh_token(
             )
 
         # Refresh the access token using the cookie value
-        tokens = refresh_access_token(refresh_token_cookie, db)
+        tokens = refresh_access_token(refresh_token_cookie, db, request=request)
+
+        db.commit()
 
         # Update auth cookies (access + optionally refresh) on the response
         # If refresh_access_token does not rotate the refresh token, keep the
@@ -230,6 +260,7 @@ def get_me(current_admin: Admin = Depends(get_current_admin_from_cookie)):
 })
 def change_password(
     password_data: PasswordChangeRequest,
+    response: Response,
     current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
@@ -253,7 +284,10 @@ def change_password(
         
         # Update the admin's password
         current_admin.password = new_hashed_password
+        revoke_all_refresh_tokens(db, current_admin.id)
         db.commit()
+
+        clear_auth_cookies(response)
         
         return PasswordChangeResponse(
             message="Password changed successfully"
@@ -283,7 +317,9 @@ def change_password(
 })
 def logout(
     response: Response,
-    current_admin: Admin = Depends(get_current_admin_from_cookie)
+    request: Request,
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
+    db: Session = Depends(get_db),
 ):
     """
     Logout the current admin user by clearing authentication cookies.
@@ -294,6 +330,11 @@ def logout(
     - Requires valid authentication (cookies must be present)
     """
     try:
+        refresh_token_cookie = request.cookies.get("refresh_token")
+        if refresh_token_cookie:
+            revoke_refresh_token(db, refresh_token_cookie)
+            db.commit()
+
         # Clear auth cookies (access + refresh) on the response
         clear_auth_cookies(response)
         
@@ -307,3 +348,38 @@ def logout(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Logout error: {str(e)}"
         ) 
+
+
+@router.post("/logout-all", response_model=LogoutResponse, responses={
+    200: {
+        "description": "Logout all devices successful",
+        "content": {
+            "application/json": {
+                "example": {
+                    "message": "Logged out from all devices successfully"
+                }
+            }
+        }
+    },
+    401: {"description": "Not authenticated"},
+    500: {"description": "Internal server error"}
+})
+def logout_all(
+    response: Response,
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
+    db: Session = Depends(get_db),
+):
+    try:
+        revoke_all_refresh_tokens(db, current_admin.id)
+        db.commit()
+
+        clear_auth_cookies(response)
+
+        return LogoutResponse(message="Logged out from all devices successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Logout-all error: {str(e)}"
+        )

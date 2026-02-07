@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
+from uuid import uuid4
 import jwt
 from passlib.context import CryptContext
 from app.core.config import settings
@@ -57,6 +58,11 @@ def create_refresh_token(
             days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
         )
     
+    # Ensure each refresh token issuance is unique to avoid collisions when
+    # persisting token hashes for revocation.
+    to_encode.setdefault("iat", datetime.now(timezone.utc))
+    to_encode.setdefault("jti", uuid4().hex)
+
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(
         to_encode, 

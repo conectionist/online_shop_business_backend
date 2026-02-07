@@ -34,21 +34,12 @@ class AuthTestUtils:
         )
         return response
     
-    def refresh_token(self, refresh_token: str) -> requests.Response:
-        """
-        Refresh an access token using a refresh token.
-        
-        Args:
-            refresh_token: The refresh token
-            
-        Returns:
-            Refresh response
-        """
-        response = requests.post(
+    def refresh_token(self) -> requests.Response:
+        """Refresh the access token using the refresh_token httpOnly cookie."""
+        return self.session.post(
             f"{self.auth_base_url}/refresh",
-            json={"refresh_token": refresh_token}
+            json={},
         )
-        return response
     
     def create_admin(self, access_token: str, username: str, password: str) -> requests.Response:
         """
@@ -192,6 +183,27 @@ class TestAuthRefresh:
         # New access token must be set via cookies
         set_cookie_headers = refresh_response.headers.get("set-cookie", "")
         assert "access_token=" in set_cookie_headers, "Expected access_token cookie to be set on refresh"
+
+    def test_refresh_rotates_refresh_token(self):
+        """Refresh should rotate refresh_token (old refresh token becomes revoked)."""
+        session = requests.Session()
+
+        login_response = session.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"}
+        )
+        assert login_response.status_code == 200
+        old_refresh = login_response.cookies.get("refresh_token")
+        assert old_refresh
+
+        refresh_response = session.post(
+            f"{auth_utils.auth_base_url}/refresh",
+            json={}
+        )
+        assert refresh_response.status_code == 200
+        new_refresh = refresh_response.cookies.get("refresh_token")
+        assert new_refresh
+        assert new_refresh != old_refresh
     
     def test_refresh_invalid_token(self):
         """Test refresh with invalid token."""
@@ -289,6 +301,88 @@ class TestAuthMe:
         assert resp.status_code == 401, f"Expected 401, got {resp.status_code}: {resp.text}"
         data = resp.json()
         assert "detail" in data
+
+
+class TestAuthLogout:
+    """Test logout functionality."""
+
+    def test_logout_success(self):
+        session = requests.Session()
+
+        login_resp = session.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"},
+        )
+        assert login_resp.status_code == 200
+
+        logout_resp = session.post(f"{auth_utils.auth_base_url}/logout", json={})
+        assert logout_resp.status_code == 200, f"Expected 200, got {logout_resp.status_code}: {logout_resp.text}"
+
+        set_cookie_headers = logout_resp.headers.get("set-cookie", "")
+        assert "access_token=" in set_cookie_headers
+        assert "refresh_token=" in set_cookie_headers
+        assert "Max-Age=0" in set_cookie_headers or "max-age=0" in set_cookie_headers
+
+    def test_logout_revokes_refresh_token(self):
+        """After logout, the previous refresh token should be rejected as revoked."""
+        session = requests.Session()
+
+        login_resp = session.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"},
+        )
+        assert login_resp.status_code == 200
+        old_refresh = login_resp.cookies.get("refresh_token")
+        assert old_refresh
+
+        logout_resp = session.post(f"{auth_utils.auth_base_url}/logout", json={})
+        assert logout_resp.status_code == 200
+
+        refresh_resp = requests.post(
+            f"{auth_utils.auth_base_url}/refresh",
+            json={},
+            cookies={"refresh_token": old_refresh},
+        )
+        assert refresh_resp.status_code == 401
+
+        detail = refresh_resp.json().get("detail", "")
+        assert "revoked" in detail.lower() or "invalid" in detail.lower()
+
+
+class TestAuthLogoutAll:
+    """Test logout-all (global logout) functionality."""
+
+    def test_logout_all_revokes_other_sessions(self):
+        """Logout-all should revoke refresh tokens from other sessions/devices."""
+        session1 = requests.Session()
+        session2 = requests.Session()
+
+        r1 = session1.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"},
+        )
+        assert r1.status_code == 200
+
+        r2 = session2.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"},
+        )
+        assert r2.status_code == 200
+        refresh2 = r2.cookies.get("refresh_token")
+        assert refresh2
+
+        logout_all_resp = session1.post(f"{auth_utils.auth_base_url}/logout-all", json={})
+        assert logout_all_resp.status_code == 200
+
+        refresh_resp = requests.post(
+            f"{auth_utils.auth_base_url}/refresh",
+            json={},
+            cookies={"refresh_token": refresh2},
+        )
+        assert refresh_resp.status_code == 401
+
+        detail = refresh_resp.json().get("detail", "")
+        assert "revoked" in detail.lower() or "invalid" in detail.lower()
 
 
 # class TestAuthCreateAdmin:

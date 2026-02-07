@@ -377,14 +377,14 @@ This is a suggested sequence to implement and validate the new auth model with m
 - ✅ Provided implementation details and risk assessment
 - ✅ Documented testing strategies and recommendations
 
-##### 2.2 Token Revocation Support (Planned)
-**Current Limitation**: Stateless JWT tokens cannot be revoked before expiration
+##### 2.2 Token Revocation Support ✅ COMPLETED
+**Implementation**: ✅ Database-backed refresh token storage + revocation
 
-**Implementation Requirements**:
-- **Device-Specific Logout**: Normal logout revokes only current refresh token (preserves other sessions)
-- **Global Token Revocation**: Password change + "Logout All Devices" revokes all tokens for security
-- **Database Storage**: Store refresh tokens with admin association and device metadata
-- **Selective Revocation**: Enable both single-device and all-device logout capabilities
+**Completed Capabilities**:
+- **Database Storage**: Refresh tokens are stored server-side as SHA-256 hashes with `admin_id`, `expires_at`, `revoked_at`, `ip_address`, `user_agent`.
+- **Refresh Rotation**: `POST /auth/refresh` rotates the refresh token and revokes the previous one.
+- **Device-Specific Logout**: `POST /auth/logout` clears cookies and revokes the current refresh token.
+- **Global Token Revocation**: `POST /auth/logout-all` and `POST /auth/change-password` revoke all refresh tokens for the admin and clear cookies.
 
 ##### 2.3 Enhanced Session Management (Planned)
 **Current Behavior**: Stateless JWT tokens with cookie storage
@@ -420,12 +420,12 @@ This is a suggested sequence to implement and validate the new auth model with m
 
 The implementation should satisfy the following checklist:
 
-- [ ] **Login:** On successful auth, set httpOnly (and Secure, SameSite) cookies for access and refresh tokens; return admin info in the body; do not require the client to send tokens back in body/header for normal requests.
-- [ ] **Refresh:** Read the refresh token from the cookie only; issue new token(s) and set/overwrite cookies; do not require `refresh_token` in the body.
-- [ ] **Authenticated requests:** Read the access token from the cookie; return 401 when missing or invalid; do not require `Authorization: Bearer` for the SPA.
-- [ ] **Logout:** Provide an endpoint that clears the auth cookies via `Set-Cookie` (and optionally invalidates server-side state if added later).
-- [ ] **CORS:** Allow the frontend origin with credentials (`Access-Control-Allow-Origin: <origin>`, `Access-Control-Allow-Credentials: true`) on all auth-related and authenticated endpoints.
-- [ ] **Cookie attributes:** Use HttpOnly, Secure (in prod), SameSite (Strict or Lax), appropriate Path and expiration for both access and refresh cookies.
+- [x] **Login:** On successful auth, set httpOnly (and Secure, SameSite) cookies for access and refresh tokens; return admin info in the body; do not require the client to send tokens back in body/header for normal requests.
+- [x] **Refresh:** Read the refresh token from the cookie only; issue new token(s) and set/overwrite cookies; do not require `refresh_token` in the body.
+- [x] **Authenticated requests:** Read the access token from the cookie; return 401 when missing or invalid; do not require `Authorization: Bearer` for the SPA.
+- [x] **Logout:** Provide an endpoint that clears the auth cookies via `Set-Cookie` and revokes refresh tokens server-side.
+- [x] **CORS:** Allow the frontend origin with credentials (`Access-Control-Allow-Origin: <origin>`, `Access-Control-Allow-Credentials: true`) on all auth-related and authenticated endpoints.
+- [x] **Cookie attributes:** Use HttpOnly, Secure (in prod), SameSite (Strict or Lax), appropriate Path and expiration for both access and refresh cookies.
 
 ---
 

@@ -19,7 +19,6 @@ from app.core.security import (
 from app.core.config import settings
 from app.models.admin import Admin
 from app.schemas.admin import AdminCreate, AdminLogin, AdminResponse
-from app.core.dependencies import custom_security
 
 # Security scheme for JWT tokens
 security = HTTPBearer()
@@ -143,71 +142,6 @@ def get_admin_by_username(db: Session, username: str) -> Optional[Admin]:
             detail=f"Database error retrieving admin: {str(e)}"
         )
 
-
-def get_current_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(custom_security),
-    db: Session = Depends(get_db)
-) -> Admin:
-    """
-    Get the current authenticated admin from JWT token.
-    
-    Args:
-        credentials: JWT token from Authorization header
-        db: Database session
-        
-    Returns:
-        Admin object if token is valid
-        
-    Raises:
-        HTTPException: If token is invalid, expired, or admin not found
-    """
-    try:
-        # Verify the token
-        payload = verify_token(credentials.credentials)
-        if not payload:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token"
-            )
-        
-        # Check if token is expired
-        if is_token_expired(credentials.credentials):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired"
-            )
-        
-        # Require access token; reject refresh tokens when used for admin API access
-        if payload.get("type") != "access":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Access token required"
-            )
-        
-        # Get admin ID from token
-        admin_id = payload.get("sub")
-        if not admin_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token payload"
-            )
-        
-        # Get admin from database
-        admin = get_admin_by_id(db, int(admin_id))
-        if not admin:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Admin not found"
-            )
-        
-        return admin
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication error: {str(e)}"
-        )
 
 
 def get_current_admin_from_cookie(

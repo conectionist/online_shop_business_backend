@@ -24,7 +24,7 @@ from app.services.auth import (  # noqa: F401
     create_admin,
     get_admin_by_id,
     get_admin_by_username,
-    get_current_admin,
+    get_current_admin_from_cookie,
     create_admin_tokens,
     refresh_access_token,
 )

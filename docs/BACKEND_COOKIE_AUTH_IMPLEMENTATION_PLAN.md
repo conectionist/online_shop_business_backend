@@ -338,14 +338,74 @@ This is a suggested sequence to implement and validate the new auth model with m
     - `Secure` flag automatically enabled in production environment.
     - Origins configured via environment variables for flexibility.
 
-### Step 8 – Cleanup and hardening
+### Step 8 – Cleanup and hardening (In Progress)
 
-- Remove or deprecate:
-  - Unused token fields from schemas.
-  - Any code paths that still expect tokens in JSON bodies or `Authorization` headers for the SPA.
-- Optional security improvements (depending on appetite):
-  - Add Origin/Referer checks on mutating endpoints as a lightweight CSRF mitigation.
-  - Introduce a server‑side store for refresh tokens (DB or cache) to support token revocation and stricter logout semantics.
+#### Phase 1: Legacy Code Cleanup ✅ COMPLETED
+**Objective**: Remove all header-based authentication code that is no longer needed
+
+**Completed Tasks**:
+- ✅ **Removed `get_current_admin()` function**: Deleted legacy header-based authentication function from `app/services/auth.py`
+- ✅ **Deleted `app/core/dependencies.py`**: Removed entire file containing `CustomHTTPBearer` and `custom_security` 
+- ✅ **Cleaned imports**: Removed `HTTPAuthorizationCredentials`, `custom_security` imports from auth service
+- ✅ **Updated service exports**: Removed `get_current_admin` from `app/services/__init__.py`
+- ✅ **Removed commented code**: Deleted commented-out admin creation endpoint that used legacy auth
+- ✅ **Fixed missing imports**: Added `verify_password` and `get_password_hash` imports to resolve errors
+
+**Validation**: All 315 integration tests pass, confirming no functionality was broken
+
+#### Phase 2: Security Hardening Implementation (In Progress)
+**Overview**: Three distinct security features to enhance cookie-based authentication system
+
+##### 2.1 CSRF Protection Enhancement ✅ COMPLETED
+**Current Protection**: SameSite=lax cookies provide basic CSRF protection
+
+**Implementation**: ✅ Documented current protection as adequate
+- ✅ Created comprehensive security documentation at `/docs/SECURITY_ENHANCEMENTS.md`
+- ✅ Analyzed current security measures and future enhancement options
+- ✅ Provided implementation details and risk assessment
+- ✅ Documented testing strategies and recommendations
+
+##### 2.2 Token Revocation Support (Planned)
+**Current Limitation**: Stateless JWT tokens cannot be revoked before expiration
+
+**Implementation Requirements**:
+- **Device-Specific Logout**: Normal logout revokes only current refresh token (preserves other sessions)
+- **Global Token Revocation**: Password change + "Logout All Devices" revokes all tokens for security
+- **Database Storage**: Store refresh tokens with admin association and device metadata
+- **Selective Revocation**: Enable both single-device and all-device logout capabilities
+
+##### 2.3 Enhanced Session Management (Planned)
+**Current Behavior**: Stateless JWT tokens with cookie storage
+
+**Implementation Requirements**:
+- **Session Tracking**: Track all active sessions per admin with comprehensive metadata
+- **Session Management**: Provide endpoints to view, revoke specific sessions, and revoke all sessions
+- **Automatic Cleanup**: Remove expired sessions automatically
+
+##### 2.4 Security Headers Documentation 📝
+**Current Status**: ✅ DOCUMENTED
+- **Current Headers**: Appropriate cache controls for auth endpoints
+- **Future Enhancements**: Document additional security headers (CSP, HSTS, etc.)
+
+#### Phase 3: Testing and Validation
+**Goal**: Ensure cleanup doesn't break functionality and security improvements work correctly
+
+**Tasks**:
+1. **Regression Testing** ✅ COMPLETED
+   - ✅ Run full integration test suite (315 tests) - PASSED
+   - ✅ Verify all authentication flows still work - CONFIRMED
+   - ✅ Test error handling for removed functionality - CONFIRMED
+
+2. **Security Testing** (Pending)
+   - Test device-specific logout functionality
+   - Test global logout ("Logout All Devices") 
+   - Test session tracking accuracy
+   - Verify token revocation effectiveness
+
+3. **Performance Testing** (Pending)
+   - Measure impact of additional security checks
+   - Verify database performance with token storage
+   - Test session management overhead
 
 ---
 

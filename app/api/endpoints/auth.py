@@ -212,54 +212,6 @@ def get_me(current_admin: Admin = Depends(get_current_admin_from_cookie)):
     """Return the currently authenticated admin based on the access_token cookie."""
     return {"id": current_admin.id, "username": current_admin.username}
 
-
-# @router.post("/create-admin", response_model=AdminResponse, status_code=status.HTTP_201_CREATED, responses={
-#     201: {
-#         "description": "Admin user created successfully",
-#         "content": {
-#             "application/json": {
-#                 "example": {
-#                     "id": 2,
-#                     "username": "newadmin"
-#                 }
-#             }
-#         }
-#     },
-#     409: {"description": "Admin with this username already exists"},
-#     422: {"description": "Validation error"},
-#     500: {"description": "Internal server error"}
-# })
-# def create_admin_user(
-#     admin_data: AdminCreate,
-#     current_admin: Admin = Depends(get_current_admin),
-#     db: Session = Depends(get_db)
-# ):
-#     """
-#     Create a new admin user (admin only).
-#     
-#     This endpoint allows existing admins to create new admin users.
-#     Only authenticated admin users can access this endpoint.
-#     
-#     The password will be securely hashed before storage.
-#     If the username already exists, the request will fail with a 409 Conflict error.
-#     """
-#     try:
-#         # Create the admin user
-#         admin = create_admin(db, admin_data)
-#         
-#         return AdminResponse(
-#             id=admin.id,
-#             username=admin.username
-#         )
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Admin creation error: {str(e)}"
-#         )
-
-
 @router.post("/change-password", response_model=PasswordChangeResponse, responses={
     200: {
         "description": "Password changed successfully",

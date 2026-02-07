@@ -338,9 +338,9 @@ This is a suggested sequence to implement and validate the new auth model with m
     - `Secure` flag automatically enabled in production environment.
     - Origins configured via environment variables for flexibility.
 
-### Step 8 – Cleanup and hardening (In Progress)
+### Step 8 – Cleanup ✅ COMPLETED
 
-#### Phase 1: Legacy Code Cleanup ✅ COMPLETED
+#### 8.1 Legacy Code Cleanup ✅ COMPLETED
 **Objective**: Remove all header-based authentication code that is no longer needed
 
 **Completed Tasks**:
@@ -353,7 +353,19 @@ This is a suggested sequence to implement and validate the new auth model with m
 
 **Validation**: All 315 integration tests pass, confirming no functionality was broken
 
-#### Phase 2: Security Hardening Implementation (In Progress)
+#### 8.2 Testing and Validation (Completed)
+**Goal**: Ensure cleanup does not break existing functionality
+
+**Tasks**:
+1. **Regression Testing** ✅ COMPLETED
+   - ✅ Run full integration test suite (315 tests) - PASSED
+   - ✅ Verify all authentication flows still work - CONFIRMED
+   - ✅ Test error handling for removed functionality - CONFIRMED
+
+
+### Step 9 – Hardening (In Progress)
+
+#### 9.1 Security Hardening Implementation (In Progress)
 **Overview**: Three distinct security features to enhance cookie-based authentication system
 
 ##### 2.1 CSRF Protection Enhancement ✅ COMPLETED
@@ -387,22 +399,17 @@ This is a suggested sequence to implement and validate the new auth model with m
 - **Current Headers**: Appropriate cache controls for auth endpoints
 - **Future Enhancements**: Document additional security headers (CSP, HSTS, etc.)
 
-#### Phase 3: Testing and Validation
-**Goal**: Ensure cleanup doesn't break functionality and security improvements work correctly
+#### 9.2 Testing and Validation (In Progress)
+**Goal**: Ensure security hardening improvements work correctly and do not break existing functionality
 
 **Tasks**:
-1. **Regression Testing** ✅ COMPLETED
-   - ✅ Run full integration test suite (315 tests) - PASSED
-   - ✅ Verify all authentication flows still work - CONFIRMED
-   - ✅ Test error handling for removed functionality - CONFIRMED
-
-2. **Security Testing** (Pending)
+1. **Security Testing** (Pending)
    - Test device-specific logout functionality
    - Test global logout ("Logout All Devices") 
    - Test session tracking accuracy
    - Verify token revocation effectiveness
 
-3. **Performance Testing** (Pending)
+2. **Performance Testing** (Pending)
    - Measure impact of additional security checks
    - Verify database performance with token storage
    - Test session management overhead

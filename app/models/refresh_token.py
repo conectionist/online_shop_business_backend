@@ -9,7 +9,7 @@ class RefreshToken(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
 
-    admin_id = Column(mysql.TINYINT(), ForeignKey("admins.id"), nullable=False, index=True)
+    admin_id = Column(Integer, ForeignKey("admins.id"), nullable=False, index=True)
 
     token_hash = Column(String(64), nullable=False, unique=True, index=True)
 

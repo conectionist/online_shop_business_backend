@@ -11,7 +11,6 @@ from app.core.auth_cookies import set_auth_cookies, clear_auth_cookies
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
-    TokenRefreshRequest,
     TokenRefreshResponse,
     AdminInfo,
     PasswordChangeRequest,
@@ -184,7 +183,6 @@ def login(
     500: {"description": "Internal server error"}
 })
 def refresh_token(
-    refresh_data: TokenRefreshRequest,
     request: Request,
     response: Response,
     db: Session = Depends(get_db)

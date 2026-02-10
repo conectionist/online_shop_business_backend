@@ -28,6 +28,7 @@ from app.services.auth import (
     store_refresh_token,
     revoke_refresh_token,
     revoke_all_refresh_tokens,
+    revoke_other_refresh_tokens,
     verify_password,
     get_password_hash,
     hash_refresh_token,
@@ -388,6 +389,55 @@ def logout_all(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Logout-all error: {str(e)}"
+        )
+
+
+@router.post("/logout-others", response_model=LogoutResponse, responses={
+    200: {
+        "description": "Logged out from all other devices",
+        "content": {
+            "application/json": {
+                "example": {
+                    "message": "Logged out from 2 other device(s)"
+                }
+            }
+        }
+    },
+    401: {"description": "Not authenticated"},
+    500: {"description": "Internal server error"}
+})
+def logout_others(
+    request: Request,
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
+    db: Session = Depends(get_db),
+):
+    """
+    Logout from all other devices except the current one.
+
+    This endpoint:
+    - Revokes all refresh tokens except the one belonging to the current session
+    - Keeps the current session alive (no cookies are cleared)
+    - Returns a success message with the number of revoked sessions
+    """
+    try:
+        refresh_token_cookie = request.cookies.get("refresh_token")
+        if not refresh_token_cookie:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing refresh token cookie"
+            )
+
+        current_token_hash = hash_refresh_token(refresh_token_cookie)
+        revoked_count = revoke_other_refresh_tokens(db, current_admin.id, current_token_hash)
+        db.commit()
+
+        return LogoutResponse(message=f"Logged out from {revoked_count} other device(s)")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Logout-others error: {str(e)}"
         )
 
 

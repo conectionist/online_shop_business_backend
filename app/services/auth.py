@@ -342,6 +342,19 @@ def revoke_all_refresh_tokens(db: Session, admin_id: int) -> int:
     return int(updated or 0)
 
 
+def revoke_other_refresh_tokens(db: Session, admin_id: int, current_token_hash: str) -> int:
+    """Revoke all refresh tokens for an admin except the current session."""
+    now = datetime.utcnow()
+    updated = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.admin_id == admin_id)
+        .filter(RefreshToken.revoked_at.is_(None))
+        .filter(RefreshToken.token_hash != current_token_hash)
+        .update({RefreshToken.revoked_at: now}, synchronize_session=False)
+    )
+    return int(updated or 0)
+
+
 def refresh_access_token(refresh_token: str, db: Session, request: Optional[Request] = None) -> dict:
     """
     Refresh an access token using a refresh token.

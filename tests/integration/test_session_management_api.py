@@ -49,6 +49,10 @@ class SessionTestUtils:
         """Revoke a specific session by ID."""
         return self.session.delete(f"{self.auth_base_url}/sessions/{session_id}")
 
+    def logout_others(self) -> requests.Response:
+        """Logout from all other sessions except the current one."""
+        return self.session.post(f"{self.auth_base_url}/logout-others")
+
 
 @pytest.fixture
 def session_utils():

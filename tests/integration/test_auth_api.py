@@ -385,6 +385,86 @@ class TestAuthLogoutAll:
         assert "revoked" in detail.lower() or "invalid" in detail.lower()
 
 
+class TestAuthLogoutOthers:
+    """Test logout-others (log out all devices except current) functionality."""
+
+    def test_logout_others_revokes_other_sessions(self):
+        """Logout-others should revoke other sessions but keep the current one alive."""
+        session1 = requests.Session()
+        session2 = requests.Session()
+
+        r1 = session1.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"},
+        )
+        assert r1.status_code == 200
+
+        r2 = session2.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"},
+        )
+        assert r2.status_code == 200
+        refresh2 = r2.cookies.get("refresh_token")
+        assert refresh2
+
+        # Logout others from session 1
+        resp = session1.post(f"{auth_utils.auth_base_url}/logout-others", json={})
+        assert resp.status_code == 200
+
+        # Session 2 should be revoked
+        refresh_resp = requests.post(
+            f"{auth_utils.auth_base_url}/refresh",
+            json={},
+            cookies={"refresh_token": refresh2},
+        )
+        assert refresh_resp.status_code == 401
+
+        # Session 1 should still work
+        me_resp = session1.get(f"{auth_utils.auth_base_url}/me")
+        assert me_resp.status_code == 200
+
+    def test_logout_others_keeps_current_session(self):
+        """After logout-others, the current session's cookies should remain valid."""
+        session = requests.Session()
+
+        login_resp = session.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"},
+        )
+        assert login_resp.status_code == 200
+
+        resp = session.post(f"{auth_utils.auth_base_url}/logout-others", json={})
+        assert resp.status_code == 200
+
+        # Current session should still be able to access protected endpoints
+        me_resp = session.get(f"{auth_utils.auth_base_url}/me")
+        assert me_resp.status_code == 200
+        assert me_resp.json()["username"] == "admin"
+
+    def test_logout_others_no_other_sessions(self):
+        """Logout-others with only one active session should succeed with 0 revoked."""
+        session = requests.Session()
+
+        # Login and immediately clear all sessions to start clean
+        login_resp = session.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"},
+        )
+        assert login_resp.status_code == 200
+        session.post(f"{auth_utils.auth_base_url}/logout-all", json={})
+
+        # Login again — now this is the only session
+        login_resp = session.post(
+            f"{auth_utils.auth_base_url}/login",
+            json={"username": "admin", "password": "adminpass123"},
+        )
+        assert login_resp.status_code == 200
+
+        resp = session.post(f"{auth_utils.auth_base_url}/logout-others", json={})
+        assert resp.status_code == 200
+        assert "0 other device" in resp.json()["message"]
+
+
 # class TestAuthCreateAdmin:
 #     """Test admin creation functionality."""
 #     

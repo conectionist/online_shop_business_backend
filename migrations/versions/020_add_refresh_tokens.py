@@ -24,6 +24,20 @@ depends_on = None
 
 def upgrade() -> None:
     """Create refresh_tokens table with all session management features."""
+
+    # Fix admins.id type: schema.sql defines it as TINYINT but the SQLAlchemy
+    # model uses Integer.  Align the DB column to Integer so the foreign key
+    # on refresh_tokens.admin_id is compatible.  This is safe even if the
+    # column is already INT (MySQL treats it as a no-op rebuild).
+    op.alter_column(
+        "admins",
+        "id",
+        existing_type=mysql.TINYINT(),
+        type_=sa.Integer(),
+        existing_nullable=False,
+        autoincrement=True,
+    )
+
     op.create_table(
         "refresh_tokens",
         # Primary key and foreign key

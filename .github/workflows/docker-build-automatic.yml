@@ -1,4 +1,4 @@
-name: API Integration Tests
+name: API Tests and Docker Build (Automatic)
 
 on:
   push:
@@ -27,39 +27,27 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  run-api-tests:
+  test:
+    name: Run Tests
     runs-on: ubuntu-latest
-    
+
     services:
       docker:
         image: docker:dind
         options: --privileged
 
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v4
+
       - name: Set up Docker and Docker Compose
         run: |
           sudo apt-get update
           sudo apt-get install -y docker-compose
 
-      - name: Set up QEMU for multi-arch
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Set up environment
         run: |
-          # Create the parent directory for test reports
           mkdir -p test-reports
-          # The scripts will create subdirectories, so we just need to ensure the base is writable
           chmod 777 test-reports
-
-      # - name: Run API Contract Tests
-      #   run: |
-      #     chmod +x ./run_api_contract_tests.sh
-      #     ./run_api_contract_tests.sh
 
       - name: Run API Integration Tests
         run: |
@@ -67,14 +55,86 @@ jobs:
           ./run_api_integration_tests.sh
 
       - name: Upload test reports
-        if: always()  # Upload reports even if tests fail
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: api-test-reports
           path: test-reports/
 
+  build-amd64:
+    name: Build amd64
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to GitHub Container Registry
-        if: success()  # Only login if tests passed
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push amd64
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          provenance: false
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,scope=amd64,mode=max
+
+  build-arm64:
+    name: Build arm64
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU for multi-arch
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push arm64
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/arm64
+          provenance: false
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,scope=arm64,mode=max
+
+  publish:
+    name: Publish Multi-arch Image
+    needs: [build-amd64, build-arm64]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
@@ -82,7 +142,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract app version
-        if: success()  # Only extract version if tests passed
         id: version
         run: |
           API_VERSION=$(grep -o 'API_VERSION = "[^"]*"' app/core/config.py | cut -d'"' -f2)
@@ -90,45 +149,40 @@ jobs:
           echo "API version: $API_VERSION"
 
       - name: Extract metadata
-        if: success()  # Only extract metadata if tests passed
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            # Add PR ref tags like pr-123
             type=ref,event=pr
-            # Only add branch-prefixed sha on default branch to avoid empty prefix on PR builds
             type=sha,format=short,prefix={{branch}}-,enable={{is_default_branch}}
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value={{date 'YYYY-MM-DD-HH-mm'}},enable={{is_default_branch}}
             type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
 
-      - name: Build and push Docker image
-        if: success()  # Only build and push if tests passed
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create multi-arch manifest and push
+        run: |
+          TAGS=$(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          docker buildx imagetools create $TAGS \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-amd64.outputs.digest }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-arm64.outputs.digest }}
+
+      - name: Inspect manifest
+        run: |
+          TAG=$(jq -cr '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          docker buildx imagetools inspect "$TAG"
 
       - name: Cleanup old images
-        if: success() && github.ref == 'refs/heads/master'  # Only cleanup on master branch
+        if: github.ref == 'refs/heads/master'
         run: |
-          # Get all image tags for this repository
           TAGS=$(gh api repos/${{ github.repository }}/packages/container/${{ env.IMAGE_NAME }}/versions --jq '.[].metadata.container.tags[]' 2>/dev/null || echo "")
-          
+
           if [ -n "$TAGS" ]; then
-            # Filter out 'latest', current version, and current commit, then sort by date and keep only 5 most recent
-            KEEP_TAGS=$(echo "$TAGS" | grep -v "latest" | grep -v "${{ steps.version.outputs.version }}" | grep -v "${{ github.sha }}" | sort -r | head -5)
-            
-            # Delete older tags (this will delete the associated image versions)
-            echo "$TAGS" | grep -v "latest" | grep -v "${{ steps.version.outputs.version }}" | grep -v "${{ github.sha }}" | sort -r | tail -n +6 | while read tag; do
+            CURRENT_VERSION="${{ steps.version.outputs.version }}"
+            CURRENT_SHA="${{ github.sha }}"
+
+            echo "$TAGS" | grep -v "latest" | grep -v "$CURRENT_VERSION" | grep -v "$CURRENT_SHA" | sort -r | tail -n +6 | while read tag; do
               if [ -n "$tag" ]; then
                 echo "Deleting old image version: $tag"
                 gh api -X DELETE repos/${{ github.repository }}/packages/container/${{ env.IMAGE_NAME }}/versions/$(gh api repos/${{ github.repository }}/packages/container/${{ env.IMAGE_NAME }}/versions --jq ".[] | select(.metadata.container.tags[] | contains(\"$tag\")) | .id")
@@ -137,6 +191,7 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # - name: Send notification on failure
       #   if: failure()
       #   uses: rtCamp/action-slack-notify@v2

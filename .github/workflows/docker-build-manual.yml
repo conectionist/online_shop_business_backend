@@ -1,4 +1,4 @@
-name: Manual API Tests and Docker Build
+name: API Tests and Docker Build (Manual)
 
 on:
   workflow_dispatch: {}

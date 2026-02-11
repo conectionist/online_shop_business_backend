@@ -170,7 +170,8 @@ jobs:
 
       - name: Inspect manifest
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          TAG=$(jq -cr '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          docker buildx imagetools inspect "$TAG"
 
       - name: Cleanup old images
         if: github.ref == 'refs/heads/master'

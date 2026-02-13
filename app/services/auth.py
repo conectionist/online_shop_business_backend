@@ -300,6 +300,17 @@ def store_refresh_token(
     # Get location from IP (optional)
     location_info = get_location_from_ip(ip_address)
 
+    # Revoke existing active sessions from the same device fingerprint
+    now = datetime.utcnow()
+    db.query(RefreshToken).filter(
+        RefreshToken.admin_id == admin_id,
+        RefreshToken.device_type == ua_info["device_type"],
+        RefreshToken.browser_name == ua_info["browser_name"],
+        RefreshToken.os_name == ua_info["os_name"],
+        RefreshToken.revoked_at.is_(None),
+        RefreshToken.expires_at > now,
+    ).update({"revoked_at": now}, synchronize_session="fetch")
+
     row = RefreshToken(
         admin_id=admin_id,
         token_hash=token_hash,

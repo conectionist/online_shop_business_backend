@@ -355,7 +355,9 @@ class TestAuthLogoutAll:
     def test_logout_all_revokes_other_sessions(self):
         """Logout-all should revoke refresh tokens from other sessions/devices."""
         session1 = requests.Session()
+        session1.headers["User-Agent"] = "Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0"
         session2 = requests.Session()
+        session2.headers["User-Agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Safari/604.1"
 
         r1 = session1.post(
             f"{auth_utils.auth_base_url}/login",
@@ -391,7 +393,9 @@ class TestAuthLogoutOthers:
     def test_logout_others_revokes_other_sessions(self):
         """Logout-others should revoke other sessions but keep the current one alive."""
         session1 = requests.Session()
+        session1.headers["User-Agent"] = "Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0"
         session2 = requests.Session()
+        session2.headers["User-Agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Safari/604.1"
 
         r1 = session1.post(
             f"{auth_utils.auth_base_url}/login",

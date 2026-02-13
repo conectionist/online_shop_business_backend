@@ -63,7 +63,12 @@ def session_utils():
 @pytest.fixture
 def second_session():
     """Fixture to provide a second session for multi-session tests."""
-    return SessionTestUtils()
+    utils = SessionTestUtils()
+    utils.session.headers["User-Agent"] = (
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    )
+    return utils
 
 
 @pytest.fixture(autouse=True)

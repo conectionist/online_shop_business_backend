@@ -18,6 +18,8 @@ class AuthTestUtils:
         self.api_base_url = os.environ.get("API_BASE_URL", "http://localhost:8000")
         self.api_v1_str = "/api/v1"
         self.auth_url = f"{self.api_base_url}{self.api_v1_str}/auth"
+        # Use a session to track cookies across requests
+        self.session = requests.Session()
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
         
@@ -37,15 +39,17 @@ class AuthTestUtils:
             "password": password
         }
         
-        response = requests.post(
+        response = self.session.post(
             f"{self.auth_url}/login",
             json=login_data
         )
         
         if response.status_code == 200:
-            data = response.json()
-            self.access_token = data.get("access_token")
-            self.refresh_token = data.get("refresh_token")
+            # Tokens are now issued via httpOnly cookies; extract them so that
+            # existing tests, which still rely on Authorization headers, can
+            # continue to function while the API migrates to cookie-based auth.
+            self.access_token = response.cookies.get("access_token")
+            self.refresh_token = response.cookies.get("refresh_token")
             return True
         else:
             self.access_token = None
@@ -65,7 +69,7 @@ class AuthTestUtils:
     
     def make_authenticated_request(self, method: str, url: str, **kwargs) -> requests.Response:
         """
-        Make an authenticated request with the current access token.
+        Make an authenticated request using cookies.
         
         Args:
             method: HTTP method (GET, POST, PUT, DELETE, etc.)
@@ -75,12 +79,22 @@ class AuthTestUtils:
         Returns:
             Response object
         """
-        headers = kwargs.get("headers", {})
-        auth_headers = self.get_auth_headers()
-        headers.update(auth_headers)
-        kwargs["headers"] = headers
-        
-        return requests.request(method, url, **kwargs)
+        # Use the session which automatically includes cookies from login
+        response = self.session.request(method, url, **kwargs)
+        if response.status_code != 401:
+            return response
+
+        # If the session was revoked/expired by another test, re-login and retry once.
+        try:
+            detail = response.json().get("detail")
+        except Exception:
+            detail = None
+
+        if detail in {"Session revoked", "Session expired", "Session not found"}:
+            if self.login():
+                return self.session.request(method, url, **kwargs)
+
+        return response
     
     def refresh_access_token(self) -> bool:
         """
@@ -91,19 +105,23 @@ class AuthTestUtils:
         """
         if not self.refresh_token:
             return False
-            
-        refresh_data = {
-            "refresh_token": self.refresh_token
-        }
-        
-        response = requests.post(
+
+        # Refresh now relies on the refresh_token httpOnly cookie set during login.
+        # Use the same session so cookies are attached automatically; the JSON
+        # body is unused but kept explicit.
+        response = self.session.post(
             f"{self.auth_url}/refresh",
-            json=refresh_data
+            json={}
         )
-        
+
         if response.status_code == 200:
-            data = response.json()
-            self.access_token = data.get("access_token")
+            # Updated access token (and optionally refresh token) are delivered
+            # via cookies. Extract them so existing tests that use Authorization
+            # headers continue to function.
+            self.access_token = response.cookies.get("access_token", self.access_token)
+            new_refresh = response.cookies.get("refresh_token")
+            if new_refresh:
+                self.refresh_token = new_refresh
             return True
         else:
             return False

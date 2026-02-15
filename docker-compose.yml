@@ -13,6 +13,17 @@ services:
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Cookie-based auth configuration (see app/core/config.py)
+      # COOKIE_SECURE controls the Secure flag on auth cookies.
+      #   - In production you typically want this true so cookies are HTTPS-only.
+      #   - In non-HTTPS local environments you may leave it unset/false.
+      # COOKIE_SAMESITE controls SameSite policy for auth cookies: "lax" or "strict".
+      # COOKIE_DOMAIN can be set to your API host (e.g. api.example.com); if unset, the host default is used.
+      # COOKIE_PATH controls the cookie Path attribute (default "/").
+      # COOKIE_SECURE=${COOKIE_SECURE}
+      # COOKIE_SAMESITE=${COOKIE_SAMESITE}
+      # COOKIE_DOMAIN=${COOKIE_DOMAIN}
+      # COOKIE_PATH=${COOKIE_PATH}
       - FRONTEND_URL=${FRONTEND_URL}
       - DB_HOST=db
       - DB_PORT=3306
@@ -39,7 +50,7 @@ services:
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT}
       # Disable OpenAPI docs in production for security
-      - ENABLE_OPENAPI_DOCS=false
+      - ENABLE_OPENAPI_DOCS=true
       # Reverse proxy: which IPs may set X-Forwarded-* headers (default 127.0.0.1)
       - USE_PROXY_HEADERS=${USE_PROXY_HEADERS:-true}
       - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}

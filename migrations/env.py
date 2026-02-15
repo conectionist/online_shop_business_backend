@@ -23,6 +23,7 @@ from app.models.list_delivery_type import ListDeliveryType
 from app.models.product_image import ProductImage
 from app.models.product_override import ProductOverride
 from app.models.admin import Admin
+from app.models.refresh_token import RefreshToken
 
 # Import the base class for metadata
 from app.core.database import Base

@@ -4,7 +4,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.services.list_product_ordered import (
     get_list_products_by_category,
@@ -79,7 +79,7 @@ def add_product_to_category_endpoint(
     category_id: int = Path(..., gt=0, description="The ID of the category"),
     product_id: int = Path(..., gt=0, description="The ID of the product to add"),
     request: AddProductRequest = Body(...),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -127,7 +127,7 @@ def update_product_position_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to update"),
     request: UpdateProductPositionRequest = Body(...),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -171,7 +171,7 @@ def move_product_between_categories_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to move"),
     request: MoveProductRequest = Body(...),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -215,7 +215,7 @@ def move_product_between_categories_endpoint(
 def remove_product_from_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to remove from the list"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -252,7 +252,7 @@ def remove_product_from_list_endpoint(
 def bulk_update_positions_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     request: BulkUpdatePositionsRequest = Body(...),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """

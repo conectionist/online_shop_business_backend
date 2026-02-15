@@ -20,7 +20,7 @@ router = APIRouter()
     500: {"description": "Internal server error"}
 })
 def read_payment_types(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get all payment types (public endpoint for dropdowns)"""
     try:
@@ -41,7 +41,7 @@ def read_payment_types(
 })
 def read_payment_type(
     payment_type_id: int = Path(..., ge=0, description="The ID of the payment type to retrieve"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get a specific payment type by ID"""
     try:

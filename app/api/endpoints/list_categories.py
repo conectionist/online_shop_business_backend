@@ -4,7 +4,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.services.list_category import (
     get_list_categories_ordered,
@@ -37,7 +37,7 @@ router = APIRouter()
 })
 def get_list_categories_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list to get categories for"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -69,7 +69,7 @@ def add_category_to_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     category_id: int = Path(..., gt=0, description="The ID of the category to add to the list"),
     request: AddCategoryRequest = Body(...),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -113,7 +113,7 @@ def update_category_position_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     category_id: int = Path(..., gt=0, description="The ID of the category to update"),
     request: UpdateCategoryPositionRequest = Body(...),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -153,7 +153,7 @@ def update_category_position_endpoint(
 def remove_category_from_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     category_id: int = Path(..., gt=0, description="The ID of the category to remove from the list"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """

@@ -13,7 +13,7 @@ from app.core.file_upload import delete_file, is_valid_image, get_upload_dir
 from app.core.image_errors import image_validation_detail
 from app.core.image_processing import process_and_save_image_versions
 from app.core.staging_uploads import resolve_staged_image, delete_staged_image
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.category import Category, CategoryCreate, CategoryUpdate
 from app.services.category import (
@@ -152,7 +152,7 @@ def read_categories(
 })
 def reorder_categories_endpoint(
     ordered_ids: List[int] = Body(..., min_items=1, description="Full ordered list of category IDs"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Atomically reorder categories by providing the full ordered list of IDs."""
@@ -191,7 +191,7 @@ def create_category_endpoint(
             "If provided, the staged image will be processed and linked as the primary image."
         ),
     ),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Create a new category
@@ -364,7 +364,7 @@ def update_category_endpoint(
     order_index: int = Form(..., ge=1, le=127, description="Manual ordering index (1-127), unique"),
     primary_image: Optional[UploadFile] = File(None, description="Image file for the category"),
     clear_image: bool = Form(False, description="If true, will clear the image and use placeholder"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Update an existing category (PUT - full replacement)
@@ -619,7 +619,7 @@ def patch_category_endpoint(
 })
 def delete_category_endpoint(
     category_id: int = Path(..., gt=0, description="The ID of the category to delete"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """Delete a category (permanently)"""

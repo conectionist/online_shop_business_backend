@@ -250,13 +250,14 @@ def test_refresh_endpoint_requires_token():
     try:
         error_data = response.json()
         assert "detail" in error_data, f"Response should contain 'detail' field: {error_data}"
-        assert "Invalid" in error_data["detail"] or "expired" in error_data["detail"], (
-            f"Error message should indicate invalid/expired token: {error_data['detail']}"
+        detail = error_data["detail"]
+        assert any(msg in detail for msg in ["Invalid", "expired", "Missing refresh token cookie"]), (
+            f"Error message should indicate missing/invalid/expired token: {detail}"
         )
     except ValueError:
         # Some endpoints might return plain text
-        assert "Invalid" in response.text or "expired" in response.text, (
-            f"Response should indicate invalid/expired token: {response.text}"
+        assert any(msg in response.text for msg in ["Invalid", "expired", "Missing refresh token cookie"]), (
+            f"Response should indicate missing/invalid/expired token: {response.text}"
         )
 
 

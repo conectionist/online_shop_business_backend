@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.order import (
     Order as OrderSchema,
@@ -82,7 +82,7 @@ def read_orders(
     sort_by: str = Query("data_plasarii", pattern="^(data_plasarii|nume_client|liste_id|delivery_type_id|payment_method_id)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     merge_similar: bool = Query(False, description="If true, merge similar orders within the same list by customer name."),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     filters = OrderFilterParams(
@@ -252,7 +252,7 @@ def create_order_endpoint(
 def read_order(
     order_id: int = Path(..., gt=0),
     include_deleted: bool = Query(False, description="Include soft-deleted orders"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     """
@@ -280,7 +280,7 @@ def read_order(
 def update_order_endpoint(
     order_id: int = Path(..., gt=0),
     order_update: OrderUpdate = None,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     """
@@ -322,7 +322,7 @@ def update_order_endpoint(
 def delete_order_endpoint(
     order_id: int = Path(..., gt=0),
     permanent: bool = Query(False, description="If true, performs a hard delete (permanent removal). Default is soft delete."),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     """
@@ -351,7 +351,7 @@ def delete_order_endpoint(
 })
 def restore_order_endpoint(
     order_id: int = Path(..., gt=0),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     """
@@ -370,7 +370,7 @@ def restore_order_endpoint(
 })
 def read_order_items(
     order_id: int = Path(..., gt=0),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     # Ensure order exists (service validates, but making explicit 404 behavior consistent)
@@ -388,7 +388,7 @@ def read_order_items(
 def add_order_item_endpoint(
     order_id: int = Path(..., gt=0),
     item_in: OrderItemBase = None,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     return add_order_item(db=db, order_id=order_id, item_in=item_in)
@@ -405,7 +405,7 @@ def update_order_item_endpoint(
     order_id: int = Path(..., gt=0),
     produse_id: int = Path(..., gt=0),
     item_in: OrderItemBase = None,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     return update_order_item(db=db, order_id=order_id, produse_id=produse_id, item_in=item_in)
@@ -420,7 +420,7 @@ def update_order_item_endpoint(
 def remove_order_item_endpoint(
     order_id: int = Path(..., gt=0),
     produse_id: int = Path(..., gt=0),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     removed = remove_order_item(db=db, order_id=order_id, produse_id=produse_id)

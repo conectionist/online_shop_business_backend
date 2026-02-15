@@ -11,23 +11,23 @@ class LoginRequest(BaseModel):
 
 
 class TokenRefreshRequest(BaseModel):
-    """Schema for token refresh request"""
-    refresh_token: str = Field(..., description="Refresh token")
+    """Schema for token refresh request.
+
+    The refresh token is now read from httpOnly cookies (see auth endpoints),
+    so this request body is intentionally empty and kept only for explicit
+    OpenAPI structure.
+    """
+    pass
 
 
 class LoginResponse(BaseModel):
     """Schema for successful login response"""
-    access_token: str = Field(..., description="JWT access token")
-    refresh_token: str = Field(..., description="JWT refresh token")
-    token_type: str = Field(default="bearer", description="Token type")
     expires_in: int = Field(..., description="Access token expiration time in seconds")
     admin: dict = Field(..., description="Admin user information")
 
 
 class TokenRefreshResponse(BaseModel):
     """Schema for token refresh response"""
-    access_token: str = Field(..., description="New JWT access token")
-    token_type: str = Field(default="bearer", description="Token type")
     expires_in: int = Field(..., description="Access token expiration time in seconds")
 
 
@@ -48,6 +48,11 @@ class PasswordChangeRequest(BaseModel):
 
 class PasswordChangeResponse(BaseModel):
     """Schema for password change response"""
+    message: str = Field(..., description="Success message")
+
+
+class LogoutResponse(BaseModel):
+    """Schema for logout response"""
     message: str = Field(..., description="Success message")
 
 

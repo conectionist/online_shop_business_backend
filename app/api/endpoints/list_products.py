@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.database import get_db
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.product import Product as ProductSchema
 from app.services.list_product import (
@@ -70,7 +70,7 @@ def add_product_to_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to add to the list"),
     request: AddProductRequest = Body(...),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -106,7 +106,7 @@ def add_product_to_list_endpoint(
 def remove_product_from_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product to remove from the list"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -143,7 +143,7 @@ def remove_product_from_list_endpoint(
 def replace_list_products_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_ids: List[int] = ...,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -174,7 +174,7 @@ def replace_list_products_endpoint(
 def add_products_to_list_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_ids: List[int] = ...,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -208,7 +208,7 @@ def update_list_product_availability_endpoint(
     list_id: int = Path(..., gt=0, description="The ID of the list"),
     product_id: int = Path(..., gt=0, description="The ID of the product in the list"),
     request: UpdateAvailabilityRequest = Body(...),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     try:

@@ -13,7 +13,7 @@ from app.services.push_notifications import (
     send_to_all_admins,
     PushSendError,
 )
-from app.services.auth import get_current_admin, Admin
+from app.services.auth import get_current_admin_from_cookie, Admin
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ def subscribe_customer(
 @router.post("/admin/subscribe", response_model=PushSubscriptionOut, status_code=status.HTTP_201_CREATED)
 def subscribe_admin(
     subscription: PushSubscriptionIn,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     """Subscribe to push notifications (admin - authentication required)."""
@@ -90,7 +90,7 @@ def send_test_notification(
     req: SendNotificationRequest,
     background: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
 ):
     """Admin-only: send a test notification to the most recent active subscription."""
     from sqlalchemy import select, desc
@@ -153,7 +153,7 @@ def send_test_notification(
 def notify_all_admins(
     req: SendNotificationRequest,
     background: BackgroundTasks,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     """Send notification to all admin subscriptions."""
@@ -194,7 +194,7 @@ def notify_specific_admin(
     admin_id: int,
     req: SendNotificationRequest,
     background: BackgroundTasks,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     """Send notification to a specific admin's subscriptions."""
@@ -235,7 +235,7 @@ def broadcast_notification(
     req: SendNotificationRequest,
     topic: Optional[str] = None,
     background: BackgroundTasks = None,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     payload = {
@@ -274,7 +274,7 @@ from app.models.web_push_subscription import WebPushSubscription
 
 @router.get("/topics", response_model=list[TopicOut])
 def get_topics(
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     topics = list_notification_topics(db)
@@ -283,7 +283,7 @@ def get_topics(
 
 @router.get("/admin/topics", response_model=list[TopicOut])
 def get_admin_topics(
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     topics = list_topics_for_admin(db, current_admin.id)
@@ -293,7 +293,7 @@ def get_admin_topics(
 @router.post("/admin/topics/subscribe", response_model=dict)
 def subscribe_admin_topics(
     body: SubscriptionTopicsRequest,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     # Note: we reuse SubscriptionTopicsRequest to carry topic_ids; subscription_id is ignored here
@@ -304,7 +304,7 @@ def subscribe_admin_topics(
 @router.delete("/admin/topics/subscribe", response_model=dict)
 def unsubscribe_admin_topics(
     body: SubscriptionTopicsRequest,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     removed = unsubscribe_admin_from_topics_fanout(db, current_admin.id, body.topic_ids)
@@ -314,7 +314,7 @@ def unsubscribe_admin_topics(
 @router.post("/topics/subscribe", response_model=dict)
 def subscribe_topics(
     body: SubscriptionTopicsRequest,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     # Ownership check
@@ -332,7 +332,7 @@ def subscribe_topics(
 @router.delete("/topics/subscribe", response_model=dict)
 def unsubscribe_topics(
     body: SubscriptionTopicsRequest,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db),
 ):
     # Ownership check

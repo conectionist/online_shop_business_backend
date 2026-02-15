@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.services.auth import get_current_admin
+from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.product_override import (
     ProductOverride,
@@ -71,7 +71,7 @@ def get_override(
 })
 def create_override(
     override_data: ProductOverrideCreate,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -99,7 +99,7 @@ def create_override(
 def update_override(
     override_id: int = Path(..., gt=0, description="ID of the override to update"),
     override_data: ProductOverrideUpdate = None,
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """
@@ -129,7 +129,7 @@ def update_override(
 })
 def delete_override(
     override_id: int = Path(..., gt=0, description="ID of the override to delete"),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin_from_cookie),
     db: Session = Depends(get_db)
 ):
     """

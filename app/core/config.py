@@ -12,9 +12,25 @@ logging.getLogger(__name__).setLevel(_log_level)
 logger = logging.getLogger(__name__)
 
 # API version information
-API_VERSION = "5.4.9"
+API_VERSION = "6.1.2"
 API_TITLE = "Online Shop API"
 API_DESCRIPTION = "API for online shop business"
+
+def get_required_env_var(var_name: str, description: str) -> str:
+    """Get a required environment variable or exit gracefully if missing"""
+    value = os.getenv(var_name)
+    if value is None or value.strip() == "":
+        error_msg = f"CRITICAL ERROR: Required environment variable '{var_name}' is not set or is empty. {description}"
+        logger.error(error_msg)
+        logger.error("Application cannot start without this configuration. Please check your environment variables.")
+        sys.exit(1)
+    return value
+
+
+def get_optional_env_var(var_name: str, default: str, description: str) -> str:
+    """Get an optional environment variable with a default"""
+    return os.getenv(var_name, default)
+
 
 # CORS Configuration
 # Get CORS_ORIGINS from environment variable or use defaults
@@ -38,8 +54,10 @@ else:
     # Fallback to wildcard to preserve previous behavior that included "*"
     ALLOWED_HOSTS = ["*"]
 
+# Environment and security-related configuration
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip() or "development"
+
 # Production must use explicit host(s) for host-header protection; do not allow "*"
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 if ENVIRONMENT == "production":
     if not allowed_hosts_str or not allowed_hosts_str.strip():
         logger.error(
@@ -53,6 +71,40 @@ if ENVIRONMENT == "production":
             "Set ALLOWED_HOSTS to your API host(s), e.g. api.example.com"
         )
         sys.exit(1)
+
+# Cookie configuration for authentication tokens
+COOKIE_SECURE_DEFAULT = "true" if ENVIRONMENT == "production" else "false"
+COOKIE_SECURE = get_optional_env_var(
+    "COOKIE_SECURE",
+    COOKIE_SECURE_DEFAULT,
+    "Whether auth cookies should be marked as Secure (HTTPS only)."
+).lower() in ("true", "1", "yes")
+
+COOKIE_SAMESITE = get_optional_env_var(
+    "COOKIE_SAMESITE",
+    "lax",
+    "SameSite policy for auth cookies (lax or strict)."
+).lower()
+
+if COOKIE_SAMESITE not in ("lax", "strict"):
+    logger.error(
+        "CRITICAL: COOKIE_SAMESITE must be 'lax' or 'strict', got '%s'. "
+        "'none' is not allowed as it disables CSRF protection.",
+        COOKIE_SAMESITE,
+    )
+    sys.exit(1)
+
+COOKIE_DOMAIN = get_optional_env_var(
+    "COOKIE_DOMAIN",
+    "",
+    "Domain attribute for auth cookies. Empty string lets the framework default to the current host."
+).strip()
+
+COOKIE_PATH = get_optional_env_var(
+    "COOKIE_PATH",
+    "/",
+    "Path attribute for auth cookies."
+).strip() or "/"
 
 # Frontend URL (used by clients, links in notifications, etc.)
 _frontend_url_raw = os.getenv("FRONTEND_URL", "").strip()
@@ -73,22 +125,6 @@ if _corp_policy not in ("same-origin", "same-site", "cross-origin"):
     _corp_policy = "same-site"
 CORP_POLICY = _corp_policy
 
-# JWT Configuration - Fail fast if not configured
-def get_required_env_var(var_name: str, description: str) -> str:
-    """Get a required environment variable or exit gracefully if missing"""
-    value = os.getenv(var_name)
-    if value is None or value.strip() == "":
-        error_msg = f"CRITICAL ERROR: Required environment variable '{var_name}' is not set or is empty. {description}"
-        logger.error(error_msg)
-        logger.error("Application cannot start without this configuration. Please check your environment variables.")
-        sys.exit(1)
-    return value
-
-
-def get_optional_env_var(var_name: str, default: str, description: str) -> str:
-    """Get an optional environment variable with a default"""
-    return os.getenv(var_name, default)
-
 # JWT Configuration - Critical security settings
 JWT_SECRET_KEY = get_required_env_var(
     "JWT_SECRET_KEY", 
@@ -97,6 +133,10 @@ JWT_SECRET_KEY = get_required_env_var(
 JWT_ALGORITHM = get_optional_env_var("JWT_ALGORITHM", "HS256", "JWT algorithm to use")
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(get_optional_env_var("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30", "Access token expiration in minutes"))
 JWT_REFRESH_TOKEN_EXPIRE_DAYS = int(get_optional_env_var("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7", "Refresh token expiration in days"))
+
+# Derived cookie lifetimes (in seconds)
+ACCESS_TOKEN_COOKIE_MAX_AGE = JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+REFRESH_TOKEN_COOKIE_MAX_AGE = JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 
 # Admin Configuration - Critical for initial admin creation
 ADMIN_USERNAME = get_required_env_var(
@@ -179,6 +219,7 @@ class Settings:
         self.API_DESCRIPTION = API_DESCRIPTION
         self.CORS_ORIGINS = CORS_ORIGINS
         self.ALLOWED_HOSTS = ALLOWED_HOSTS
+        self.ENVIRONMENT = ENVIRONMENT
         self.FRONTEND_URL = FRONTEND_URL
         self.CORP_POLICY = CORP_POLICY
         
@@ -187,6 +228,14 @@ class Settings:
         self.JWT_ALGORITHM = JWT_ALGORITHM
         self.JWT_ACCESS_TOKEN_EXPIRE_MINUTES = JWT_ACCESS_TOKEN_EXPIRE_MINUTES
         self.JWT_REFRESH_TOKEN_EXPIRE_DAYS = JWT_REFRESH_TOKEN_EXPIRE_DAYS
+
+        # Cookie / auth settings
+        self.COOKIE_SECURE = COOKIE_SECURE
+        self.COOKIE_SAMESITE = COOKIE_SAMESITE
+        self.COOKIE_DOMAIN = COOKIE_DOMAIN
+        self.COOKIE_PATH = COOKIE_PATH
+        self.ACCESS_TOKEN_COOKIE_MAX_AGE = ACCESS_TOKEN_COOKIE_MAX_AGE
+        self.REFRESH_TOKEN_COOKIE_MAX_AGE = REFRESH_TOKEN_COOKIE_MAX_AGE
         
         # Admin Settings
         self.ADMIN_USERNAME = ADMIN_USERNAME

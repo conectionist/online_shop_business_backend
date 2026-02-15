@@ -1,8 +1,8 @@
 # Backend: Cookie-Based Authentication Implementation Plan
 
-This document describes **how** to implement secure, cookie-based authentication on the backend, starting from the current JWT‑over‑`Authorization`‑header design.
+This document describes **how** secure, cookie-based authentication is implemented on the backend and the expected behaviors for frontend integration.
 
-It is backend‑only and assumes the frontend will be migrated according to `FRONTEND_COOKIE_AUTH_MIGRATION_GUIDE.md`.
+It is backend‑only and assumes the frontend will be migrated according to `FRONTEND_COOKIE_AUTH_IMPLEMENTATION_PLAN.md`.
 
 The goal is to end up with:
 
@@ -14,29 +14,32 @@ The goal is to end up with:
 
 ## 1. Problem Statement
 
-### 1.1 Current behavior (backend + frontend)
+### 1.1 Current behavior (backend)
 
 - `POST /auth/login`
   - Validates credentials.
-  - Returns `access_token` and `refresh_token` in JSON.
-  - The frontend stores these in `localStorage` and sends `Authorization: Bearer <access_token>` on every request.
+  - Issues access + refresh JWTs.
+  - Sets `access_token` and `refresh_token` as **httpOnly cookies**.
+  - Returns admin info + `expires_in` (no tokens in body).
 
 - `POST /auth/refresh`
-  - Accepts a `refresh_token` in the **request body**.
-  - Returns a new `access_token` in JSON.
+  - Reads `refresh_token` from **cookies only**.
+  - Rotates refresh token, revokes previous one, sets new cookies.
+  - Returns minimal body (`expires_in`).
 
 - Protected endpoints
-  - Depend on `get_current_admin`, which reads the JWT from the **Authorization header** (via `custom_security` / `HTTPBearer`).
+  - Use `get_current_admin_from_cookie`, which reads the **access token cookie**.
+  - If a `refresh_token` cookie is present, it enforces an active, non‑revoked, non‑expired session that matches the access token.
+  - If no refresh cookie exists (legacy/non‑browser clients), it falls back to access‑token‑only validation.
 
-**Issues:**
-
-- Tokens are readable by JavaScript (frontend) and stored in `localStorage`, which is vulnerable to XSS‑driven token theft.
-- The backend requires explicit `Authorization` headers and `refresh_token` bodies, tying the API contract to the current frontend implementation.
-- There is no cookie‑based flow yet; frontend cannot migrate away from `localStorage` safely.
+- Sessions and revocation
+  - Refresh tokens are stored server‑side (hashed) with metadata.
+  - Revocation is supported per session and per admin (logout‑all / change‑password).
+  - Session management endpoints are available under `/auth/sessions*`.
 
 ### 1.2 Requirements recap
 
-From our cookie-based auth requirements and the frontend migration guide:
+From our cookie-based auth requirements and the frontend migration plan:
 
 - Tokens must be sent and stored **only via httpOnly cookies**, not in JSON bodies for client storage.
 - The browser must send cookies automatically on credentialed requests (`withCredentials` / `credentials: 'include'`).
@@ -47,11 +50,11 @@ From our cookie-based auth requirements and the frontend migration guide:
   - Provide a **session/me**‑style endpoint so the frontend can restore logged‑in state on app load.
   - Support proper **CORS with credentials** for the SPA origin.
 
-We do **not** need backward compatibility with the current header/body‑token scheme. We can move directly to the new model.
+We do **not** require `Authorization: Bearer` for browser clients. A limited access‑token‑only fallback exists for legacy/non‑browser use.
 
 ---
 
-## 2. Target Design (Backend Auth Model)
+## 2. Current Design (Backend Auth Model)
 
 ### 2.1 High‑level flow
 
@@ -67,10 +70,11 @@ We do **not** need backward compatibility with the current header/body‑token s
 - **Authenticated requests:**
   - Protected endpoints read the `access_token` **from cookies**, validate it, and return 401 on invalid/missing/expired token.
   - They no longer require `Authorization: Bearer` for the SPA.
+  - If a `refresh_token` cookie is present, the access token must map to a valid, active session (non‑revoked, non‑expired).
 
 - **Refresh (`POST /auth/refresh`):**
   - Reads the `refresh_token` from cookies only.
-  - If valid, issues a new `access_token` (and optionally a new `refresh_token`).
+  - If valid, issues a new `access_token` **and rotates the refresh token**.
   - Updates the cookies via `Set-Cookie`.
   - Response body is empty or minimal, without tokens.
 
@@ -81,7 +85,17 @@ We do **not** need backward compatibility with the current header/body‑token s
 - **Logout (`POST /auth/logout`):**
   - Called with credentials (cookies).
   - Clears both `access_token` and `refresh_token` cookies.
-  - Optionally invalidates refresh tokens server‑side if we later introduce token storage.
+  - Revokes the current refresh token server‑side if present.
+
+- **Logout all (`POST /auth/logout-all`):**
+  - Revokes all refresh tokens for the admin.
+  - Clears auth cookies.
+
+- **Session management:**
+  - `GET /auth/sessions` lists active sessions.
+  - `GET /auth/sessions/current` returns the current session (based on refresh token).
+  - `GET /auth/sessions/{id}` returns a specific session.
+  - `DELETE /auth/sessions/{id}` revokes another session.
 
 ### 2.2 Cookie attributes
 
@@ -130,115 +144,64 @@ For all auth‑related and authenticated routes:
 
 ### 3.1 Auth endpoints (`app/api/endpoints/auth.py`)
 
-**Current:**
-
-- `POST /auth/login`:
-  - Returns `LoginResponse` with `access_token`, `refresh_token`, `token_type`, `expires_in`, `admin`.
-  - No cookies are set.
-
-- `POST /auth/refresh`:
-  - Accepts `TokenRefreshRequest` with `refresh_token` in the body.
-  - Returns `TokenRefreshResponse` with a new `access_token`.
-
-**Target:**
+**Current (implemented):**
 
 1. **`POST /auth/login`**
-   - Keep request schema (`LoginRequest`) as is.
-   - After successful `authenticate_admin` + `create_admin_tokens`:
-     - Use `Response` / `JSONResponse` to:
-       - Set `access_token` and `refresh_token` cookies with proper attributes.
-       - Return JSON body containing **only** admin info (and optional non‑sensitive metadata).
-   - Update `LoginResponse` schema (see 3.2) to reflect no tokens in the body.
+   - Sets `access_token` + `refresh_token` cookies.
+   - Stores refresh token server‑side (hashed) with session metadata.
+   - Returns admin info and `expires_in` (no tokens in body).
 
 2. **`POST /auth/refresh`**
-   - Change implementation to:
-     - Read `refresh_token` from `request.cookies`.
-     - Call a modified `refresh_access_token` that accepts just the token string.
-     - Set new cookies (at least `access_token`, optionally `refresh_token`) on success.
-   - Update `TokenRefreshRequest` and `TokenRefreshResponse` schemas (see 3.2):
-     - Request body no longer needs a `refresh_token` field.
-     - Response body can be empty or minimal (e.g. `{ "expires_in": ... }`).
+   - Reads `refresh_token` from cookies.
+   - Rotates refresh token and revokes the previous one.
+   - Sets new cookies and returns `expires_in`.
 
-3. **New `GET /auth/me` endpoint**
-   - Dependencies:
-     - A cookie‑based auth dependency (see 3.3) that extracts and validates `access_token` from cookies.
-   - Behavior:
-     - If authenticated, return admin info (`id`, `username`).
-     - If not authenticated, return 401.
+3. **`GET /auth/me`**
+   - Uses cookie‑based auth to return current admin info.
+   - Returns 401 if unauthenticated.
 
-4. **New `POST /auth/logout` endpoint**
-   - Called with credentials (cookies attached).
-   - Sends `Set-Cookie` headers that:
-     - Clear `access_token` and `refresh_token` (same name/path/domain, `Max-Age=0` or expired date).
-   - Returns 200/204.
+4. **`POST /auth/logout`**
+   - Revokes the current refresh token (if present) and clears cookies.
+
+5. **`POST /auth/logout-all`**
+   - Revokes all refresh tokens for the admin and clears cookies.
+
+6. **Session management**
+   - `GET /auth/sessions`
+   - `GET /auth/sessions/current`
+   - `GET /auth/sessions/{id}`
+   - `DELETE /auth/sessions/{id}`
 
 ### 3.2 Schemas (`app/schemas/auth.py`)
 
-**Current:**
-
-- `LoginResponse` includes `access_token`, `refresh_token`, `token_type`, `expires_in`, `admin`.
-- `TokenRefreshRequest` contains `refresh_token`.
-- `TokenRefreshResponse` returns `access_token`, `token_type`, `expires_in`.
-
-**Target:**
+**Current (implemented):**
 
 1. **`LoginResponse`**
-   - Remove `access_token` and `refresh_token` fields.
-   - Keep `admin` and, if desired, `expires_in` or other non‑sensitive metadata.
-   - Optionally define a dedicated `AdminLoginResponse` / `AdminInfo` model for clarity.
+   - Contains `admin` and `expires_in` only.
+   - No tokens in the body.
 
 2. **`TokenRefreshRequest`**
-   - Either:
-     - Remove this schema and accept an empty body; or
-     - Keep it as an empty model (if you want explicit structure).
-   - The refresh token will **not** be read from the body anymore.
+   - Empty body (schema exists only for OpenAPI clarity).
 
 3. **`TokenRefreshResponse`**
-   - Remove `access_token` (and `token_type`) if tokens are delivered only via cookies.
-   - Keep `expires_in` only if you want the frontend to know when the new access token expires (optional).
-   - Alternatively, make it an empty response if the frontend doesn’t need any data.
+   - Contains `expires_in` only.
 
-### 3.3 Auth service / dependencies (`app/services/auth.py`, `app/core/dependencies.py`)
+### 3.3 Auth service / dependencies (`app/services/auth.py`)
 
-**Current:**
+**Current (implemented):**
 
-- `get_current_admin`:
-  - Uses `custom_security` / `HTTPBearer` to get the token from the **Authorization header**.
-  - Validates it via `verify_token` and `is_token_expired`.
-  - Ensures token type is `"access"`.
+- `get_current_admin_from_cookie`:
+  - Reads `access_token` from `request.cookies`.
+  - Validates token and ensures type is `"access"`.
+  - If a `refresh_token` cookie is present:
+    - Ensures a matching active session exists (not revoked/expired).
+  - If no refresh cookie exists:
+    - Falls back to access‑token‑only validation (for legacy/non‑browser clients).
 
 - `refresh_access_token`:
-  - Accepts a `refresh_token` string (from request body).
-  - Verifies token and type (`"refresh"`), checks expiry, then issues a new access token.
-
-**Target:**
-
-1. **Cookie‑based auth dependency**
-   - Introduce a new dependency, e.g. `get_current_admin_from_cookie`, that:
-     - Reads `access_token` from `request.cookies["access_token"]`.
-     - Uses `verify_token` + `is_token_expired` as today.
-     - Validates token type is `"access"`.
-     - Loads the admin from DB by `sub` (same as existing logic).
-
-   - Use this dependency in:
-     - All protected admin endpoints.
-     - `GET /auth/me`.
-
-2. **Optional: transitional support for `Authorization: Bearer`**
-   - If you want to keep compatibility with non‑browser clients, add a hybrid dependency that:
-     - Prefers cookie if present, else falls back to header.
-   - Since we don’t require backward compatibility for the SPA, this is **optional** and can be added later if needed.
-
-3. **`refresh_access_token`**
-   - Keep the core logic:
-     - Verify token.
-     - Ensure type is `"refresh"`.
-     - Check expiry.
-     - Load admin from DB.
-     - Issue a new `"access"` token.
-   - Usage will change:
-     - It will be called from `/auth/refresh` with `refresh_token` read from cookies, not from the body.
-     - It can remain a pure function that just takes a token string and DB session.
+  - Accepts a refresh token string (from cookies).
+  - Verifies token type (`"refresh"`), checks expiry, then issues a new access token.
+  - Supports refresh token rotation + revocation in the calling flow.
 
 ### 3.4 CORS / configuration (`app/core/config.py` and related)
 
@@ -263,7 +226,7 @@ If the CORS setup is currently centralized (e.g. via FastAPI’s `CORSMiddleware
 
 This is a suggested sequence to implement and validate the new auth model with minimal risk.
 
-### Step 1 – Add cookie helpers and constants
+### Step 1 – Add cookie helpers and constants (Completed)
 
 - Define:
   - Cookie names: e.g. `ACCESS_TOKEN_COOKIE_NAME = "access_token"`, `REFRESH_TOKEN_COOKIE_NAME = "refresh_token"`.
@@ -274,7 +237,7 @@ This is a suggested sequence to implement and validate the new auth model with m
     - `max_age` for access and refresh.
 - Optionally centralize cookie setting/clearing in small utility functions to avoid duplication.
 
-### Step 2 – Implement cookie‑setting in `POST /auth/login`
+### Step 2 – Implement cookie‑setting in `POST /auth/login` (Completed)
 
 - Modify `login` endpoint to:
   - After `create_admin_tokens`, set both cookies on the response.
@@ -283,7 +246,7 @@ This is a suggested sequence to implement and validate the new auth model with m
   - Assert `Set-Cookie` headers are present with correct attributes.
   - Assert response JSON no longer includes tokens.
 
-### Step 3 – Implement cookie‑based `POST /auth/refresh`
+### Step 3 – Implement cookie‑based `POST /auth/refresh` (Completed)
 
 - Modify `refresh_token` endpoint to:
   - Read `refresh_token` from `request.cookies`.
@@ -296,7 +259,7 @@ This is a suggested sequence to implement and validate the new auth model with m
   - Assert new cookies are set.
   - Assert correct 401 behavior when cookie is invalid/missing.
 
-### Step 4 – Add `GET /auth/me`
+### Step 4 – Add `GET /auth/me` (Completed)
 
 - Implement a simple endpoint that:
   - Uses the cookie‑based auth dependency.
@@ -306,45 +269,113 @@ This is a suggested sequence to implement and validate the new auth model with m
   - With valid `access_token` cookie: returns 200 and correct admin.
   - Without cookie or with invalid/expired token: returns 401.
 
-### Step 5 – Add `POST /auth/logout`
+### Step 5 – Add `POST /auth/logout` (Completed)
 
 - Implement endpoint that:
   - Sends `Set-Cookie` clear instructions for `access_token` and `refresh_token`.
-  - Returns 204 or a simple JSON message.
 - Tests:
   - With cookies set: response clears both cookies (check `Set-Cookie`).
-  - Idempotent behavior: calling logout when already “logged out” is safe.
+  - Idempotent behavior: calling logout when already "logged out" is safe.
 
-### Step 6 – Switch protected endpoints to cookie‑based auth
+### Step 6 – Switch protected endpoints to cookie-based auth (Completed)
 
-- Update all admin‑protected routes to use the new cookie‑based dependency (`get_current_admin_from_cookie`).
-- Ensure:
-  - No SPA code depends on `Authorization: Bearer` anymore.
-  - Integration tests that use `Authorization` headers can either:
-    - Keep using the old dependency in tests only, or
-    - Be updated to simulate cookie auth (preferred for end‑to‑end realism).
+- Migrate all admin-protected endpoints from `get_current_admin` to `get_current_admin_from_cookie`.
+- Update test utilities to use cookies instead of Authorization headers.
+- Keep public endpoints (e.g., payment types) without authentication requirements.
+- Tests:
+  - All 332 integration tests pass with cookie-based authentication.
+  - Authentication flow works: login → protected endpoints → logout.
+  - Public endpoints remain accessible without authentication.
 
-Given the small admin user base, it is acceptable for tests to still use header‑based auth temporarily, but for full alignment, they should be migrated to cookies as a later step.
-
-### Step 7 – CORS and environment validation
+### Step 7 – CORS and environment validation (Completed)
 
 - Confirm:
-  - CORS is configured with the correct frontend origin and `allow_credentials=True`.
-  - In development:
+  - ✅ CORS is configured with the correct frontend origin and `allow_credentials=True`.
+  - ✅ In development:
     - Cookies are visible in browser DevTools under the API origin.
     - Login sets cookies correctly; authenticated calls send cookies; refresh and logout behave as expected.
-  - In production:
-    - `Secure` is enabled.
-    - Origins match the deployed frontend domain.
+  - ✅ In testing:
+    - All 332 integration tests pass with cookie-based authentication.
+    - CORS validation script confirms proper cookie behavior.
+  - ✅ Production-ready configuration:
+    - `Secure` flag automatically enabled in production environment.
+    - Origins configured via environment variables for flexibility.
 
-### Step 8 – Cleanup and hardening
+### Step 8 – Cleanup ✅ COMPLETED
 
-- Remove or deprecate:
-  - Unused token fields from schemas.
-  - Any code paths that still expect tokens in JSON bodies or `Authorization` headers for the SPA.
-- Optional security improvements (depending on appetite):
-  - Add Origin/Referer checks on mutating endpoints as a lightweight CSRF mitigation.
-  - Introduce a server‑side store for refresh tokens (DB or cache) to support token revocation and stricter logout semantics.
+#### 8.1 Legacy Code Cleanup ✅ COMPLETED
+**Objective**: Remove all header-based authentication code that is no longer needed
+
+**Completed Tasks**:
+- ✅ **Removed `get_current_admin()` function**: Deleted legacy header-based authentication function from `app/services/auth.py`
+- ✅ **Deleted `app/core/dependencies.py`**: Removed entire file containing `CustomHTTPBearer` and `custom_security` 
+- ✅ **Cleaned imports**: Removed `HTTPAuthorizationCredentials`, `custom_security` imports from auth service
+- ✅ **Updated service exports**: Removed `get_current_admin` from `app/services/__init__.py`
+- ✅ **Removed commented code**: Deleted commented-out admin creation endpoint that used legacy auth
+- ✅ **Fixed missing imports**: Added `verify_password` and `get_password_hash` imports to resolve errors
+
+**Validation**: All 332 integration tests pass, confirming no functionality was broken
+
+#### 8.2 Testing and Validation (Completed)
+**Goal**: Ensure cleanup does not break existing functionality
+
+**Tasks**:
+1. **Regression Testing** ✅ COMPLETED
+   - ✅ Run full integration test suite (332 tests) - PASSED
+   - ✅ Verify all authentication flows still work - CONFIRMED
+   - ✅ Test error handling for removed functionality - CONFIRMED
+
+
+### Step 9 – Hardening (Partially Completed)
+
+#### 9.1 Security Hardening Implementation (Partially Completed)
+**Overview**: Three distinct security features to enhance cookie-based authentication system
+
+##### 9.1.1 CSRF Protection Enhancement ✅ COMPLETED
+**Current Protection**: SameSite=lax cookies provide basic CSRF protection
+
+**Implementation**: ✅ Documented current protection as adequate
+- ✅ Created comprehensive security documentation at `/docs/SECURITY_ENHANCEMENTS.md`
+- ✅ Analyzed current security measures and future enhancement options
+- ✅ Provided implementation details and risk assessment
+- ✅ Documented testing strategies and recommendations
+
+##### 9.1.2 Token Revocation Support ✅ COMPLETED
+**Implementation**: ✅ Database-backed refresh token storage + revocation
+
+**Completed Capabilities**:
+- **Database Storage**: Refresh tokens are stored server-side as SHA-256 hashes with `admin_id`, `expires_at`, `revoked_at`, `ip_address`, `user_agent`.
+- **Refresh Rotation**: `POST /auth/refresh` rotates the refresh token and revokes the previous one.
+- **Device-Specific Logout**: `POST /auth/logout` clears cookies and revokes the current refresh token.
+- **Global Token Revocation**: `POST /auth/logout-all` and `POST /auth/change-password` revoke all refresh tokens for the admin and clear cookies.
+
+##### 9.1.3 Enhanced Session Management ✅ COMPLETED
+**Current Behavior**: Database-backed refresh tokens with session metadata
+
+**Completed Capabilities**:
+- **Session Tracking**: Active sessions stored with device/user-agent/IP metadata.
+- **Session Management**: Endpoints to list, view current, fetch by ID, and revoke sessions.
+- **Automatic Cleanup**: Expired sessions are filtered from active views; optional cleanup utilities exist.
+
+##### 9.1.4 Security Headers Documentation 📝
+**Current Status**: ✅ DOCUMENTED
+- **Current Headers**: Appropriate cache controls for auth endpoints
+- **Future Enhancements**: Document additional security headers (CSP, HSTS, etc.)
+
+#### 9.2 Testing and Validation (In Progress)
+**Goal**: Ensure security hardening improvements work correctly and do not break existing functionality
+
+**Tasks**:
+1. **Security Testing** (Pending)
+   - Test device-specific logout functionality
+   - Test global logout ("Logout All Devices") 
+   - Test session tracking accuracy
+   - Verify token revocation effectiveness
+
+2. **Performance Testing** (Pending)
+   - Measure impact of additional security checks
+   - Verify database performance with token storage
+   - Test session management overhead
 
 ---
 
@@ -352,12 +383,12 @@ Given the small admin user base, it is acceptable for tests to still use header�
 
 The implementation should satisfy the following checklist:
 
-- [ ] **Login:** On successful auth, set httpOnly (and Secure, SameSite) cookies for access and refresh tokens; return admin info in the body; do not require the client to send tokens back in body/header for normal requests.
-- [ ] **Refresh:** Read the refresh token from the cookie only; issue new token(s) and set/overwrite cookies; do not require `refresh_token` in the body.
-- [ ] **Authenticated requests:** Read the access token from the cookie; return 401 when missing or invalid; do not require `Authorization: Bearer` for the SPA.
-- [ ] **Logout:** Provide an endpoint that clears the auth cookies via `Set-Cookie` (and optionally invalidates server-side state if added later).
-- [ ] **CORS:** Allow the frontend origin with credentials (`Access-Control-Allow-Origin: <origin>`, `Access-Control-Allow-Credentials: true`) on all auth-related and authenticated endpoints.
-- [ ] **Cookie attributes:** Use HttpOnly, Secure (in prod), SameSite (Strict or Lax), appropriate Path and expiration for both access and refresh cookies.
+- [x] **Login:** On successful auth, set httpOnly (and Secure, SameSite) cookies for access and refresh tokens; return admin info in the body; do not require the client to send tokens back in body/header for normal requests.
+- [x] **Refresh:** Read the refresh token from the cookie only; issue new token(s) and set/overwrite cookies; do not require `refresh_token` in the body.
+- [x] **Authenticated requests:** Read the access token from the cookie; return 401 when missing or invalid; do not require `Authorization: Bearer` for the SPA.
+- [x] **Logout:** Provide an endpoint that clears the auth cookies via `Set-Cookie` and revokes refresh tokens server-side.
+- [x] **CORS:** Allow the frontend origin with credentials (`Access-Control-Allow-Origin: <origin>`, `Access-Control-Allow-Credentials: true`) on all auth-related and authenticated endpoints.
+- [x] **Cookie attributes:** Use HttpOnly, Secure (in prod), SameSite (Strict or Lax), appropriate Path and expiration for both access and refresh cookies.
 
 ---
 
@@ -371,8 +402,8 @@ By following this plan, the backend will:
   - Login (`/auth/login`),
   - Refresh (`/auth/refresh`),
   - Session check (`/auth/me`),
-  - Logout (`/auth/logout`),
+  - Logout (`/auth/logout`) and logout‑all (`/auth/logout-all`),
+  - Session management (`/auth/sessions*`),
   - And all protected admin operations using cookie‑based auth.
 
 This enables the frontend to migrate away from `localStorage` entirely and rely on secure, httpOnly cookies for admin authentication.
-

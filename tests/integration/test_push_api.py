@@ -92,19 +92,18 @@ def test_unsubscribe_deactivates():
 def test_admin_topics_aggregate_and_logout_behavior():
     # Login as admin
     assert auth_utils.login() is True
-    headers = auth_utils.get_auth_headers()
+    session = auth_utils.session
 
     # Initially, expect empty list of admin topics
-    r0 = requests.get(f"{V1}/push/admin/topics", headers=headers)
+    r0 = session.get(f"{V1}/push/admin/topics")
     assert r0.status_code == 200, r0.text
     assert isinstance(r0.json(), list)
     initial_topics = {t["name"] for t in r0.json()}
 
     # Create a browser subscription for this admin
     endpoint = _unique_endpoint()
-    r1 = requests.post(
+    r1 = session.post(
         f"{V1}/push/admin/subscribe",
-        headers=headers,
         json={
             "endpoint": endpoint,
             "keys": {"p256dh": "k-sub", "auth": "a-sub"},
@@ -115,7 +114,7 @@ def test_admin_topics_aggregate_and_logout_behavior():
     sub_id = r1.json()["id"]
 
     # Get available topics
-    r_topics = requests.get(f"{V1}/push/topics", headers=headers)
+    r_topics = session.get(f"{V1}/push/topics")
     assert r_topics.status_code == 200, r_topics.text
     all_topics = r_topics.json()
     assert len(all_topics) >= 2
@@ -125,15 +124,14 @@ def test_admin_topics_aggregate_and_logout_behavior():
     assert len(topic_ids) >= 1
 
     # Subscribe this subscription to those topics
-    r_sub = requests.post(
+    r_sub = session.post(
         f"{V1}/push/topics/subscribe",
-        headers=headers,
         json={"subscription_id": sub_id, "topic_ids": topic_ids},
     )
     assert r_sub.status_code == 200, r_sub.text
 
     # Now the admin topics endpoint should include those topic names
-    r2 = requests.get(f"{V1}/push/admin/topics", headers=headers)
+    r2 = session.get(f"{V1}/push/admin/topics")
     assert r2.status_code == 200, r2.text
     names = {t["name"] for t in r2.json()}
     for tname in ("admin_login", "list_published"):
@@ -141,11 +139,11 @@ def test_admin_topics_aggregate_and_logout_behavior():
             assert tname in names
 
     # Deactivate the subscription to simulate logout
-    r3 = requests.delete(f"{V1}/push/subscribe", params={"endpoint": endpoint}, headers=headers)
+    r3 = session.delete(f"{V1}/push/subscribe", params={"endpoint": endpoint})
     assert r3.status_code == 200, r3.text
 
     # Admin topics should now drop these topics (no active subs remain)
-    r4 = requests.get(f"{V1}/push/admin/topics", headers=headers)
+    r4 = session.get(f"{V1}/push/admin/topics")
     assert r4.status_code == 200, r4.text
     names_after = {t["name"] for t in r4.json()}
     for tname in ("admin_login", "list_published"):

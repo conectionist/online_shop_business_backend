@@ -12,6 +12,16 @@ services:
       - DEBUG=1
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - ENVIRONMENT=development
+      # Cookie-based auth configuration for debug environment (see app/core/config.py)
+      # These are typically left to defaults, but can be overridden while debugging cookie behavior:
+      #   COOKIE_SECURE=false
+      #   COOKIE_SAMESITE=lax
+      #   COOKIE_DOMAIN=
+      #   COOKIE_PATH=/
+      # COOKIE_SECURE=${COOKIE_SECURE}
+      # COOKIE_SAMESITE=${COOKIE_SAMESITE}
+      # COOKIE_DOMAIN=${COOKIE_DOMAIN}
+      # COOKIE_PATH=${COOKIE_PATH}
       - FRONTEND_URL=${FRONTEND_URL}
       - DB_HOST=db_debug
       - DB_PORT=3306

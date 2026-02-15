@@ -34,6 +34,16 @@ services:
       - DB_PASSWORD=${TEST_MYSQL_PASSWORD}
       - DB_NAME=${TEST_MYSQL_DATABASE}
       - ENVIRONMENT=test
+      # Cookie-based auth configuration for tests (see app/core/config.py)
+      # Typically you rely on defaults in tests, but you can override for specific scenarios:
+      #   COOKIE_SECURE=false
+      #   COOKIE_SAMESITE=lax
+      #   COOKIE_DOMAIN=
+      #   COOKIE_PATH=/
+      # COOKIE_SECURE=${COOKIE_SECURE}
+      # COOKIE_SAMESITE=${COOKIE_SAMESITE}
+      # COOKIE_DOMAIN=${COOKIE_DOMAIN}
+      # COOKIE_PATH=${COOKIE_PATH}
       - FRONTEND_URL=${TEST_FRONTEND_URL}
       - UPLOAD_FOLDER=/app/uploads
       # Image upload: max file size in MB (default 15)

@@ -1,13 +1,21 @@
 """Authentication endpoints for admin login and token management"""
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, Response
+import logging
+from datetime import datetime, timezone
 from uuid import uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.core.auth_cookies import set_auth_cookies, clear_auth_cookies
+from app.core.security import verify_token
+from app.core.auth_cookies import (
+    set_auth_cookies,
+    clear_auth_cookies,
+    REFRESH_TOKEN_COOKIE_NAME,
+)
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -36,9 +44,41 @@ from app.services.auth import (
     revoke_session_by_id,
     get_current_session
 )
+from app.services.push_notifications import send_to_subscriptions_by_topic
 from app.models.admin import Admin
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+def _notify_admin_login(admin_id: int, admin_username: str):
+    """Fire-and-forget background task: notify admins subscribed to admin_login topic."""
+    try:
+        session = SessionLocal()
+        try:
+            login_uid = uuid4().hex
+            payload = {
+                "title": "Admin Login",
+                "body": f"Admin '{admin_username}' has logged in",
+                "data": {
+                    "type": "admin_login",
+                    "admin_id": admin_id,
+                    "admin_username": admin_username
+                },
+                "tag": f"admin_login_{admin_id}_{login_uid}"
+            }
+            send_to_subscriptions_by_topic(
+                session,
+                "admin_login",
+                payload,
+                event_id=f"admin_login_{admin_id}_{login_uid}"
+            )
+        finally:
+            session.close()
+    except Exception:
+        # Best-effort; do not fail login on notification issues
+        pass
 
 
 @router.post("/login", response_model=LoginResponse, responses={
@@ -82,22 +122,17 @@ def login(
     try:
         # Authenticate the admin
         admin = authenticate_admin(db, login_data.username, login_data.password)
-        
+
         if not admin:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid username or password"
             )
-        
+
         # Create tokens
         tokens = create_admin_tokens(admin)
 
-        refresh_payload = None
-        try:
-            from app.core.security import verify_token
-            refresh_payload = verify_token(tokens["refresh_token"])
-        except Exception:
-            refresh_payload = None
+        refresh_payload = verify_token(tokens["refresh_token"])
 
         if not refresh_payload or not refresh_payload.get("exp"):
             raise HTTPException(
@@ -105,8 +140,7 @@ def login(
                 detail="Login error: Failed to create refresh token"
             )
 
-        from datetime import datetime
-        refresh_expires_at = datetime.utcfromtimestamp(int(refresh_payload["exp"]))
+        refresh_expires_at = datetime.fromtimestamp(int(refresh_payload["exp"]), tz=timezone.utc).replace(tzinfo=None)
 
         store_refresh_token(
             db,
@@ -120,36 +154,6 @@ def login(
         # Set auth cookies (access + refresh) on the response
         set_auth_cookies(response, tokens["access_token"], tokens["refresh_token"])
 
-        # Fire-and-forget: notify admins subscribed to admin_login topic
-        def _notify_admin_login(admin_id: int, admin_username: str):
-            try:
-                from app.core.database import SessionLocal
-                from app.services.push_notifications import send_to_subscriptions_by_topic
-                session = SessionLocal()
-                try:
-                    login_uid = uuid4().hex
-                    payload = {
-                        "title": "Admin Login",
-                        "body": f"Admin '{admin_username}' has logged in",
-                        "data": {
-                            "type": "admin_login",
-                            "admin_id": admin_id,
-                            "admin_username": admin_username
-                        },
-                        "tag": f"admin_login_{admin_id}_{login_uid}"
-                    }
-                    send_to_subscriptions_by_topic(
-                        session,
-                        "admin_login",
-                        payload,
-                        event_id=f"admin_login_{admin_id}_{login_uid}"
-                    )
-                finally:
-                    session.close()
-            except Exception:
-                # Best-effort; do not fail login on notification issues
-                pass
-
         background.add_task(_notify_admin_login, admin.id, admin.username)
 
         # Return admin info and metadata only; tokens are delivered via cookies
@@ -159,10 +163,12 @@ def login(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error in login")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login error: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -198,7 +204,7 @@ def refresh_token(
     """
     try:
         # Read refresh token from cookies
-        refresh_token_cookie = request.cookies.get("refresh_token")
+        refresh_token_cookie = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
         if not refresh_token_cookie:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -221,10 +227,12 @@ def refresh_token(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error in refresh_token")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Token refresh error: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -271,7 +279,7 @@ def change_password(
 ):
     """
     Change the current admin's password.
-    
+
     This endpoint allows an authenticated admin to change their own password.
     The admin must provide their current password for verification.
     Only the authenticated admin can change their own password.
@@ -283,27 +291,29 @@ def change_password(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid current password"
             )
-        
+
         # Hash the new password
         new_hashed_password = get_password_hash(password_data.new_password)
-        
+
         # Update the admin's password
         current_admin.password = new_hashed_password
         revoke_all_refresh_tokens(db, current_admin.id)
         db.commit()
 
         clear_auth_cookies(response)
-        
+
         return PasswordChangeResponse(
             message="Password changed successfully"
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error in change_password")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Password change error: {str(e)}"
-        ) 
+            detail="An internal error occurred"
+        )
 
 
 @router.post("/logout", response_model=LogoutResponse, responses={
@@ -328,31 +338,33 @@ def logout(
 ):
     """
     Logout the current admin user by clearing authentication cookies.
-    
+
     This endpoint:
     - Clears both access_token and refresh_token cookies
     - Returns a success message
     - Requires valid authentication (cookies must be present)
     """
     try:
-        refresh_token_cookie = request.cookies.get("refresh_token")
+        refresh_token_cookie = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
         if refresh_token_cookie:
             revoke_refresh_token(db, refresh_token_cookie)
             db.commit()
 
         # Clear auth cookies (access + refresh) on the response
         clear_auth_cookies(response)
-        
+
         return LogoutResponse(
             message="Logged out successfully"
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error in logout")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Logout error: {str(e)}"
-        ) 
+            detail="An internal error occurred"
+        )
 
 
 @router.post("/logout-all", response_model=LogoutResponse, responses={
@@ -383,10 +395,12 @@ def logout_all(
         return LogoutResponse(message="Logged out from all devices successfully")
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error in logout_all")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Logout-all error: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -418,7 +432,7 @@ def logout_others(
     - Returns a success message with the number of revoked sessions
     """
     try:
-        refresh_token_cookie = request.cookies.get("refresh_token")
+        refresh_token_cookie = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
         if not refresh_token_cookie:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -432,10 +446,12 @@ def logout_others(
         return LogoutResponse(message=f"Logged out from {revoked_count} other device(s)")
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error in logout_others")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Logout-others error: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -483,18 +499,18 @@ def list_sessions(
 ):
     """
     List all active sessions for the current admin.
-    
+
     Returns all non-revoked, non-expired sessions with metadata.
     The current session (based on the refresh token cookie) is marked with is_current=True.
     """
     try:
         # Get all active sessions
         sessions = get_active_sessions(db, current_admin.id)
-        
+
         # Get current session token hash to mark current session
-        current_refresh_token = request.cookies.get("refresh_token")
+        current_refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
         current_token_hash = hash_refresh_token(current_refresh_token) if current_refresh_token else None
-        
+
         # Build response
         session_list = []
         for session in sessions:
@@ -513,15 +529,19 @@ def list_sessions(
                 is_current=(session.token_hash == current_token_hash)
             )
             session_list.append(session_info)
-        
+
         return SessionListResponse(
             sessions=session_list,
             total=len(session_list)
         )
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in list_sessions")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error listing sessions: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -541,18 +561,18 @@ def get_current_session_details(
 ):
     """
     Get details of the current session.
-    
+
     Returns metadata about the session associated with the current refresh token.
     """
     try:
         # Get current refresh token from cookie
-        current_refresh_token = request.cookies.get("refresh_token")
+        current_refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
         if not current_refresh_token:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="No active session"
             )
-        
+
         # Get session from database
         session = get_current_session(db, current_refresh_token)
         if not session:
@@ -560,14 +580,14 @@ def get_current_session_details(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Current session not found"
             )
-        
+
         # Verify session belongs to current admin
         if session.admin_id != current_admin.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Session does not belong to current admin"
             )
-        
+
         return SessionInfo(
             id=session.id,
             session_name=session.session_name or "Unknown Device",
@@ -584,10 +604,12 @@ def get_current_session_details(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error in get_current_session_details")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error getting current session: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -608,7 +630,7 @@ def get_session_details(
 ):
     """
     Get details of a specific session by ID.
-    
+
     Only returns sessions belonging to the current admin.
     """
     try:
@@ -619,12 +641,12 @@ def get_session_details(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Session not found"
             )
-        
+
         # Check if this is the current session
-        current_refresh_token = request.cookies.get("refresh_token")
+        current_refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
         current_token_hash = hash_refresh_token(current_refresh_token) if current_refresh_token else None
         is_current = (session.token_hash == current_token_hash)
-        
+
         return SessionInfo(
             id=session.id,
             session_name=session.session_name or "Unknown Device",
@@ -641,10 +663,12 @@ def get_session_details(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error in get_session_details")
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error getting session: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -666,7 +690,7 @@ def revoke_session(
 ):
     """
     Revoke a specific session by ID (logout that device).
-    
+
     This endpoint allows an admin to remotely logout from another device.
     To logout from the current device, use POST /auth/logout instead.
     """
@@ -678,9 +702,9 @@ def revoke_session(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Session not found"
             )
-        
+
         # Check if trying to revoke current session
-        current_refresh_token = request.cookies.get("refresh_token")
+        current_refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
         if current_refresh_token:
             current_token_hash = hash_refresh_token(current_refresh_token)
             if session.token_hash == current_token_hash:
@@ -688,7 +712,7 @@ def revoke_session(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Cannot revoke current session. Use POST /auth/logout instead."
                 )
-        
+
         # Revoke the session
         success = revoke_session_by_id(db, session_id, current_admin.id)
         if not success:
@@ -696,18 +720,19 @@ def revoke_session(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Session not found or already revoked"
             )
-        
+
         db.commit()
-        
+
         return SessionRevokeResponse(
             message="Session revoked successfully",
             session_id=session_id
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error in revoke_session")
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error revoking session: {str(e)}"
+            detail="An internal error occurred"
         )

@@ -12,7 +12,7 @@ logging.getLogger(__name__).setLevel(_log_level)
 logger = logging.getLogger(__name__)
 
 # API version information
-API_VERSION = "6.1.1"
+API_VERSION = "6.1.2"
 API_TITLE = "Online Shop API"
 API_DESCRIPTION = "API for online shop business"
 
@@ -85,6 +85,14 @@ COOKIE_SAMESITE = get_optional_env_var(
     "lax",
     "SameSite policy for auth cookies (lax or strict)."
 ).lower()
+
+if COOKIE_SAMESITE not in ("lax", "strict"):
+    logger.error(
+        "CRITICAL: COOKIE_SAMESITE must be 'lax' or 'strict', got '%s'. "
+        "'none' is not allowed as it disables CSRF protection.",
+        COOKIE_SAMESITE,
+    )
+    sys.exit(1)
 
 COOKIE_DOMAIN = get_optional_env_var(
     "COOKIE_DOMAIN",

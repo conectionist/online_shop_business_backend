@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from urllib.parse import urlparse
 from pydantic import BaseModel
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -75,6 +76,36 @@ class CORPMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(CORPMiddleware)
+
+# CSRF Origin validation for cookie-based auth.
+# Browsers always send the Origin header on cross-origin requests; if the
+# header is present and doesn't match our allowed origins we reject the
+# request.  Requests without an Origin header (curl, Postman, server-to-server)
+# are allowed through.
+class OriginValidationMiddleware(BaseHTTPMiddleware):
+    UNSAFE_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method in self.UNSAFE_METHODS:
+            origin = request.headers.get("origin")
+            if not origin:
+                # Fall back to Referer for clients that send it instead
+                referer = request.headers.get("referer")
+                if referer:
+                    parsed = urlparse(referer)
+                    origin = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else None
+
+            if origin:
+                allowed = {o.rstrip("/") for o in settings.CORS_ORIGINS}
+                if origin.rstrip("/") not in allowed:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Origin not allowed"},
+                    )
+
+        return await call_next(request)
+
+app.add_middleware(OriginValidationMiddleware)
 
 # Set up logger for HTTP exceptions
 logger = logging.getLogger(__name__)

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, TIMESTAMP, text, Index
+from sqlalchemy import Column, ForeignKey, Integer, String, TIMESTAMP, text, Index
 from sqlalchemy.dialects import mysql
 
 from app.core.database import Base
@@ -16,7 +16,7 @@ class RefreshToken(Base):
     created_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     last_used_at = Column(TIMESTAMP, nullable=True)
 
-    expires_at = Column(DateTime, nullable=False, index=True)
+    expires_at = Column(TIMESTAMP, nullable=False, index=True)
 
     revoked_at = Column(TIMESTAMP, nullable=True)
 

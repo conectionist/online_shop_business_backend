@@ -1,8 +1,10 @@
 """Authentication service for admin users"""
 
-from datetime import datetime, timedelta
 import hashlib
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+
 from fastapi import HTTPException, status, Depends, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -17,54 +19,58 @@ from app.core.security import (
     is_token_expired
 )
 from app.core.config import settings
+from app.core.auth_cookies import ACCESS_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_NAME
 from app.models.admin import Admin
 from app.models.refresh_token import RefreshToken
 from app.schemas.admin import AdminCreate, AdminLogin, AdminResponse
+
+logger = logging.getLogger(__name__)
 
 
 def authenticate_admin(db: Session, username: str, password: str) -> Optional[Admin]:
     """
     Authenticate an admin user with username and password.
-    
+
     Args:
         db: Database session
         username: Admin username
         password: Admin password (plain text)
-        
+
     Returns:
         Admin object if authentication successful, None otherwise
     """
     try:
         # Get admin by username
         admin = db.query(Admin).filter(Admin.username == username).first()
-        
+
         if not admin:
             return None
-            
+
         # Verify password
         if not verify_password(password, admin.password):
             return None
-            
+
         return admin
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
+        logger.exception("Database error during authentication")
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error during authentication: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
 def create_admin(db: Session, admin: AdminCreate) -> Admin:
     """
     Create a new admin user.
-    
+
     Args:
         db: Database session
         admin: Admin creation data
-        
+
     Returns:
         Created Admin object
-        
+
     Raises:
         HTTPException: If username already exists or database error occurs
     """
@@ -76,68 +82,71 @@ def create_admin(db: Session, admin: AdminCreate) -> Admin:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Admin with username '{admin.username}' already exists"
             )
-        
+
         # Hash the password
         hashed_password = get_password_hash(admin.password)
-        
+
         # Create new admin
         db_admin = Admin(
             username=admin.username,
             password=hashed_password
         )
-        
+
         db.add(db_admin)
         db.commit()
         db.refresh(db_admin)
-        
+
         return db_admin
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
+        logger.exception("Database error creating admin")
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error creating admin: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
 def get_admin_by_id(db: Session, admin_id: int) -> Optional[Admin]:
     """
     Get admin by ID.
-    
+
     Args:
         db: Database session
         admin_id: Admin ID
-        
+
     Returns:
         Admin object if found, None otherwise
     """
     try:
         return db.query(Admin).filter(Admin.id == admin_id).first()
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
+        logger.exception("Database error retrieving admin by id")
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error retrieving admin: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
 def get_admin_by_username(db: Session, username: str) -> Optional[Admin]:
     """
     Get admin by username.
-    
+
     Args:
         db: Database session
         username: Admin username
-        
+
     Returns:
         Admin object if found, None otherwise
     """
     try:
         return db.query(Admin).filter(Admin.username == username).first()
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
+        logger.exception("Database error retrieving admin by username")
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error retrieving admin: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -151,7 +160,7 @@ def get_current_admin_from_cookie(
 
     This is the cookie-based equivalent of get_current_admin (header-based).
     """
-    token = request.cookies.get("access_token")
+    token = request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -182,7 +191,7 @@ def get_current_admin_from_cookie(
 
     # If a refresh token cookie is present, require a valid, active session.
     # Otherwise, fall back to access-token-only auth for legacy test helpers.
-    refresh_token = request.cookies.get("refresh_token")
+    refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
     session = None
     if refresh_token:
         session = get_current_session(db, refresh_token)
@@ -198,7 +207,7 @@ def get_current_admin_from_cookie(
                 detail="Session revoked",
             )
 
-        if session.expires_at <= datetime.utcnow():
+        if session.expires_at <= datetime.now(timezone.utc).replace(tzinfo=None):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Session expired",
@@ -232,10 +241,10 @@ def get_current_admin_from_cookie(
 def create_admin_tokens(admin: Admin) -> dict:
     """
     Create access and refresh tokens for an admin.
-    
+
     Args:
         admin: Admin object
-        
+
     Returns:
         Dictionary with access_token, refresh_token, and token_type
     """
@@ -245,17 +254,17 @@ def create_admin_tokens(admin: Admin) -> dict:
         "username": admin.username,
         "type": "access"
     }
-    
+
     refresh_data = {
         "sub": str(admin.id),
         "username": admin.username,
         "type": "refresh"
     }
-    
+
     # Create tokens
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(refresh_data)
-    
+
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -290,18 +299,18 @@ def store_refresh_token(
 ) -> RefreshToken:
     from app.utils.user_agent_parser import parse_user_agent
     from app.utils.ip_geolocation import get_location_from_ip
-    
+
     token_hash = hash_refresh_token(refresh_token)
     ip_address, user_agent = _get_request_meta(request)
-    
+
     # Parse user agent for device/browser/OS info
     ua_info = parse_user_agent(user_agent)
-    
+
     # Get location from IP (optional)
     location_info = get_location_from_ip(ip_address)
 
     # Revoke existing active sessions from the same device fingerprint
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     db.query(RefreshToken).filter(
         RefreshToken.admin_id == admin_id,
         RefreshToken.device_type == ua_info["device_type"],
@@ -309,7 +318,7 @@ def store_refresh_token(
         RefreshToken.os_name == ua_info["os_name"],
         RefreshToken.revoked_at.is_(None),
         RefreshToken.expires_at > now,
-    ).update({"revoked_at": now}, synchronize_session="fetch")
+    ).update({"revoked_at": now}, synchronize_session=False)
 
     row = RefreshToken(
         admin_id=admin_id,
@@ -331,7 +340,7 @@ def store_refresh_token(
 
 def revoke_refresh_token(db: Session, refresh_token: str) -> None:
     token_hash = hash_refresh_token(refresh_token)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     row = (
         db.query(RefreshToken)
@@ -343,7 +352,7 @@ def revoke_refresh_token(db: Session, refresh_token: str) -> None:
 
 
 def revoke_all_refresh_tokens(db: Session, admin_id: int) -> int:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     updated = (
         db.query(RefreshToken)
         .filter(RefreshToken.admin_id == admin_id)
@@ -355,7 +364,7 @@ def revoke_all_refresh_tokens(db: Session, admin_id: int) -> int:
 
 def revoke_other_refresh_tokens(db: Session, admin_id: int, current_token_hash: str) -> int:
     """Revoke all refresh tokens for an admin except the current session."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     updated = (
         db.query(RefreshToken)
         .filter(RefreshToken.admin_id == admin_id)
@@ -369,14 +378,14 @@ def revoke_other_refresh_tokens(db: Session, admin_id: int, current_token_hash: 
 def refresh_access_token(refresh_token: str, db: Session, request: Optional[Request] = None) -> dict:
     """
     Refresh an access token using a refresh token.
-    
+
     Args:
         refresh_token: Refresh token
         db: Database session
-        
+
     Returns:
         Dictionary with new access_token and token_type
-        
+
     Raises:
         HTTPException: If refresh token is invalid or expired
     """
@@ -387,14 +396,14 @@ def refresh_access_token(refresh_token: str, db: Session, request: Optional[Requ
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid refresh token"
             )
-        
+
         # Check if it's a refresh token
         if payload.get("type") != "refresh":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token type"
             )
-        
+
         if is_token_expired(refresh_token):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -417,14 +426,14 @@ def refresh_access_token(refresh_token: str, db: Session, request: Optional[Requ
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token has been revoked"
             )
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if token_row.expires_at <= now:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token has expired"
             )
         token_row.last_used_at = now
-        
+
         # Get admin ID from token
         admin_id = payload.get("sub")
         if not admin_id:
@@ -432,7 +441,7 @@ def refresh_access_token(refresh_token: str, db: Session, request: Optional[Requ
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token payload"
             )
-        
+
         # Get admin from database
         admin = get_admin_by_id(db, int(admin_id))
         if not admin:
@@ -440,15 +449,19 @@ def refresh_access_token(refresh_token: str, db: Session, request: Optional[Requ
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Admin not found"
             )
-        
+
         # Create new access token
         token_data = {
             "sub": str(admin.id),
             "username": admin.username,
             "type": "access"
         }
-        
+
         access_token = create_access_token(token_data)
+
+        # Revoke old token BEFORE creating the new one to close the race window
+        token_row.revoked_at = now
+        db.flush()
 
         new_refresh_token = create_refresh_token({
             "sub": str(admin.id),
@@ -461,7 +474,7 @@ def refresh_access_token(refresh_token: str, db: Session, request: Optional[Requ
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token refresh error"
             )
-        new_expires_at = datetime.utcfromtimestamp(int(new_payload["exp"]))
+        new_expires_at = datetime.fromtimestamp(int(new_payload["exp"]), tz=timezone.utc).replace(tzinfo=None)
 
         new_row = store_refresh_token(
             db,
@@ -471,7 +484,6 @@ def refresh_access_token(refresh_token: str, db: Session, request: Optional[Requ
             request=request,
         )
 
-        token_row.revoked_at = now
         db.flush()
         token_row.replaced_by_token_id = new_row.id
 
@@ -483,10 +495,11 @@ def refresh_access_token(refresh_token: str, db: Session, request: Optional[Requ
         }
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error in refresh_access_token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token refresh error: {str(e)}"
+            detail="Token refresh failed"
         )
 
 
@@ -497,15 +510,15 @@ def refresh_access_token(refresh_token: str, db: Session, request: Optional[Requ
 def get_active_sessions(db: Session, admin_id: int) -> list[RefreshToken]:
     """
     Get all active (non-revoked, non-expired) sessions for an admin.
-    
+
     Args:
         db: Database session
         admin_id: Admin ID
-        
+
     Returns:
         List of active RefreshToken objects, ordered by last_used_at descending
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     return (
         db.query(RefreshToken)
         .filter(RefreshToken.admin_id == admin_id)
@@ -517,18 +530,18 @@ def get_active_sessions(db: Session, admin_id: int) -> list[RefreshToken]:
 
 
 def get_session_by_id(
-    db: Session, 
-    session_id: int, 
+    db: Session,
+    session_id: int,
     admin_id: int
 ) -> Optional[RefreshToken]:
     """
     Get a specific session by ID, ensuring it belongs to the admin.
-    
+
     Args:
         db: Database session
         session_id: Session (RefreshToken) ID
         admin_id: Admin ID
-        
+
     Returns:
         RefreshToken object if found and belongs to admin, None otherwise
     """
@@ -541,40 +554,40 @@ def get_session_by_id(
 
 
 def revoke_session_by_id(
-    db: Session, 
-    session_id: int, 
+    db: Session,
+    session_id: int,
     admin_id: int
 ) -> bool:
     """
     Revoke a specific session by ID.
-    
+
     Args:
         db: Database session
         session_id: Session (RefreshToken) ID
         admin_id: Admin ID
-        
+
     Returns:
         True if session was revoked, False if not found or already revoked
     """
     session = get_session_by_id(db, session_id, admin_id)
     if not session or session.revoked_at is not None:
         return False
-    
-    session.revoked_at = datetime.utcnow()
+
+    session.revoked_at = datetime.now(timezone.utc).replace(tzinfo=None)
     return True
 
 
 def get_current_session(
-    db: Session, 
+    db: Session,
     refresh_token: str
 ) -> Optional[RefreshToken]:
     """
     Get the current session from the refresh token cookie.
-    
+
     Args:
         db: Database session
         refresh_token: Refresh token string
-        
+
     Returns:
         RefreshToken object if found, None otherwise
     """
@@ -589,24 +602,24 @@ def get_current_session(
 def cleanup_expired_sessions(db: Session, days_to_keep: int = 30) -> int:
     """
     Delete expired sessions older than the specified number of days.
-    
+
     This function removes expired refresh tokens from the database to keep
     it clean and maintain performance. Only tokens that have been expired
     for longer than the specified retention period are deleted.
-    
+
     Args:
         db: Database session
         days_to_keep: Number of days to keep expired sessions (default: 30)
-        
+
     Returns:
         Number of sessions deleted
     """
-    cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
-    
+    cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_to_keep)
+
     deleted = (
         db.query(RefreshToken)
         .filter(RefreshToken.expires_at < cutoff_date)
         .delete(synchronize_session=False)
     )
-    
-    return int(deleted or 0) 
+
+    return int(deleted or 0)

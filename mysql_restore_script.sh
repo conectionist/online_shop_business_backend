@@ -139,6 +139,11 @@ fi
 echo ""
 echo "Restoring database..."
 
+# Drop and recreate the schema to ensure a clean slate before restoring.
+# This removes any tables that exist in the DB but were not in the backup.
+docker compose exec -T "$COMPOSE_SERVICE_NAME" \
+    sh -c "MYSQL_PWD=\$MYSQL_ROOT_PASSWORD mysql -u root -e \"DROP DATABASE IF EXISTS \$MYSQL_DATABASE; CREATE DATABASE \$MYSQL_DATABASE;\""
+
 # Perform restore using docker compose exec
 # The password is passed via MYSQL_PWD environment variable
 docker compose exec -T "$COMPOSE_SERVICE_NAME" \

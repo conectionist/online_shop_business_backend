@@ -4,8 +4,8 @@
 
 This document outlines the plan to implement the backup and restore strategy described in [api_backup_restore_strategy.md](api_backup_restore_strategy.md) for this FastAPI backend application using an **asynchronous worker-based architecture**.
 
-**Status**: Planning Phase
-**Last Updated**: 2026-02-12
+**Status**: Design Refined
+**Last Updated**: 2026-02-19
 **Target**: Production-ready backup/restore system with async job workers
 
 ---
@@ -17,7 +17,7 @@ This codebase already has a [synchronous implementation plan](BACKUP_RESTORE_IMP
 | Aspect | Existing Plan (Synchronous) | This Plan (Async Workers) |
 |--------|---------------------------|--------------------------|
 | **Execution** | Direct API execution | Background workers poll jobs |
-| **Progress Tracking** | Not available (blocking request) | Real-time progress in database |
+| **Progress Tracking** | Not available (blocking request) | Real-time progress (DB for backups, file for restores) |
 | **Scalability** | Limited (blocks API workers) | High (dedicated worker containers) |
 | **User Experience** | Wait for completion | Immediate response, poll status |
 | **Complexity** | Lower (simpler architecture) | Higher (more components) |
@@ -46,8 +46,6 @@ The backup/restore strategy can be successfully implemented in this codebase. Th
 - ⚠️ Requires adaptation: No heavy job queue (will use database-backed polling)
 - 🆕 New components needed: Backup worker service, maintenance mode, encryption
 
-**Estimated Effort**: 2-3 days for MVP, 1 week for production-ready implementation
-
 ---
 
 ## Current Infrastructure Analysis
@@ -69,13 +67,13 @@ Current Setup:
   ORM: SQLAlchemy 2.0.46
   Migrations: Alembic 1.18.3
   Models: 23 models (admins, orders, products, categories, etc.)
-  Connection Pooling: Configured (size=5, max_overflow=5)
+  Connection Pooling: Configured (size=5, max_overflow=5, pool_pre_ping=True)
 ```
 
 **Backup Strategy Fit**:
 - Can use `mysqldump` for consistent backups
 - Database credentials already configured
-- Connection settings optimized for production
+- `pool_pre_ping=True` already set — handles reconnection automatically after a restore (no API restart needed)
 
 #### 2. File Storage ✅
 ```
@@ -90,7 +88,7 @@ uploads/
 - Clean, organized structure
 - UUID-based directories prevent conflicts
 - Already mounted as Docker volume
-- Easy to archive with tar/rsync
+- Easy to archive with tar
 
 #### 3. Docker Infrastructure ✅
 ```yaml
@@ -108,7 +106,7 @@ Volumes:
 ```
 
 **Backup Strategy Fit**:
-- Easy to add backup-worker service
+- Easy to add backup-worker and restore-worker services
 - Network isolation already configured
 - Volume management in place
 
@@ -126,6 +124,60 @@ Current Approach:
 
 ---
 
+## Key Design Decisions
+
+These decisions were made during design review and supersede any conflicting guidance elsewhere in this document.
+
+### Decision 1: Separate Metadata Stores for Backup vs Restore
+
+**Problem**: Using the application DB as the source of truth for restore job progress is incoherent — the restore operation replaces the DB mid-job, wiping the job record.
+
+**Decision**:
+- **Backup job metadata** → application DB (`backups` table). Safe because `mysqldump --single-transaction` takes a consistent snapshot; writes to the `backups` table after the snapshot starts do not affect the backup.
+- **Restore job state** → filesystem (`/app/backups/restore_<id>.state.json`). This file lives on the `backups` volume, which persists across DB restores. It is the authoritative source of truth during and after a restore operation.
+
+The `restores` table in the DB tracks restore requests initiated from the current DB state (best-effort, pre-restore). During a restore, the worker writes all progress to the state file. After the restore completes and the DB is back up, the final state is readable from the file.
+
+**API behaviour for `GET /api/v1/restores/{id}`**:
+1. Query the `restores` table in the DB
+2. If not found (DB was restored and wiped the record), check for `/app/backups/restore_<id>.state.json`
+3. Return whichever source has more current information
+
+### Decision 2: No Docker Socket Mount
+
+**Problem**: Mounting `/var/run/docker.sock` gives the restore worker full root access to the Docker host, which is a critical security risk.
+
+**Decision**: Do not mount the Docker socket. The API does not need to restart after a restore because `pool_pre_ping=True` is already configured in `app/core/database.py`. SQLAlchemy will automatically detect stale connections on first use and reconnect transparently. `RESTART_API` is removed from `RestoreStage`.
+
+### Decision 3: Maintenance Mode via File Flag
+
+**Problem**: Querying the DB on every request to check maintenance mode (Option A) adds latency under normal load for zero benefit 99.9% of the time, and fails if the DB is down during a restore.
+
+**Decision**: Use a file flag (Option C). The restore worker creates `/app/flags/maintenance.flag` to enable maintenance mode and deletes it when done. The API middleware checks for this file's existence — a single filesystem stat call with no DB overhead.
+
+A `flags` volume is shared between the `api` and `restore-worker` containers so they both see the same flag file.
+
+### Decision 4: Mandatory Pre-restore Safety Snapshot + Auto-rollback
+
+**Problem**: If a restore crashes mid-operation (specifically during `RESTORE_DB`), the database is in an unknown partial state. Simply marking the job as failed and requiring manual intervention leaves the system down until an admin acts.
+
+**Decision**:
+1. Before touching anything, the restore worker runs a fast local `mysqldump` to `/app/backups/safety_<restore_id>.sql`
+2. If the restore fails at any stage, auto-rollback by replaying the safety snapshot
+3. Maintenance mode stays on throughout — disabled only after successful restore **or** successful rollback
+4. The state file records the final outcome (success, failed+rolled_back, failed+rollback_failed)
+5. If the rollback itself fails, maintenance mode stays on and manual intervention is required — this is true disaster recovery territory
+
+### Decision 5: Rate Limiting on Backup Creation
+
+**Decision**: Enforce a maximum of 1 queued or running backup at a time, checked at the application layer (endpoint validation). Additionally, use the existing `slowapi` rate limiter on `POST /api/v1/backups` to prevent abuse.
+
+### Decision 6: No Backup Download Endpoint
+
+The API is a control plane only. It issues commands to the backup/restore workers; backup files never transit through the API. If admins need to retrieve backup files off-server, that is handled by external sync services (out of scope).
+
+---
+
 ## What Needs Adaptation
 
 ### 1. Job Queue Architecture
@@ -138,28 +190,33 @@ API → Redis Queue → Celery Worker → Execution
 
 #### Our Adaptation: Database-Backed Polling
 ```
-API → Database (backups table) → Python Worker (polls) → Execution
+API → Database (backups table) → Backup Worker (polls) → Execution
 ```
 
 **Implementation**:
 ```python
-# Worker polling loop
+# Worker polling loop — uses asyncio.create_subprocess_exec, not subprocess.run
 async def backup_worker_loop():
     while True:
-        # Atomic job claiming with database transaction
-        async with db.transaction():
-            job = await db.query(Backup)\
-                .filter(Backup.status == 'queued')\
-                .with_for_update(skip_locked=True)\
-                .first()
+        async with db.begin():
+            job = db.execute(
+                select(Backup)
+                .filter(Backup.status == BackupStatus.QUEUED)
+                .with_for_update(skip_locked=True)
+                .limit(1)
+            ).scalar_one_or_none()
 
             if job:
-                job.status = 'running'
-                await db.commit()
-                await execute_backup(job)
+                job.status = BackupStatus.RUNNING
+                job.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        await asyncio.sleep(5)  # Poll interval
+        if job:
+            await execute_backup(job)
+
+        await asyncio.sleep(5)
 ```
+
+**Important**: all subprocess calls in workers must use `asyncio.create_subprocess_exec` (non-blocking), never `subprocess.run` (blocks the event loop).
 
 **Pros**:
 - ✅ No new dependencies (Redis, Celery)
@@ -171,73 +228,52 @@ async def backup_worker_loop():
 - ⚠️ Polling delay (5s typical)
 - ⚠️ Less scalable for high-frequency jobs (fine for backups)
 
-**Alternative**: Add Celery later if needed for other background tasks
-
 ---
 
-### 2. Maintenance Mode (New Feature)
+### 2. Maintenance Mode — File Flag
 
-#### Requirement
-During restore operations, the API must enter maintenance mode to:
-- Block all incoming requests
-- Prevent data modifications during restore
-- Display maintenance message to users
+The maintenance mode flag is a plain file on a shared Docker volume visible to both the `api` and `restore-worker` containers.
 
-#### Implementation Options
-
-**Option A: Database Flag** (Recommended)
 ```python
-# Model
-class SystemSettings(Base):
-    __tablename__ = 'system_settings'
-    id = Column(Integer, primary_key=True)
-    maintenance_mode = Column(Boolean, default=False)
-    maintenance_message = Column(String(500))
+MAINTENANCE_FLAG_PATH = Path("/app/flags/maintenance.flag")
 
-# Middleware
 @app.middleware("http")
 async def maintenance_mode_middleware(request: Request, call_next):
-    # Skip for admin/health endpoints
-    if request.url.path in ["/health", "/api/v1/system/status"]:
+    # Always allow health/status endpoints
+    allowed = {"/health", "/api/v1/system/status"}
+    if request.url.path in allowed:
         return await call_next(request)
 
-    db = next(get_db())
-    settings = db.query(SystemSettings).first()
-
-    if settings and settings.maintenance_mode:
+    if MAINTENANCE_FLAG_PATH.exists():
         return JSONResponse(
             status_code=503,
             content={
-                "detail": settings.maintenance_message or "System under maintenance",
-                "retry_after": 300  # 5 minutes
+                "detail": "System under maintenance. Please try again later.",
+                "retry_after": 300
             }
         )
 
     return await call_next(request)
 ```
 
-**Option B: Redis Flag** (if Redis available)
 ```python
-# Fast in-memory check
-if await redis.get("maintenance_mode") == "true":
-    raise ServiceUnavailable()
+# Restore worker — enable/disable maintenance mode
+def enable_maintenance():
+    MAINTENANCE_FLAG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    MAINTENANCE_FLAG_PATH.touch()
+
+def disable_maintenance():
+    MAINTENANCE_FLAG_PATH.unlink(missing_ok=True)
 ```
 
-**Option C: File Flag** (simplest, no DB hit)
-```python
-# Check for maintenance file
-if os.path.exists("/tmp/maintenance.flag"):
-    raise ServiceUnavailable()
-```
-
-**Recommendation**: Start with Option A (database), migrate to Redis if performance needed
+**Advantages over DB flag**:
+- Zero DB overhead on every request
+- Works even when the DB is down (during restore)
+- Simpler to reason about
 
 ---
 
-### 3. Backup Encryption (New Capability)
-
-#### Requirement
-Backups must be encrypted before storage to protect sensitive data.
+### 3. Backup Encryption
 
 #### Recommended: Age Encryption
 [Age](https://github.com/FiloSottile/age) is modern, simple, and secure.
@@ -250,63 +286,51 @@ RUN apt-get update && apt-get install -y age
 
 **Key Generation** (one-time):
 ```bash
-# Generate key pair
 age-keygen -o /secrets/backup-key.txt
-
-# Output:
-# Public key: age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
-# (Keep private key secure!)
+# Public key printed to stdout — safe to store in env var
+# Private key in file — keep secure
 ```
 
-**Encryption Workflow**:
+**Encryption Workflow** (using async subprocess):
 ```python
-import subprocess
+import asyncio
 
 async def encrypt_backup(backup_path: str, public_key: str) -> str:
-    """Encrypt backup file using age."""
     encrypted_path = f"{backup_path}.age"
-
-    cmd = [
-        "age",
-        "-e",                          # encrypt
-        "-r", public_key,              # recipient public key
-        "-o", encrypted_path,          # output file
-        backup_path                    # input file
-    ]
-
-    result = subprocess.run(cmd, capture_output=True, check=True)
-
-    # Remove unencrypted backup
+    proc = await asyncio.create_subprocess_exec(
+        "age", "-e", "-r", public_key, "-o", encrypted_path, backup_path,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(f"age encryption failed: {stderr.decode()}")
     os.remove(backup_path)
-
     return encrypted_path
 
 async def decrypt_backup(encrypted_path: str, private_key_path: str) -> str:
-    """Decrypt backup file using age."""
     decrypted_path = encrypted_path.replace(".age", "")
-
-    cmd = [
-        "age",
-        "-d",                          # decrypt
-        "-i", private_key_path,        # identity (private key)
-        "-o", decrypted_path,          # output file
-        encrypted_path                 # input file
-    ]
-
-    result = subprocess.run(cmd, capture_output=True, check=True)
-
+    proc = await asyncio.create_subprocess_exec(
+        "age", "-d", "-i", private_key_path, "-o", decrypted_path, encrypted_path,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(f"age decryption failed: {stderr.decode()}")
     return decrypted_path
 ```
 
 **Key Management**:
 ```yaml
-# docker-compose.yml
 services:
   backup-worker:
     environment:
-      - BACKUP_PUBLIC_KEY=age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+      - BACKUP_PUBLIC_KEY=${BACKUP_PUBLIC_KEY}
+
+  restore-worker:
     secrets:
-      - backup-private-key
+      - backup-private-key          # Only the restore worker gets the private key
 
 secrets:
   backup-private-key:
@@ -314,12 +338,10 @@ secrets:
 ```
 
 **Security**:
-- ✅ Public key can be in environment variables
-- ✅ Private key ONLY in secrets, never in database/code
-- ✅ Private key ONLY available to restore worker, not API
-- ✅ Use different keys for different environments
-
-**Alternative**: GPG, AWS KMS, or HashiCorp Vault for enterprise
+- ✅ Public key in environment variables (safe to expose)
+- ✅ Private key ONLY in Docker secrets, never in database/code
+- ✅ Private key ONLY available to restore worker, not API or backup worker
+- ✅ Use different keys per environment
 
 ---
 
@@ -337,47 +359,54 @@ secrets:
 ┌─────────────────────────────────────────────┐
 │  API Container (FastAPI)                    │
 │                                             │
-│  POST /api/v1/backups                      │
-│    → Create backup record (status=queued)  │
+│  POST /api/v1/backups                       │
+│    → Validate (reject if one already        │
+│      queued/running), create DB record      │
 │                                             │
-│  GET /api/v1/backups                       │
-│    → List all backups with status          │
+│  GET /api/v1/backups                        │
+│    → List backups with status               │
 │                                             │
-│  GET /api/v1/backups/{id}                  │
-│    → Get backup status & progress          │
+│  GET /api/v1/backups/{id}                   │
+│    → Get backup status & progress           │
 │                                             │
-│  POST /api/v1/restores                     │
-│    → Initiate restore (status=queued)      │
+│  DELETE /api/v1/backups/{id}                │
+│    → Delete backup record + file            │
 │                                             │
-│  POST /api/v1/system/maintenance           │
-│    → Enable/disable maintenance mode       │
-└────────┬────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────┐
-│  MySQL Database                             │
+│  POST /api/v1/restores                      │
+│    → Create DB record (status=queued)       │
 │                                             │
-│  Tables:                                    │
-│    - backups (id, status, progress, ...)   │
-│    - restores (id, backup_id, status, ...) │
-│    - system_settings (maintenance_mode)    │
-│    - [23 existing tables]                  │
-└────────┬────────────────────────────────────┘
-         │
+│  GET /api/v1/restores/{id}                  │
+│    → Check DB, fall back to state file      │
+│                                             │
+│  GET /api/v1/system/status                  │
+│    → Check maintenance flag file            │
+└──────────────────┬──────────────────────────┘
+                   │
+         ┌─────────┴─────────┐
+         ▼                   ▼
+┌──────────────────┐  ┌──────────────────────────┐
+│  MySQL Database  │  │  flags volume             │
+│                  │  │                           │
+│  - backups       │  │  /app/flags/              │
+│  - restores      │  │    maintenance.flag       │
+│  - [23 existing] │  │    (created/deleted by    │
+│                  │  │    restore-worker)        │
+└────────┬─────────┘  └──────────────────────────┘
          │ Polls every 5s
          ▼
 ┌─────────────────────────────────────────────┐
 │  Backup Worker Container                    │
 │                                             │
 │  while True:                                │
-│    job = poll_queued_backups()             │
+│    job = poll_queued_backups()              │
 │    if job:                                  │
-│      1. mysqldump database                 │
-│      2. tar /uploads directory             │
-│      3. encrypt archive                    │
-│      4. calculate checksum                 │
-│      5. update progress                    │
-│      6. mark completed                     │
+│      1. mysqldump database                  │
+│      2. tar /uploads directory              │
+│      3. encrypt archive (age)               │
+│      4. calculate checksum (SHA-256)        │
+│      5. update progress in DB               │
+│      6. mark completed in DB               │
+│      7. clean up old backups (retention)   │
 │    sleep(5)                                 │
 └────────┬────────────────────────────────────┘
          │
@@ -386,30 +415,51 @@ secrets:
 │  Restore Worker Container                   │
 │                                             │
 │  while True:                                │
-│    job = poll_queued_restores()            │
+│    job = poll_queued_restores()             │
 │    if job:                                  │
-│      1. enable maintenance mode            │
-│      2. download & decrypt backup          │
-│      3. verify checksum                    │
-│      4. restore database                   │
-│      5. restore files                      │
-│      6. run migrations                     │
-│      7. validate restore                   │
-│      8. disable maintenance mode           │
-│      9. mark completed                     │
+│      1. write state file (restore ID)      │
+│      2. take safety snapshot (mysqldump)   │
+│      3. enable maintenance mode (flag)     │
+│      4. decrypt & verify backup            │
+│      5. restore database                   │
+│      6. restore files                      │
+│      7. run migrations                     │
+│      8. validate restore                   │
+│      9. disable maintenance mode           │
+│     10. update state file: completed       │
+│                                             │
+│    on failure at any step:                  │
+│      → rollback using safety snapshot      │
+│      → disable maintenance mode            │
+│      → update state file: failed+rolled_back│
 │    sleep(5)                                 │
 └────────┬────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────┐
-│  Backup Storage Volume                      │
+│  Backup Storage Volume (/app/backups)        │
 │                                             │
-│  /backups/                                  │
-│    ├── backup_20260212_120000.tar.gz.age  │
-│    ├── backup_20260212_120000.meta.json   │
-│    ├── backup_20260211_180000.tar.gz.age  │
-│    └── backup_20260211_180000.meta.json   │
+│  backup_20260219_120000.tar.gz.age          │
+│  backup_20260219_120000.meta.json           │
+│  safety_<restore_id>.sql    ← pre-restore   │
+│  restore_<restore_id>.state.json ← progress │
 └─────────────────────────────────────────────┘
+```
+
+### Restore State File Schema
+
+`/app/backups/restore_<id>.state.json`:
+```json
+{
+  "id": "uuid",
+  "backup_id": "uuid",
+  "status": "running|completed|failed|rolled_back",
+  "stage": "safety_snapshot|maintenance_mode|decrypt|verify|restore_db|...",
+  "progress": 60,
+  "started_at": "2026-02-19T12:00:00",
+  "completed_at": null,
+  "error_message": null
+}
 ```
 
 ### Docker Compose Configuration
@@ -418,6 +468,11 @@ secrets:
 # docker-compose.yml additions
 services:
   # Existing services: api, db
+
+  api:
+    # ... existing config ...
+    volumes:
+      - flags:/app/flags            # Read maintenance flag
 
   backup-worker:
     build:
@@ -435,9 +490,8 @@ services:
       - BACKUP_PUBLIC_KEY=${BACKUP_PUBLIC_KEY}
       - BACKUP_RETENTION_DAYS=30
     volumes:
-      - ./uploads:/app/uploads:ro           # Read-only access
-      - ./backups:/app/backups              # Write access
-      - mysql_data:/var/lib/mysql:ro        # Optional: for LVM snapshots
+      - ./uploads:/app/uploads:ro       # Read-only: archive uploads
+      - backups:/app/backups            # Write: store backup archives
     networks:
       - backend
     depends_on:
@@ -464,9 +518,9 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
     volumes:
-      - ./uploads:/app/uploads              # Write access
-      - ./backups:/app/backups:ro           # Read-only access
-      - /var/run/docker.sock:/var/run/docker.sock  # For restarting API
+      - ./uploads:/app/uploads          # Write: restore file tree
+      - backups:/app/backups            # Write: state files, safety snapshots
+      - flags:/app/flags                # Write: maintenance.flag
     secrets:
       - backup-private-key
     networks:
@@ -484,11 +538,15 @@ services:
 volumes:
   backups:
     driver: local
+  flags:
+    driver: local
 
 secrets:
   backup-private-key:
     file: ./secrets/backup-key.txt
 ```
+
+**Note**: No `/var/run/docker.sock` mount. The API does not need to restart after a restore because `pool_pre_ping=True` is already configured — SQLAlchemy detects and replaces stale connections automatically.
 
 ---
 
@@ -506,7 +564,10 @@ from sqlalchemy.dialects.mysql import CHAR
 from app.core.database import Base
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+
+def _now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 class BackupStatus(str, enum.Enum):
     QUEUED = "queued"
@@ -531,25 +592,19 @@ class Backup(Base):
     stage = Column(Enum(BackupStage), nullable=False, default=BackupStage.INITIALIZED)
     progress = Column(Integer, default=0)  # 0-100
 
-    # Backup metadata
-    backup_filename = Column(String(255))
-    backup_path = Column(String(500))
+    backup_path = Column(String(500))          # Full path to .tar.gz.age file
     size_bytes = Column(BigInteger)
-    checksum = Column(String(64))  # SHA-256
+    checksum = Column(String(64))              # SHA-256 hex
 
-    # Metadata JSON
-    metadata = Column(JSON)
+    backup_metadata = Column(JSON)             # Avoid collision with SQLAlchemy's .metadata attribute
 
-    # Error handling
     error_message = Column(Text, nullable=True)
 
-    # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=_now, nullable=False)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
-    # Admin tracking
-    created_by = Column(Integer, nullable=True)
+    created_by = Column(Integer, nullable=True)   # Admin ID
 
 class RestoreStatus(str, enum.Enum):
     QUEUED = "queued"
@@ -560,16 +615,16 @@ class RestoreStatus(str, enum.Enum):
 
 class RestoreStage(str, enum.Enum):
     INITIALIZED = "initialized"
+    SAFETY_SNAPSHOT = "safety_snapshot"
     MAINTENANCE_MODE = "maintenance_mode"
-    DOWNLOAD = "download"
     DECRYPT = "decrypt"
     VERIFY = "verify"
     RESTORE_DB = "restore_db"
     RESTORE_FILES = "restore_files"
     MIGRATE = "migrate"
     VALIDATE = "validate"
-    RESTART_API = "restart_api"
     COMPLETED = "completed"
+    # Note: RESTART_API stage removed — pool_pre_ping=True handles reconnection automatically
 
 class Restore(Base):
     __tablename__ = "restores"
@@ -581,28 +636,24 @@ class Restore(Base):
     stage = Column(Enum(RestoreStage), nullable=False, default=RestoreStage.INITIALIZED)
     progress = Column(Integer, default=0)
 
-    # Pre-restore snapshot (for rollback)
-    pre_restore_snapshot_id = Column(CHAR(36), nullable=True)
+    # Path to the pre-restore safety snapshot SQL file (on backup volume)
+    safety_snapshot_path = Column(String(500), nullable=True)
 
-    # Error handling
     error_message = Column(Text, nullable=True)
 
-    # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=_now, nullable=False)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
-    # Admin tracking
     created_by = Column(Integer, nullable=True)
-
-class SystemSettings(Base):
-    __tablename__ = "system_settings"
-
-    id = Column(Integer, primary_key=True, default=1)
-    maintenance_mode = Column(Integer, default=0)  # 0=false, 1=true
-    maintenance_message = Column(String(500), default="System under maintenance. Please try again later.")
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 ```
+
+**Notable changes from original plan**:
+- `metadata` renamed to `backup_metadata` — `metadata` is a reserved attribute on SQLAlchemy `Base` subclasses
+- `datetime.utcnow` replaced with `_now()` — MySQL TIMESTAMP columns return naive datetimes; using `datetime.now(timezone.utc).replace(tzinfo=None)` avoids the deprecated call and keeps comparisons consistent
+- `SystemSettings` model removed — maintenance mode uses a file flag, not a DB row
+- `RESTART_API` removed from `RestoreStage`
+- `pre_restore_snapshot_id` replaced with `safety_snapshot_path` (direct file path)
 
 #### 1.2 Create Pydantic Schemas
 
@@ -615,18 +666,17 @@ from typing import Optional, Dict, Any
 from app.models.backup import BackupStatus, BackupStage, RestoreStatus, RestoreStage
 
 class BackupCreate(BaseModel):
-    """Request to create a backup."""
-    pass
+    pass  # No parameters — backup always captures full current state
 
 class BackupResponse(BaseModel):
     id: str
     status: BackupStatus
     stage: BackupStage
     progress: int = Field(ge=0, le=100)
-    backup_filename: Optional[str] = None
+    backup_path: Optional[str] = None
     size_bytes: Optional[int] = None
     checksum: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    backup_metadata: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
     created_at: datetime
     started_at: Optional[datetime] = None
@@ -652,13 +702,8 @@ class RestoreResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class MaintenanceModeUpdate(BaseModel):
-    enabled: bool
-    message: Optional[str] = "System under maintenance. Please try again later."
-
 class SystemStatusResponse(BaseModel):
     maintenance_mode: bool
-    maintenance_message: Optional[str] = None
 ```
 
 **Deliverables**:
@@ -670,21 +715,41 @@ class SystemStatusResponse(BaseModel):
 
 ### Phase 2: API Endpoints (1 day)
 
-Create endpoints for backup/restore operations and system status.
-
 **File**: `app/api/endpoints/backups.py`
 
-See full implementation in Phase 2 of the detailed plan.
+**Key Endpoints**:
+- `POST /api/v1/backups` — Create backup job (reject if one already queued/running; rate-limited via slowapi)
+- `GET /api/v1/backups` — List backups
+- `GET /api/v1/backups/{id}` — Get backup status & progress
+- `DELETE /api/v1/backups/{id}` — Delete backup record and archive file
+
+**File**: `app/api/endpoints/restores.py`
 
 **Key Endpoints**:
-- `POST /api/v1/backups` - Create backup job
-- `GET /api/v1/backups` - List backups
-- `GET /api/v1/backups/{id}` - Get backup status
-- `DELETE /api/v1/backups/{id}` - Delete backup
-- `POST /api/v1/restores` - Initiate restore
-- `GET /api/v1/restores/{id}` - Get restore status
-- `POST /api/v1/system/maintenance` - Toggle maintenance mode
-- `GET /api/v1/system/status` - Get system status
+- `POST /api/v1/restores` — Initiate restore (creates DB record + queues job)
+- `GET /api/v1/restores/{id}` — Get restore status (checks DB, falls back to state file if DB record missing post-restore)
+
+**File**: `app/api/endpoints/system_config.py` (extend existing)
+
+**Key Endpoints**:
+- `GET /api/v1/system/status` — Returns `{"maintenance_mode": true/false}` by checking flag file
+
+**Rate Limiting** (`POST /api/v1/backups`):
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+@router.post("/backups")
+@limiter.limit("5/hour")
+async def create_backup(request: Request, db: Session = Depends(get_db), ...):
+    # Reject if a backup is already queued or running
+    active = db.query(Backup).filter(
+        Backup.status.in_([BackupStatus.QUEUED, BackupStatus.RUNNING])
+    ).first()
+    if active:
+        raise HTTPException(409, "A backup is already in progress")
+    ...
+```
 
 ---
 
@@ -693,14 +758,16 @@ See full implementation in Phase 2 of the detailed plan.
 **File**: `app/workers/backup_worker.py`
 
 Polling worker that:
-1. Polls database for queued backup jobs
-2. Claims jobs atomically using database locks
-3. Executes backup (dump DB, archive files, encrypt, checksum)
-4. Updates progress in database
-5. Stores backup and metadata
-6. Auto-cleanup of old backups
+1. Polls DB for queued backup jobs using `SELECT ... FOR UPDATE SKIP LOCKED`
+2. Claims job atomically, sets `status=running`
+3. Runs `mysqldump --single-transaction` via `asyncio.create_subprocess_exec`
+4. Archives `/app/uploads` with `tar`
+5. Encrypts with `age`
+6. Calculates SHA-256 checksum
+7. Updates `backups` DB record throughout (progress, stage, final status)
+8. Cleans up backups older than `BACKUP_RETENTION_DAYS`
 
-See full implementation in documentation.
+**Stale job detection**: On startup and periodically, reset any `running` jobs older than 2 hours to `failed` (these are from a previous worker crash).
 
 ---
 
@@ -709,36 +776,51 @@ See full implementation in documentation.
 **File**: `app/workers/restore_worker.py`
 
 Polling worker that:
-1. Polls database for queued restore jobs
-2. Enables maintenance mode
-3. Decrypts and verifies backup
-4. Creates safety backup (for rollback)
-5. Restores database and files
-6. Runs migrations
-7. Validates restore
-8. Disables maintenance mode
+1. Polls DB for queued restore jobs
+2. Creates state file: `/app/backups/restore_<id>.state.json`
+3. Takes pre-restore safety snapshot: `mysqldump` → `/app/backups/safety_<id>.sql`
+4. Enables maintenance mode: `touch /app/flags/maintenance.flag`
+5. Decrypts and verifies backup checksum
+6. Restores database via `mysql` CLI
+7. Restores file tree from tar archive
+8. Runs Alembic migrations
+9. Validates restore (smoke-check DB connectivity, row counts)
+10. Disables maintenance mode: `rm /app/flags/maintenance.flag`
+11. Updates state file: `status=completed`
 
-See full implementation in documentation.
+**On failure at any step**:
+```
+→ Run safety snapshot restore (mysql < safety_<id>.sql)
+→ Restore original file tree if partially overwritten
+→ Disable maintenance mode
+→ Update state file: status=failed, error_message=...
+→ If rollback also fails: leave maintenance mode ON, alert admin
+```
+
+**Note**: After restore, the DB has been replaced with the backup's state. The `restores` table in the DB no longer contains the current restore job record. The state file is the authoritative outcome record.
 
 ---
 
 ### Phase 5: Docker Integration (0.5 day)
 
-Update Docker Compose and Dockerfile to:
-- Add backup-worker service
-- Add restore-worker service
-- Install required tools (mysqldump, rsync, age)
-- Configure volumes and secrets
-- Set up proper networking
+Update `docker-compose.yml` and `Dockerfile` to:
+- Add `backup-worker` service
+- Add `restore-worker` service
+- Add `backups` and `flags` named volumes
+- Mount `flags` volume into both `api` and `restore-worker`
+- Install `age`, `mysqldump`, `mysql` client in Dockerfile
+- Add `backup-private-key` secret for restore-worker only
+- Add maintenance mode middleware to `app/main.py`
 
 ---
 
 ### Phase 6: Testing & Documentation (1 day)
 
-- Integration tests for backup/restore flow
+- Integration tests for backup creation flow
+- Integration tests for restore flow (including maintenance mode verification)
+- Integration tests for rollback on simulated failure
 - Manual testing guide
 - API documentation updates
-- README updates
 
 ---
 
@@ -746,14 +828,16 @@ Update Docker Compose and Dockerfile to:
 
 | Generic Strategy | Our Implementation |
 |-----------------|-------------------|
-| **Job Queue** | Celery/RQ with Redis | Database-backed polling (5s interval) |
-| **Database** | Generic RDBMS | MySQL 8.4 with `mysqldump` |
-| **File Storage** | Generic uploads | UUID-based structure (`products/{uuid}/`) |
-| **Worker Architecture** | Heavy Celery workers | Lightweight Python polling containers |
-| **Job Claiming** | Push-based (instant) | Poll-based (5s delay acceptable) |
-| **Orchestration** | Complex job queuing | Simple status-based state machine |
-| **Encryption** | Generic (GPG/KMS) | Age encryption (modern, simple) |
-| **Deployment** | Kubernetes/complex | Docker Compose (fits existing infra) |
+| **Job Queue** | Celery/RQ with Redis → Database-backed polling (5s interval) |
+| **Database** | Generic RDBMS → MySQL 8.4 with `mysqldump` |
+| **File Storage** | Generic uploads → UUID-based structure (`products/{uuid}/`) |
+| **Worker Architecture** | Heavy Celery workers → Lightweight Python polling containers |
+| **Job Claiming** | Push-based (instant) → Poll-based (5s delay acceptable) |
+| **Orchestration** | Complex job queuing → Simple status-based state machine |
+| **Encryption** | Generic (GPG/KMS) → Age encryption (modern, simple) |
+| **Deployment** | Kubernetes/complex → Docker Compose (fits existing infra) |
+| **Restore metadata** | Application DB → Filesystem state file (survives DB restore) |
+| **Maintenance mode** | In-memory/Redis → File flag on shared volume (zero DB overhead) |
 
 ---
 
@@ -763,23 +847,28 @@ Update Docker Compose and Dockerfile to:
 
 - ✅ Public key: Environment variable (safe to expose)
 - ✅ Private key: Docker secret (never in code/database)
-- ✅ Private key only on restore worker
-- ✅ Different keys per environment
-- ⚠️ Key rotation procedure needed
+- ✅ Private key only on restore worker, not API or backup worker
+- ✅ Use different keys per environment
+- ⚠️ Key rotation procedure needed (document separately)
 
 ### 2. Database Credentials
 
-- ✅ Workers have read-only DB credentials (backup)
-- ⚠️ Restore worker needs write access (destructive)
+- ✅ Backup worker: can use read-only DB credentials (only reads application tables)
+- ⚠️ Restore worker: needs full write access (destructive by nature)
 - ✅ Credentials in environment variables
-- ⚠️ Consider using Docker secrets for production
+- ⚠️ Consider Docker secrets for production DB passwords
 
 ### 3. Access Control
 
 - ✅ Backup endpoints: Admin-only
-- ✅ Restore endpoints: Admin-only (super dangerous!)
-- ✅ Maintenance mode: Admin-only
-- ⚠️ Consider requiring 2FA for restore operations
+- ✅ Restore endpoints: Admin-only
+- ✅ Maintenance mode status: Public read (system status), admin write
+- ⚠️ Consider requiring a confirmation token for restore operations (separate UX flow)
+
+### 4. No Docker Socket
+
+- ✅ `pool_pre_ping=True` is already configured — no API restart needed post-restore
+- ✅ No privileged container access required
 
 ---
 
@@ -787,53 +876,27 @@ Update Docker Compose and Dockerfile to:
 
 ### Before Deploying
 
-- [ ] Generate production encryption keys
-- [ ] Store private key in secure secret manager
-- [ ] Configure offsite backup storage (S3/etc)
-- [ ] Set up backup monitoring/alerting
-- [ ] Test full restore procedure
+- [ ] Generate production encryption keys (`age-keygen`)
+- [ ] Store private key securely (Docker secret or secret manager)
+- [ ] Test full backup → restore → validate cycle end-to-end
+- [ ] Test rollback on simulated mid-restore failure
+- [ ] Test maintenance mode blocks requests correctly
+- [ ] Configure backup retention policy (`BACKUP_RETENTION_DAYS`)
 - [ ] Document disaster recovery runbook
-- [ ] Set up scheduled automated backups
-- [ ] Configure backup retention policy
-- [ ] Test maintenance mode behavior
-- [ ] Add 2FA requirement for restores
-- [ ] Set up audit logging
+- [ ] Set up scheduled automated backups (cron or scheduler)
 - [ ] Configure alerting for failed backups
+- [ ] Set up audit logging for backup/restore operations
+- [ ] Configure external sync for backup files (out of scope for this system)
 
 ---
 
-## Estimated Timeline
-
-| Phase | Task | Duration |
-|-------|------|----------|
-| 1 | Database schema & models | 1 day |
-| 2 | API endpoints | 1 day |
-| 3 | Backup worker service | 2 days |
-| 4 | Restore worker service | 2 days |
-| 5 | Docker integration | 0.5 day |
-| 6 | Testing & documentation | 1 day |
-| **Total** | **MVP Implementation** | **7.5 days** |
-
----
-
-## Next Steps
-
-1. **Review both plans**: Compare this async plan with the [existing synchronous plan](BACKUP_RESTORE_IMPLEMENTATION_PLAN.md)
-2. **Choose approach**: Decide based on your requirements:
-   - Synchronous: Simpler, faster to implement, good for small databases
-   - Async (this plan): More robust, better UX, good for large databases
-3. **Generate encryption keys** for development
-4. **Begin Phase 1** (database schema)
-
----
-
-## Questions & Decisions Needed
+## Questions & Decisions Still Open
 
 1. **Backup Frequency**: How often should automated backups run?
 2. **Retention Policy**: How long to keep backups? (default: 30 days)
-3. **Storage Location**: Local volume or S3/remote storage?
-4. **Restore Safeguards**: Require 2FA? Confirmation token?
-5. **Notification Requirements**: Email/Slack on completion?
+3. **Restore Safeguards**: Require a confirmation token in addition to admin auth?
+4. **Notification Requirements**: Email/webhook on backup completion or failure?
+5. **Safety Snapshot Retention**: How long to keep pre-restore safety snapshots?
 
 ---
 

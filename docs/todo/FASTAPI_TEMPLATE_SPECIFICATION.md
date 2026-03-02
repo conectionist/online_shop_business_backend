@@ -2,28 +2,30 @@
 
 ## Table of Contents
 1. [Overview](#overview)
-2. [Project Structure](#project-structure)
-3. [Technology Stack](#technology-stack)
-4. [Configuration Management](#configuration-management)
-5. [Database Setup](#database-setup)
-6. [Application Architecture](#application-architecture)
-7. [Authentication & Authorization](#authentication--authorization)
-8. [Error Handling](#error-handling)
-9. [Logging](#logging)
-10. [API Design Patterns](#api-design-patterns)
-11. [Testing Framework](#testing-framework)
-12. [Docker & Containerization](#docker--containerization)
-13. [CI/CD Pipeline](#cicd-pipeline)
-14. [Security Best Practices](#security-best-practices)
-15. [Code Organization Patterns](#code-organization-patterns)
-16. [Development Workflow](#development-workflow)
-17. [Convenience Scripts](#convenience-scripts)
-18. [Development Guidelines](#development-guidelines)
-19. [AI Rules](#ai-rules)
-20. [Metrics & Observability](#metrics--observability)
-21. [Deployment](#deployment)
-22. [Backup & Restore](#backup--restore)
-23. [Minimal Functionality](#minimal-functionality)
+2. [Design Principle: Template vs User Code Separation](#design-principle-template-vs-user-code-separation)
+3. [Project Structure](#project-structure)
+4. [Technology Stack](#technology-stack)
+5. [Configuration Management](#configuration-management)
+6. [Database Setup](#database-setup)
+7. [Application Architecture](#application-architecture)
+8. [Authentication & Authorization](#authentication--authorization)
+9. [Error Handling](#error-handling)
+10. [Logging](#logging)
+11. [API Design Patterns](#api-design-patterns)
+12. [Testing Framework](#testing-framework)
+13. [Docker & Containerization](#docker--containerization)
+14. [CI/CD Pipeline](#cicd-pipeline)
+15. [Security Best Practices](#security-best-practices)
+16. [Code Organization Patterns](#code-organization-patterns)
+17. [Development Workflow](#development-workflow)
+18. [Convenience Scripts](#convenience-scripts)
+19. [Development Guidelines](#development-guidelines)
+20. [AI Rules](#ai-rules)
+21. [Metrics & Observability](#metrics--observability)
+22. [Deployment](#deployment)
+23. [Backup & Restore](#backup--restore)
+24. [Minimal Functionality](#minimal-functionality)
+25. [Template Repository Setup](#template-repository-setup)
 
 ---
 
@@ -32,12 +34,34 @@
 This document specifies a production-ready FastAPI template project that provides a solid foundation for building RESTful APIs. The template includes all essential infrastructure components (database, authentication, error handling, logging, testing, CI/CD) while maintaining minimal business logic. Developers can fork this template and focus on implementing their domain-specific functionality without reinventing common patterns.
 
 ### Key Principles
+- **Template vs User Code Separation**: Every file is classified as template-owned or user-owned, enabling conflict-free upgrades (see [Design Principle](#design-principle-template-vs-user-code-separation))
 - **Separation of Concerns**: Clear boundaries between API, services, models, and schemas
 - **DRY (Don't Repeat Yourself)**: Reusable patterns and utilities to minimize duplication
-- **Fail Fast**: Configuration validation on startup
+- **Fail Fast**: Configuration validation on startup — all errors collected and reported at once
 - **Security First**: Secure defaults and best practices built-in
 - **Testability**: Comprehensive testing framework ready to use
 - **Production Ready**: Docker, CI/CD, monitoring, and logging configured
+- **Dockerized Dev Tooling**: All dev tools (linting, testing, dependency pinning) run inside Docker — no Python or tools needed on the host
+
+---
+
+## Design Principle: Template vs User Code Separation
+
+Every file in the template is classified as **template-owned** or **user-owned**. When rebasing a fork onto a newer template version:
+
+- **Template-owned files** (`[TEMPLATE]`) may be updated by the template. Users should not edit these, so rebases apply cleanly.
+- **User-owned files** (`[USER]`) are where users put their app-specific code. The template provides stubs but never touches these files after the initial commit.
+- **Mixed files** (`[MIXED]`) are unavoidable shared zones (e.g., `pyproject.toml`). These are structured with clear sections to minimize friction.
+
+This separation means template upgrades produce **zero conflicts** in the common case.
+
+### Rebase Conflict Expectations
+
+When you update the template and rebase a fork:
+
+- **Zero conflicts**: Any change to core infrastructure files (`main.py`, `security.py`, `database.py`, `middleware.py`, `Dockerfile`, CI workflows, `Makefile`, `.dockerignore`)
+- **Low risk**: `pyproject.toml` (template changes `[tool.*]`, fork changes `[project]` — different sections)
+- **Never conflicts**: User endpoint files, service implementations, model definitions, `.env.example`, `README.md` — template never touches these after initial scaffold
 
 ---
 
@@ -47,95 +71,111 @@ This document specifies a production-ready FastAPI template project that provide
 project_root/
 ├── .github/
 │   └── workflows/
-│       ├── api-tests.yml          # Automated test and build pipeline (on push/PR)
-│       └── docker-build-manual.yml # Manual build pipeline (workflow_dispatch)
+│       ├── api-tests.yml              # [TEMPLATE] Automated test and build pipeline (on push/PR)
+│       └── docker-build-manual.yml    # [TEMPLATE] Manual build pipeline (workflow_dispatch)
 ├── app/
-│   ├── __init__.py
-│   ├── main.py                    # FastAPI application entry point
+│   ├── __init__.py                    # [TEMPLATE] Exports __version__ from pyproject.toml
+│   ├── main.py                        # [TEMPLATE] FastAPI application entry point
 │   ├── api/
 │   │   ├── __init__.py
-│   │   ├── api.py                 # Main API router
-│   │   ├── dependencies.py       # Shared dependencies (auth, rate limiting, etc.)
+│   │   ├── api.py                     # [MIXED]    Main API router (template base + user routes)
+│   │   ├── dependencies.py            # [TEMPLATE] Shared dependencies (auth, rate limiting, etc.)
 │   │   └── endpoints/
 │   │       ├── __init__.py
-│   │       ├── health.py          # Health check endpoints
-│   │       └── version.py         # Version endpoint (minimal functionality)
+│   │       ├── health.py              # [TEMPLATE] Health check endpoints
+│   │       └── version.py             # [TEMPLATE] Version endpoint (minimal functionality)
 │   ├── core/
 │   │   ├── __init__.py
-│   │   ├── config.py              # Application configuration
-│   │   ├── database.py            # Database connection and session management
-│   │   ├── security.py           # JWT, password hashing, token management
-│   │   ├── auth_cookies.py       # Cookie helpers and constants for auth tokens
-│   │   ├── rate_limit.py         # Rate limiting (slowapi) shared limiter instance
-│   │   ├── exceptions.py         # Custom exceptions and handlers
-│   │   ├── middleware.py          # Custom middleware (logging, request ID, etc.)
-│   │   └── constants.py           # Application constants
+│   │   ├── config.py                  # [TEMPLATE] Application configuration
+│   │   ├── database.py                # [TEMPLATE] Database connection and session management
+│   │   ├── security.py                # [TEMPLATE] JWT, password hashing, token management
+│   │   ├── auth_cookies.py            # [TEMPLATE] Cookie helpers and constants for auth tokens
+│   │   ├── rate_limit.py              # [TEMPLATE] Rate limiting (slowapi) shared limiter instance
+│   │   ├── exceptions.py              # [TEMPLATE] Custom exceptions and handlers
+│   │   ├── middleware.py              # [TEMPLATE] Custom middleware (logging, request ID, etc.)
+│   │   └── constants.py               # [MIXED]    Application constants (template defaults + user additions)
 │   ├── models/
 │   │   ├── __init__.py
-│   │   ├── base.py                # Base model with common fields (id, timestamps, soft delete)
-│   │   └── refresh_token.py       # Refresh token / session model with device fingerprinting
+│   │   ├── base.py                    # [TEMPLATE] Base model with common fields (id, timestamps, soft delete)
+│   │   └── refresh_token.py           # [TEMPLATE] Refresh token / session model with device fingerprinting
 │   ├── schemas/
 │   │   ├── __init__.py
-│   │   ├── common.py              # Common response schemas
-│   │   ├── auth.py                # Login, token refresh, password change schemas
-│   │   ├── session.py             # Session info and management schemas
-│   │   └── version.py             # Version response schema
+│   │   ├── common.py                  # [TEMPLATE] Common response schemas
+│   │   ├── auth.py                    # [TEMPLATE] Login, token refresh, password change schemas
+│   │   ├── session.py                 # [TEMPLATE] Session info and management schemas
+│   │   └── version.py                 # [TEMPLATE] Version response schema
 │   ├── services/
 │   │   ├── __init__.py
-│   │   ├── base.py                # Base service class with common CRUD operations
-│   │   └── version.py             # Version service (minimal example)
+│   │   ├── base.py                    # [TEMPLATE] Base service class with common CRUD operations
+│   │   └── version.py                 # [TEMPLATE] Version service (minimal example)
 │   └── utils/
 │       ├── __init__.py
-│       ├── logging.py             # Structured logging utilities
-│       ├── validators.py          # Common validation functions
-│       ├── user_agent_parser.py   # User agent parsing for session fingerprinting
-│       └── ip_geolocation.py      # IP geolocation stub (ready for MaxMind/API)
+│       ├── logging.py                 # [TEMPLATE] Structured logging utilities
+│       ├── validators.py              # [TEMPLATE] Common validation functions
+│       ├── user_agent_parser.py       # [TEMPLATE] User agent parsing for session fingerprinting
+│       └── ip_geolocation.py          # [TEMPLATE] IP geolocation stub (ready for MaxMind/API)
 ├── tests/
 │   ├── __init__.py
-│   ├── conftest.py                # Pytest fixtures (DB, client, etc.)
+│   ├── conftest.py                    # [TEMPLATE] Pytest fixtures (DB, client, etc.)
 │   ├── integration/
 │   │   ├── __init__.py
-│   │   ├── test_utils.py           # Base test utilities class
-│   │   ├── test_auth_utils.py      # Authentication test utilities
-│   │   ├── test_health.py          # Health check tests
-│   │   └── test_version.py         # Version endpoint tests (example)
+│   │   ├── test_utils.py              # [TEMPLATE] Base test utilities class
+│   │   ├── test_auth_utils.py         # [TEMPLATE] Authentication test utilities
+│   │   ├── test_health.py             # [TEMPLATE] Health check tests
+│   │   └── test_version.py            # [TEMPLATE] Version endpoint tests (example)
 │   └── unit/
 │       ├── __init__.py
-│       └── test_services.py       # Unit tests for services
+│       └── test_services.py           # [USER]     Unit tests for services
 ├── migrations/
-│   ├── env.py                     # Alembic environment configuration
-│   ├── env.py.template            # Template for env.py
-│   ├── script.py.mako             # Alembic migration script template
-│   └── versions/                  # Migration files
-├── docker/
-│   ├── Dockerfile                 # Production Dockerfile
-│   ├── Dockerfile.test            # Test Dockerfile
-│   └── docker-entrypoint.sh       # Container entrypoint script
-├── .env.example                   # Example environment variables
-├── .env.test                      # Test environment variables
-├── .gitignore
-├── docker-compose.yml             # Production docker-compose
-├── docker-compose.test.yml        # Test docker-compose
-├── docker-compose.monitoring.yml  # Optional monitoring services (Prometheus, Grafana, etc.)
-├── monitoring/                    # Monitoring service configurations
+│   ├── env.py                         # [TEMPLATE] Alembic environment configuration
+│   ├── env.py.template                # [TEMPLATE] Template for env.py
+│   ├── script.py.mako                 # [TEMPLATE] Alembic migration script template
+│   └── versions/                      # [USER]     Migration files
+├── Dockerfile                         # [TEMPLATE] Multi-stage production Dockerfile
+├── Dockerfile.test                    # [TEMPLATE] Test Dockerfile
+├── .dockerignore                      # [TEMPLATE] Docker build context exclusions
+├── docker-entrypoint.sh               # [TEMPLATE] Container entrypoint script
+├── Makefile                           # [TEMPLATE] Common dev commands (all run in Docker)
+├── pyproject.toml                     # [MIXED]    See note below
+├── .env.example                       # [USER]     Example environment variables
+├── .env.test                          # [USER]     Test environment variables
+├── .gitignore                         # [TEMPLATE]
+├── docker-compose.yml                 # [TEMPLATE] Production docker-compose (includes dev profile)
+├── docker-compose.test.yml            # [TEMPLATE] Test docker-compose
+├── docker-compose.monitoring.yml      # [TEMPLATE] Optional monitoring services (Prometheus, Grafana, etc.)
+├── monitoring/                        # [TEMPLATE] Monitoring service configurations
 │   ├── prometheus/
-│   │   └── prometheus.yml         # Prometheus configuration
+│   │   └── prometheus.yml
 │   ├── grafana/
-│   │   ├── provisioning/          # Grafana datasources and dashboards
-│   │   └── dashboards/             # Grafana dashboard JSON files
+│   │   ├── provisioning/
+│   │   └── dashboards/
 │   ├── loki/
-│   │   └── loki-config.yml        # Loki configuration
+│   │   └── loki-config.yml
 │   └── alloy/
-│       └── config.river            # Grafana Alloy configuration (log shipper)
-├── alembic.ini.template           # Alembic configuration template
-├── logging.ini                    # Logging configuration
-├── requirements.txt               # Production dependencies
-├── requirements-test.txt          # Test dependencies
-├── setup_env.sh                   # Environment setup script
-├── scripts/                       # Convenience scripts directory
-│   ├── run_api_integration_tests.sh  # Integration test runner script
-│   └── rollback.sh                # Production rollback script
-└── README.md                      # Project documentation
+│       └── config.river
+├── alembic.ini.template               # [TEMPLATE] Alembic configuration template
+├── logging.ini                        # [TEMPLATE] Logging configuration
+├── requirements.lock                  # [TEMPLATE] Pinned dependencies (generated by pip-compile)
+├── requirements-test.txt              # [TEMPLATE] Test dependencies
+├── setup_env.sh                       # [TEMPLATE] Environment setup script
+├── scripts/                           # [TEMPLATE] Convenience scripts directory
+│   ├── run_api_integration_tests.sh
+│   ├── run_api_integration_tests.py
+│   └── rollback.sh
+└── README.md                          # [USER]     Project documentation
+```
+
+### `pyproject.toml` — the one mixed file
+
+This file is unavoidable as a shared conflict zone since TOML has no include mechanism. To minimize friction, it is structured with clear sections:
+
+```
+[project]            ← USER edits: name, description, dependencies
+version = "..."      ← USER edits: version bumps
+[project.optional-dependencies]
+                     ← TEMPLATE owns: dev tooling deps
+[tool.ruff]          ← TEMPLATE owns: linter config
+[tool.pytest]        ← TEMPLATE owns: test config
 ```
 
 ---
@@ -192,7 +232,7 @@ project_root/
 
 Use environment variables with helper functions for type-safe, validated configuration.
 
-> **✅ Environment Variable Support**: Configuration is read from environment variables or `.env` files via Docker Compose. Required variables (e.g. `JWT_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`) cause the application to exit immediately with a descriptive error if not set.
+> **✅ Environment Variable Support**: Configuration is read from environment variables or `.env` files via Docker Compose. Required variables (e.g. `JWT_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`) are validated at startup — **all** errors are collected and reported at once, then the application exits with clear messages. This prevents the frustrating "fix one, restart, hit the next" cycle.
 
 > **🔒 Production Safety**: The configuration module enforces several production safety rules at startup:
 > - **ALLOWED_HOSTS must be explicit** in production — wildcard `"*"` is rejected with `sys.exit(1)`
@@ -209,7 +249,8 @@ class Settings(BaseSettings):
     """Application settings with validation and type safety."""
     
     # API Configuration
-    API_VERSION: str = "1.0.0"
+    # Note: API_VERSION is no longer a config variable — it is derived from
+    # pyproject.toml via importlib.metadata (see app/__init__.py)
     API_TITLE: str = "FastAPI Template"
     API_DESCRIPTION: str = "Production-ready FastAPI template"
     API_PREFIX: str = "/api/v1"
@@ -2622,21 +2663,42 @@ def test_version_response_format(client: TestClient):
 
 ## Docker & Containerization
 
-### Production Dockerfile
+### Multi-Stage Dockerfile
 
 **File: `Dockerfile`**
 
+The Dockerfile uses **three stages**: `builder` (install deps), `dev` (install deps + dev tools), and runtime (lean production image). Only the runtime stage ships in production.
+
 ```dockerfile
+# ---- Build stage ----
+FROM python:3.14-slim AS builder
+
+WORKDIR /build
+COPY requirements.lock ./
+RUN apt-get update && apt-get install -y curl default-mysql-client && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir -r requirements.lock
+
+# ---- Dev stage ----
+# Used by `docker compose run dev` for lint, test, lock.
+# Mounts source at runtime — nothing else to COPY.
+FROM python:3.14-slim AS dev
+
+WORKDIR /app
+COPY pyproject.toml requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock \
+ && pip install --no-cache-dir ".[dev]"
+
+# ---- Runtime stage ----
 FROM python:3.14-slim
 
 WORKDIR /app
 
-# Copy dependency specification and install system packages
-COPY requirements.txt .
+# Install runtime system dependencies
 RUN apt-get update && apt-get install -y curl default-mysql-client && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy only the application code and required assets (not entire context)
 COPY app/ ./app/
@@ -2658,11 +2720,43 @@ USER appuser
 ENTRYPOINT ["./docker-entrypoint.sh"]
 ```
 
-> **Key improvements over basic Dockerfile**:
+> **Key design decisions**:
+> - **Three stages**: `builder` installs production deps, `dev` installs prod + dev tools (ruff, pytest, pip-tools), runtime is the lean production image
+> - **Dev stage**: Includes ruff, pytest, and pip-tools. Source is bind-mounted at runtime (via docker-compose `dev` service), so the image doesn't need rebuilding when code changes. No Python install needed on the host machine.
 > - **Python 3.14-slim**: Uses latest Python for performance and security
-> - **Unprivileged user**: Runs as `appuser` (UID 1000) instead of root
+> - **Unprivileged user**: Runs as `appuser` (UID 1000) instead of root (runtime stage only — dev runs as root so `make lock` can write `requirements.lock` to the mount)
 > - **Selective COPY**: Only copies needed files, not the entire context (smaller image, no secrets)
 > - **No EXPOSE/HEALTHCHECK in Dockerfile**: These are handled in docker-compose for flexibility
+> - **`ENTRYPOINT` not `CMD`**: Uses entrypoint script for database wait + migrations; can still be overridden with `docker run --entrypoint /bin/bash`
+
+### `.dockerignore`
+
+**File: `.dockerignore`**
+
+Keeps the build context small and prevents secrets, dev files, and unnecessary artifacts from being sent to the Docker daemon or ending up in the image.
+
+```
+.git/
+.github/
+.gitignore
+.dockerignore
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.md
+docs/
+docker-compose*.yml
+.env
+.env.*
+!.env.example
+temp*/
+test-reports/
+tests/
+Makefile
+monitoring/
+```
 
 ### Docker Entrypoint
 
@@ -2863,6 +2957,19 @@ services:
     networks:
       - backend
 
+  # Dev tooling container (used by Makefile for lint, test, lock)
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    volumes:
+      - .:/app
+    working_dir: /app
+    profiles: [dev]
+    networks:
+      - backend
+
 networks:
   frontend:
     driver: bridge
@@ -2875,12 +2982,23 @@ volumes:
     driver: local
 ```
 
+### Dev Container Profile
+
+The `dev` service in `docker-compose.yml`:
+- Builds the `dev` stage of the Dockerfile (ruff, pytest, pip-tools included)
+- Bind-mounts the project root so it always sees current source
+- Uses the `dev` profile so it **doesn't start** with `docker compose up` (only invoked explicitly via `make lint`, `make format`, `make lock`, etc.)
+- Runs as root so `make lock` can write `requirements.lock` back to the mount
+
+This means the Makefile commands like `make lint`, `make format`, and `make lock` all run inside this container, ensuring consistent tooling across all developers without any local Python setup.
+
 > **Key improvements**:
 > - **Resource limits**: Memory (1G) and CPU (1.0) limits with reservations for both API and DB
 > - **Log rotation**: JSON file logging driver with 10MB max-size, 3 files rotation
 > - **Internal network**: Database is on an internal-only network, not exposed to host
 > - **Health check on `/health`**: Uses dedicated health endpoint instead of root
 > - **Build args**: Passes UID/GID for unprivileged user
+> - **Dev profile**: `dev` service with `profiles: [dev]` for dockerized tooling (doesn't start with `up`)
 
 ### Test Docker Compose
 
@@ -3120,11 +3238,11 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Extract app version
+      - name: Extract app version from pyproject.toml
         id: version
         run: |
-          API_VERSION=$(grep -o 'API_VERSION = "[^"]*"' app/core/config.py | cut -d'"' -f2)
-          echo "version=$API_VERSION" >> $GITHUB_OUTPUT
+          APP_VERSION=$(grep -m1 '^version' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$APP_VERSION" >> $GITHUB_OUTPUT
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -3287,23 +3405,36 @@ The template enforces several security rules at startup that prevent common prod
 
 **Startup Validation** (in `app/core/config.py`):
 
+All configuration errors are **collected** and reported at once, then the application exits. This prevents the frustrating cycle of fixing one error, restarting, and hitting the next.
+
 ```python
+# Collect ALL configuration errors before exiting
+errors = []
+
+# Check required environment variables
+for var_name in ("JWT_SECRET_KEY", "ADMIN_USERNAME", "ADMIN_PASSWORD"):
+    if not os.environ.get(var_name):
+        errors.append(f"Required env var {var_name} is not set")
+
 # Production must use explicit host(s) — wildcard is rejected
 if ENVIRONMENT == "production":
     if not allowed_hosts_str or allowed_hosts_str.strip() == "*":
-        logger.error(
-            "CRITICAL: Production requires ALLOWED_HOSTS to be set to explicit host(s), not '*'. "
+        errors.append(
+            "Production requires ALLOWED_HOSTS to be set to explicit host(s), not '*'. "
             "Set ALLOWED_HOSTS to your API host(s), e.g. api.example.com"
         )
-        sys.exit(1)
 
 # Cookie SameSite must be "lax" or "strict" — "none" is rejected
 if COOKIE_SAMESITE not in ("lax", "strict"):
-    logger.error(
-        "CRITICAL: COOKIE_SAMESITE must be 'lax' or 'strict', got '%s'. "
-        "'none' is not allowed as it disables CSRF protection.",
-        COOKIE_SAMESITE,
+    errors.append(
+        f"COOKIE_SAMESITE must be 'lax' or 'strict', got '{COOKIE_SAMESITE}'. "
+        "'none' is not allowed as it disables CSRF protection."
     )
+
+# Report all errors at once, then exit
+if errors:
+    for e in errors:
+        logger.error("CRITICAL: %s", e)
     sys.exit(1)
 ```
 
@@ -3652,11 +3783,111 @@ fi
 echo "Environment setup complete!"
 ```
 
-### Requirements Files
+### Version Management (Single Source of Truth)
 
-**File: `requirements.txt`**
+**File: `pyproject.toml`** (version and project metadata)
+
+The version is defined in `pyproject.toml` and extracted everywhere else — no manual `VERSION` constant to keep in sync.
+
+**File: `app/__init__.py`**
+
+```python
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("fastapi-template")
+except PackageNotFoundError:
+    # Fallback for running without install (e.g. directly in Docker)
+    import re
+    from pathlib import Path
+
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    match = re.search(r'^version\s*=\s*"(.+?)"', pyproject.read_text(), re.MULTILINE)
+    __version__ = match.group(1) if match else "0.0.0-unknown"
+```
+
+This replaces the hardcoded `API_VERSION` config variable. The version endpoint and health checks use `__version__` from this module. CI extracts the version via `grep`/`sed` — no Python import needed.
+
+### Dependency Management (pyproject.toml + pip-compile)
+
+**File: `pyproject.toml`** `[MIXED]`
+
+`pyproject.toml` replaces the old `requirements.txt` as the single source for project metadata, dependencies, and tool configuration. It uses **loose constraints** for development flexibility.
+
+```toml
+[project]
+name = "fastapi-template"
+version = "1.0.0"
+description = "Production-ready FastAPI API server template"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.128,<1",
+    "uvicorn>=0.40,<1",
+    "pydantic>=2.12,<3",
+    "sqlalchemy>=2.0,<3",
+    "alembic>=1.18,<2",
+    "mysql-connector-python>=9.5,<10",
+    "PyMySQL>=1.1,<2",
+    "python-multipart>=0.0.22",
+    "Pillow>=11.3,<12",
+    "PyJWT>=2.11,<3",
+    "passlib[argon2]>=1.7,<2",
+    "debugpy>=1.8,<2",
+    "slowapi>=0.1,<1",
+    "user-agents>=2.2,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.9",
+    "pip-tools>=7.0",
+    "requests>=2.32",
+    "pytest-json-report>=1.5",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "LOG",  # flake8-logging
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+```
+
+**Ruff** replaces flake8 + black + isort with a single, fast tool. The `[tool.ruff]` section is template-owned and provides consistent code quality across all projects forked from the template.
+
+### Dependency Pinning with pip-compile
+
+The template uses a **two-file approach**:
+
+1. **`pyproject.toml`** — Loose constraints (e.g., `fastapi>=0.128,<1`) for development flexibility
+2. **`requirements.lock`** — Exact pins (e.g., `fastapi==0.128.0`) generated by `pip-compile` for reproducible builds
+
+**Generating the lock file**:
+
+```bash
+make lock   # runs: pip-compile pyproject.toml -o requirements.lock
+```
+
+The Dockerfile installs from `requirements.lock` for reproducible builds. `pyproject.toml` has the loose constraints for development.
+
+**File: `requirements.lock`** (generated, do not edit manually)
 
 ```
+# This file is generated by pip-compile from pyproject.toml
+# Do not edit manually. Run `make lock` to regenerate.
 fastapi==0.128.0
 uvicorn==0.40.0
 pydantic==2.12.5
@@ -3671,9 +3902,10 @@ passlib[argon2]==1.7.4
 debugpy==1.8.20
 slowapi==0.1.9
 user-agents==2.2.0
+# ... plus all transitive dependencies with exact versions
 ```
 
-**File: `requirements-test.txt`**
+**File: `requirements-test.txt`** (kept separate for test container)
 
 ```
 pytest
@@ -3685,7 +3917,57 @@ pytest-json-report
 
 ## Convenience Scripts
 
-The template includes several convenience scripts to streamline common development and deployment tasks. These scripts automate repetitive operations and reduce the chance of errors.
+### Makefile
+
+**File: `Makefile`**
+
+The Makefile is the universal interface for development. All dev tooling runs inside Docker containers — no Python, ruff, pytest, or pip-tools needed on the host. The only prerequisites are Docker and `make`.
+
+```makefile
+.PHONY: build run stop logs lint format test lock migrate shell
+
+DEV = docker compose run --rm --no-deps dev
+
+build:
+	docker compose build
+
+run:
+	docker compose up -d
+
+stop:
+	docker compose down
+
+logs:
+	docker compose logs -f
+
+lint:
+	$(DEV) ruff check app/ tests/
+	$(DEV) ruff format --check app/ tests/
+
+format:
+	$(DEV) ruff format app/ tests/
+
+test:
+	docker compose -f docker-compose.test.yml --env-file .env.test up --build --abort-on-container-exit api_integration_tests
+
+lock:
+	$(DEV) pip-compile pyproject.toml -o requirements.lock
+
+migrate:
+	docker compose exec api alembic upgrade head
+
+shell:
+	docker compose exec api /bin/bash
+```
+
+**Key design**:
+- `DEV` variable targets the `dev` Docker Compose service (see [Dev Container Profile](#dev-container-profile))
+- `make lint` / `make format` run ruff inside Docker — no local Python install needed
+- `make lock` regenerates `requirements.lock` from `pyproject.toml` constraints
+- `make test` runs the full integration test suite via docker-compose
+- `make shell` opens a shell in the running API container for debugging
+
+The template includes several additional convenience scripts to streamline common development and deployment tasks. These scripts automate repetitive operations and reduce the chance of errors.
 
 ### Python Test Runner
 
@@ -6604,6 +6886,98 @@ cryptography>=41.0.0  # For optional backup encryption
 
 ---
 
+## Template Repository Setup
+
+This repo is designed as a **GitHub Template Repository**. You create it once, then stamp out as many project repos as you need — each one stays connected to the template so you can pull in future improvements via rebase.
+
+### One-time setup (template repo)
+
+1. Create the repository on GitHub.
+2. Implement all template-owned files from this spec and push to `main`.
+3. Go to **Settings → General** and check **"Template repository"**.
+
+This enables the **"Use this template"** button on the repo page.
+
+### Creating a new project from the template
+
+1. On GitHub, click **"Use this template" → "Create a new repository"**.
+   Name it after your project (e.g. `my-api-project`).
+2. Clone your new repo and connect it back to the template:
+
+```bash
+git clone git@github.com:you/my-api-project.git
+cd my-api-project
+git remote add template git@github.com:you/fastapi-template.git
+```
+
+3. Follow the project checklist below.
+
+You can repeat this for as many projects as you want — unlike forks, there is no one-per-account limit.
+
+### Project checklist
+
+Once you have a new repo from the template:
+
+1. **Search & replace** the template project name with your project name
+   (in `pyproject.toml` `[project].name` and `app/__init__.py`).
+2. **Update** `OWNER/REPO` in CI workflow and rollback script with your GitHub `user/repo`.
+3. **Edit** `pyproject.toml` — update project name, description, and add your dependencies.
+4. **Run** `make lock` to pin dependencies.
+5. **Copy** `.env.example` → `.env` and fill in values.
+6. **Add your models** in `app/models/`, **endpoints** in `app/api/endpoints/`, **services** in `app/services/`, and **schemas** in `app/schemas/`.
+7. **Generate your initial migration**: `alembic revision --autogenerate -m "initial"`.
+8. **Run** `make build && make run`.
+
+Everything else (Docker, CI, authentication, session management, logging, rate limiting, health checks, versioning) works out of the box.
+
+### Syncing template updates to project repos
+
+When you improve the template (e.g. update the Dockerfile, CI workflow, middleware, or auth system), pull those changes into each project repo:
+
+```bash
+cd my-api-project
+git fetch template
+git rebase template/main
+```
+
+Because project repos only modify **user-owned files** and the template only modifies **template-owned files**, these rebases resolve cleanly. See [Design Principle: Template vs User Code Separation](#design-principle-template-vs-user-code-separation) for the full conflict analysis.
+
+### Files you edit (user-owned)
+
+| File | What you do |
+|---|---|
+| `app/api/endpoints/*.py` | Your API endpoint implementations |
+| `app/models/*.py` | Your SQLAlchemy models |
+| `app/services/*.py` | Your business logic |
+| `app/schemas/*.py` | Your Pydantic request/response schemas |
+| `tests/unit/*.py` | Your unit tests |
+| `migrations/versions/` | Your migration files |
+| `.env.example` | Document your env vars |
+| `README.md` | Your documentation |
+| `pyproject.toml` | Only: `name`, `description`, `version`, `dependencies` |
+
+### Files you never edit (template-owned)
+
+| File | What it does |
+|---|---|
+| `app/main.py` | FastAPI app entry point, middleware stack |
+| `app/core/config.py` | Configuration loading + validation |
+| `app/core/security.py` | JWT + password hashing |
+| `app/core/auth_cookies.py` | Cookie management |
+| `app/core/database.py` | Database connection + session |
+| `app/core/middleware.py` | All middleware (CORS, CORP, Origin validation, logging) |
+| `app/core/rate_limit.py` | Rate limiter instance |
+| `app/core/exceptions.py` | Exception handling |
+| `app/services/auth.py` | Authentication service |
+| `app/utils/*.py` | Utility functions |
+| `Dockerfile` | Multi-stage image build |
+| `docker-compose.yml` | Production + dev compose |
+| `.github/workflows/*.yml` | CI/CD pipelines |
+| `Makefile` | Common commands |
+| `.gitignore` / `.dockerignore` | Ignore rules |
+
+---
+
 ## Minimal Functionality
 
 The template includes only essential endpoints:
@@ -6623,13 +6997,20 @@ All other functionality (authentication, CRUD operations, etc.) should be added 
 This template provides:
 
 ✅ **Complete Infrastructure**: Database, authentication, error handling, logging
+✅ **Template/User Separation**: Clear ownership of every file — conflict-free upgrades via rebase
+✅ **Dockerized Dev Tooling**: Makefile + dev container profile — no local Python needed
+✅ **Multi-Stage Docker Build**: Builder, dev, and runtime stages for lean production images
+✅ **Dependency Pinning**: `pyproject.toml` (loose) + `requirements.lock` (exact) via pip-compile
+✅ **Code Quality**: Ruff for linting + formatting, configured in pyproject.toml
+✅ **Single Version Source**: `pyproject.toml` → `importlib.metadata` — no manual constant to sync
 ✅ **Testing Framework**: Integration and unit test utilities ready to use
-✅ **Docker Setup**: Production and test containers configured
-✅ **CI/CD**: Automated testing and Docker builds
-✅ **Security**: JWT auth, rate limiting, input validation
+✅ **Docker Setup**: Production, test, and dev containers configured
+✅ **CI/CD**: Automated testing and multi-arch Docker builds
+✅ **Security**: Cookie-based auth, rate limiting, CSRF protection, input validation
 ✅ **Metrics & Observability**: Prometheus metrics with optional Grafana, Loki, Sentry integration
 ✅ **Backup & Restore**: Comprehensive backup/restore system with optional encryption and file backup
 ✅ **Best Practices**: Code organization, error handling, logging patterns
 ✅ **Minimal Logic**: Only essential endpoints, ready for customization
+✅ **Template Repo Guide**: Fork, connect remote, rebase for updates
 
 Developers can fork this template and immediately start building their domain-specific functionality without worrying about infrastructure concerns.

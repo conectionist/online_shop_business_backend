@@ -62,18 +62,23 @@ project_root/
 │   │       └── version.py         # Version endpoint (minimal functionality)
 │   ├── core/
 │   │   ├── __init__.py
-│   │   ├── config.py              # Application configuration (Pydantic Settings)
+│   │   ├── config.py              # Application configuration
 │   │   ├── database.py            # Database connection and session management
 │   │   ├── security.py           # JWT, password hashing, token management
+│   │   ├── auth_cookies.py       # Cookie helpers and constants for auth tokens
+│   │   ├── rate_limit.py         # Rate limiting (slowapi) shared limiter instance
 │   │   ├── exceptions.py         # Custom exceptions and handlers
 │   │   ├── middleware.py          # Custom middleware (logging, request ID, etc.)
 │   │   └── constants.py           # Application constants
 │   ├── models/
 │   │   ├── __init__.py
-│   │   └── base.py                # Base model with common fields (id, timestamps, soft delete)
+│   │   ├── base.py                # Base model with common fields (id, timestamps, soft delete)
+│   │   └── refresh_token.py       # Refresh token / session model with device fingerprinting
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── common.py              # Common response schemas
+│   │   ├── auth.py                # Login, token refresh, password change schemas
+│   │   ├── session.py             # Session info and management schemas
 │   │   └── version.py             # Version response schema
 │   ├── services/
 │   │   ├── __init__.py
@@ -82,7 +87,9 @@ project_root/
 │   └── utils/
 │       ├── __init__.py
 │       ├── logging.py             # Structured logging utilities
-│       └── validators.py          # Common validation functions
+│       ├── validators.py          # Common validation functions
+│       ├── user_agent_parser.py   # User agent parsing for session fingerprinting
+│       └── ip_geolocation.py      # IP geolocation stub (ready for MaxMind/API)
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py                # Pytest fixtures (DB, client, etc.)
@@ -151,6 +158,8 @@ project_root/
 - **PyJWT**: JWT token handling
 - **passlib[argon2]**: Password hashing (Argon2 algorithm)
 - **python-multipart**: File uploads support
+- **slowapi**: Per-IP, per-endpoint rate limiting
+- **user-agents**: User agent parsing for session device fingerprinting
 
 ### Validation & Serialization
 - **Pydantic** 2.x: Data validation and settings management
@@ -181,14 +190,15 @@ project_root/
 
 **File: `app/core/config.py`**
 
-Use `pydantic-settings` for type-safe, validated configuration with environment variable support.
+Use environment variables with helper functions for type-safe, validated configuration.
 
-> **✅ Environment Variable Support**: Pydantic Settings automatically reads from:
-> - Environment variables (highest priority)
-> - `.env` files (loaded automatically)
-> - Default values in the class (lowest priority)
-> 
-> This means all configuration can be set via Docker Compose environment variables or `.env` files. The values in the class definition are just defaults/fallbacks. The `SettingsConfigDict` with `env_file=".env"` ensures that environment variables from Docker Compose, `.env` files, or system environment will override the defaults.
+> **✅ Environment Variable Support**: Configuration is read from environment variables or `.env` files via Docker Compose. Required variables (e.g. `JWT_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`) cause the application to exit immediately with a descriptive error if not set.
+
+> **🔒 Production Safety**: The configuration module enforces several production safety rules at startup:
+> - **ALLOWED_HOSTS must be explicit** in production — wildcard `"*"` is rejected with `sys.exit(1)`
+> - **COOKIE_SAMESITE must be "lax" or "strict"** — `"none"` is rejected (disables CSRF protection)
+> - **OpenAPI docs are disabled by default** in production (enabled in dev/test)
+> - **Login rate limits are strict** in production (5/5min) but relaxed in dev/test (1000/5min)
 
 ```python
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -231,15 +241,30 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    
+
+    # Cookie Configuration (for httpOnly cookie-based auth)
+    COOKIE_SECURE: bool = True  # True in production (HTTPS-only), False in dev
+    COOKIE_SAMESITE: str = "lax"  # "lax" or "strict" only; "none" is rejected
+    COOKIE_DOMAIN: str = ""  # Empty = use default host; set to API domain in production
+    COOKIE_PATH: str = "/"  # Path attribute for auth cookies
+    # Derived cookie lifetimes (computed from JWT settings):
+    # ACCESS_TOKEN_COOKIE_MAX_AGE = JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    # REFRESH_TOKEN_COOKIE_MAX_AGE = JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+
     # CORS Configuration
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:8000"
     ]
-    
+
+    # Cross-Origin Resource Policy (CORP)
+    CORP_POLICY: str = "same-site"  # "same-origin", "same-site", or "cross-origin"
+
+    # Frontend URL (used for links in notifications, etc.)
+    FRONTEND_URL: str = "http://localhost:3000"
+
     # Security
-    ALLOWED_HOSTS: List[str] = ["*"]
+    ALLOWED_HOSTS: List[str] = ["*"]  # MUST be explicit in production (not "*")
     TRUSTED_PROXIES: List[str] = ["127.0.0.1", "localhost"]
     
     # Logging
@@ -252,10 +277,11 @@ class Settings(BaseSettings):
     # OpenAPI Documentation
     ENABLE_OPENAPI_DOCS: bool = True
     
-    # Rate Limiting
-    RATE_LIMIT_ENABLED: bool = True
-    RATE_LIMIT_PER_MINUTE: int = 60
-    RATE_LIMIT_PER_HOUR: int = 1000
+    # Rate Limiting (per-IP, per-endpoint via slowapi)
+    ORDER_RATE_LIMIT_MAX: int = 10  # Max orders per IP per window
+    ORDER_RATE_LIMIT_WINDOW: str = "24hour"  # slowapi window format
+    LOGIN_RATE_LIMIT_MAX: int = 5  # Max login attempts per IP per window (production default)
+    LOGIN_RATE_LIMIT_WINDOW: str = "5minute"  # slowapi window format
     
     # Admin User (for initial setup)
     ADMIN_USERNAME: str  # Required
@@ -335,8 +361,20 @@ JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
 CORS_ORIGINS=http://localhost:3000,http://localhost:8000
 
 # Security
-ALLOWED_HOSTS=*
+ALLOWED_HOSTS=*  # MUST be explicit in production (not "*")
 TRUSTED_PROXIES=127.0.0.1,localhost
+
+# Cookie-based auth
+# COOKIE_SECURE=true       # Set to true for HTTPS-only cookies (auto in production)
+# COOKIE_SAMESITE=lax      # "lax" or "strict" only; "none" is rejected
+# COOKIE_DOMAIN=           # Set to API domain in production
+# COOKIE_PATH=/
+
+# Cross-Origin Resource Policy
+# CORP_POLICY=same-site    # "same-origin", "same-site", or "cross-origin"
+
+# Frontend URL (for notification links, etc.)
+# FRONTEND_URL=http://localhost:3000
 
 # Logging
 LOG_LEVEL=INFO
@@ -345,9 +383,11 @@ LOG_FORMAT=json
 # OpenAPI
 ENABLE_OPENAPI_DOCS=true
 
-# Rate Limiting
-RATE_LIMIT_ENABLED=true
-RATE_LIMIT_PER_MINUTE=60
+# Rate Limiting (per-IP, per-endpoint via slowapi)
+ORDER_RATE_LIMIT_MAX=10
+ORDER_RATE_LIMIT_WINDOW=24hour
+LOGIN_RATE_LIMIT_MAX=5
+LOGIN_RATE_LIMIT_WINDOW=5minute
 
 # Admin
 ADMIN_USERNAME=admin
@@ -866,6 +906,11 @@ app = FastAPI(
 )
 
 # Add middleware (order matters!)
+
+# Rate limiting (slowapi): per-IP, per-endpoint
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
 app.add_middleware(ErrorHandlingMiddleware)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(LoggingMiddleware)
@@ -880,6 +925,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Cross-Origin Resource Policy (CORP) — adds header to all responses
+app.add_middleware(CORPMiddleware)
+
+# CSRF Origin Validation — rejects mutating requests from unknown origins
+app.add_middleware(OriginValidationMiddleware)
 
 # Setup exception handlers
 setup_exception_handlers(app)
@@ -1010,6 +1061,23 @@ class VersionResponse(BaseModel):
 
 ## Authentication & Authorization
 
+### Overview
+
+The template uses **httpOnly cookie-based authentication** instead of Bearer token headers. This provides stronger security against XSS attacks since JavaScript cannot access httpOnly cookies.
+
+**How it works**:
+1. Client sends `POST /api/v1/auth/login` with username/password
+2. Server validates credentials, creates JWT access + refresh tokens
+3. Tokens are set as **httpOnly, Secure, SameSite** cookies on the response
+4. Browser automatically sends cookies on subsequent requests
+5. Server reads tokens from cookies (not from Authorization header)
+
+**Security advantages over Bearer tokens**:
+- Tokens cannot be stolen via XSS (JavaScript can't read httpOnly cookies)
+- SameSite attribute provides CSRF protection
+- Secure flag ensures cookies are only sent over HTTPS
+- No token storage in localStorage/sessionStorage (common XSS target)
+
 ### Security Utilities
 
 **File: `app/core/security.py`**
@@ -1017,13 +1085,12 @@ class VersionResponse(BaseModel):
 ```python
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from uuid import uuid4
 import jwt
 from passlib.context import CryptContext
-from fastapi import HTTPException, status
-
 from app.core.config import settings
 
-# Password hashing context using Argon2
+# Password hashing context using Argon2 (more secure than bcrypt)
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -1040,20 +1107,15 @@ def create_access_token(
 ) -> str:
     """Create JWT access token."""
     to_encode = data.copy()
-    
+
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(
             minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
         )
-    
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.now(timezone.utc),
-        "type": "access"
-    })
-    
+
+    to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(
         to_encode,
         settings.JWT_SECRET_KEY,
@@ -1065,22 +1127,22 @@ def create_refresh_token(
     data: dict,
     expires_delta: Optional[timedelta] = None
 ) -> str:
-    """Create JWT refresh token."""
+    """Create JWT refresh token with unique identifiers for collision avoidance."""
     to_encode = data.copy()
-    
+
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(
             days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
         )
-    
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.now(timezone.utc),
-        "type": "refresh"
-    })
-    
+
+    # Ensure each refresh token issuance is unique to avoid collisions when
+    # persisting token hashes for revocation.
+    to_encode.setdefault("iat", datetime.now(timezone.utc))
+    to_encode.setdefault("jti", uuid4().hex)
+
+    to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(
         to_encode,
         settings.JWT_SECRET_KEY,
@@ -1089,7 +1151,7 @@ def create_refresh_token(
     return encoded_jwt
 
 def verify_token(token: str) -> Optional[dict]:
-    """Verify and decode JWT token."""
+    """Verify and decode JWT token. Returns None on failure."""
     try:
         payload = jwt.decode(
             token,
@@ -1097,91 +1159,432 @@ def verify_token(token: str) -> Optional[dict]:
             algorithms=[settings.JWT_ALGORITHM]
         )
         return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired"
-        )
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+    except jwt.PyJWTError:
+        return None
 
 def is_token_expired(token: str) -> bool:
     """Check if token is expired."""
     try:
-        payload = verify_token(token)
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
         exp = payload.get("exp")
         if exp is None:
             return True
         return datetime.now(timezone.utc) > datetime.fromtimestamp(exp, tz=timezone.utc)
-    except HTTPException:
+    except jwt.PyJWTError:
         return True
 ```
 
-### Authentication Dependencies
+### Cookie Management
 
-**File: `app/api/dependencies.py`**
+**File: `app/core/auth_cookies.py`**
 
 ```python
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+"""Helpers and constants for authentication cookies."""
+
+from typing import Any, Dict
+from fastapi import Response
+from app.core.config import settings
+
+# Public cookie names for auth tokens
+ACCESS_TOKEN_COOKIE_NAME = "access_token"
+REFRESH_TOKEN_COOKIE_NAME = "refresh_token"
+
+def _base_cookie_params(max_age: int) -> Dict[str, Any]:
+    """Build base cookie parameters shared by auth cookies."""
+    params: Dict[str, Any] = {
+        "httponly": True,
+        "secure": settings.COOKIE_SECURE,
+        "samesite": settings.COOKIE_SAMESITE,
+        "path": settings.COOKIE_PATH,
+        "max_age": max_age,
+    }
+    # Only set domain if configured
+    if settings.COOKIE_DOMAIN:
+        params["domain"] = settings.COOKIE_DOMAIN
+    return params
+
+def set_auth_cookies(
+    response: Response,
+    access_token: str,
+    refresh_token: str,
+) -> None:
+    """Set access and refresh token cookies on the given response."""
+    response.set_cookie(
+        key=ACCESS_TOKEN_COOKIE_NAME,
+        value=access_token,
+        **_base_cookie_params(settings.ACCESS_TOKEN_COOKIE_MAX_AGE),
+    )
+    response.set_cookie(
+        key=REFRESH_TOKEN_COOKIE_NAME,
+        value=refresh_token,
+        **_base_cookie_params(settings.REFRESH_TOKEN_COOKIE_MAX_AGE),
+    )
+
+def clear_auth_cookies(response: Response) -> None:
+    """Clear auth cookies on the given response."""
+    for cookie_name, max_age_setting in [
+        (ACCESS_TOKEN_COOKIE_NAME, settings.ACCESS_TOKEN_COOKIE_MAX_AGE),
+        (REFRESH_TOKEN_COOKIE_NAME, settings.REFRESH_TOKEN_COOKIE_MAX_AGE),
+    ]:
+        params = _base_cookie_params(max_age_setting)
+        response.set_cookie(
+            key=cookie_name,
+            value="",
+            max_age=0,
+            **{k: v for k, v in params.items() if k not in {"max_age"}},
+        )
+```
+
+### Session Model (Refresh Token with Device Fingerprinting)
+
+**File: `app/models/refresh_token.py`**
+
+```python
+from sqlalchemy import Column, ForeignKey, Integer, String, TIMESTAMP, text, Index
+from app.core.database import Base
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    admin_id = Column(Integer, ForeignKey("admins.id"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+
+    created_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    last_used_at = Column(TIMESTAMP, nullable=True)
+    expires_at = Column(TIMESTAMP, nullable=False, index=True)
+    revoked_at = Column(TIMESTAMP, nullable=True)
+    replaced_by_token_id = Column(Integer, ForeignKey("refresh_tokens.id"), nullable=True)
+
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(512), nullable=True)
+
+    # Enhanced session metadata (from user agent parsing)
+    session_name = Column(String(100), nullable=True)   # e.g. "Chrome on macOS"
+    device_type = Column(String(50), nullable=True)     # desktop, mobile, tablet, unknown
+    browser_name = Column(String(50), nullable=True)    # Chrome, Firefox, Safari, etc.
+    os_name = Column(String(50), nullable=True)         # Windows, macOS, Linux, iOS, Android
+    location_city = Column(String(100), nullable=True)
+    location_country = Column(String(2), nullable=True) # ISO country code
+
+    __table_args__ = (
+        Index("idx_refresh_tokens_admin_id", "admin_id"),
+        Index("idx_refresh_tokens_expires_at", "expires_at"),
+        Index("idx_refresh_tokens_admin_active", "admin_id", "revoked_at", "expires_at"),
+        {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_unicode_ci"},
+    )
+```
+
+### Authentication Service
+
+**File: `app/services/auth.py`**
+
+The authentication service handles cookie-based auth, session management, and device fingerprinting.
+
+```python
+import hashlib
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from fastapi import HTTPException, status, Depends, Request
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
-from app.core.security import verify_token
-from app.models.admin import Admin  # Example model
+from app.core.security import (
+    get_password_hash, verify_password,
+    create_access_token, create_refresh_token, verify_token, is_token_expired
+)
+from app.core.config import settings
+from app.core.auth_cookies import ACCESS_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_NAME
+from app.models.admin import Admin
+from app.models.refresh_token import RefreshToken
 
-# Security scheme
-security = HTTPBearer()
+logger = logging.getLogger(__name__)
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+def hash_refresh_token(token: str) -> str:
+    """Hash refresh token for storage (never store raw tokens)."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def get_current_admin_from_cookie(
+    request: Request,
+    db: Session = Depends(get_db),
 ) -> Admin:
     """
-    Get current authenticated user from JWT token.
-    
-    This is a template - replace Admin with your actual user model.
-    """
-    token = credentials.credentials
-    payload = verify_token(token)
-    
-    if payload.get("type") != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token type"
-        )
-    
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload"
-        )
-    
-    user = db.query(Admin).filter(Admin.id == int(user_id)).first()
-    if not user or user.is_deleted:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-    
-    return user
+    Get the current authenticated admin from the access_token cookie.
 
-# Optional: Role-based access control
-async def require_role(required_role: str):
-    """Dependency factory for role-based access control."""
-    async def role_checker(
-        current_user: Admin = Depends(get_current_user)
-    ) -> Admin:
-        # Implement role checking logic
-        # if current_user.role != required_role:
-        #     raise HTTPException(status_code=403, detail="Insufficient permissions")
-        return current_user
-    return role_checker
+    Validates:
+    1. Access token cookie exists and is valid
+    2. Token is not expired
+    3. Token type is "access" (reject refresh tokens)
+    4. If refresh token cookie is present, session must exist and be active
+    5. Session admin_id matches token admin_id
+    """
+    token = request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication token")
+
+    if is_token_expired(token):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
+
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Access token required")
+
+    # If a refresh token cookie is present, require a valid, active session
+    refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
+    session = None
+    if refresh_token:
+        session = get_current_session(db, refresh_token)
+        if not session:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session not found")
+        if session.revoked_at is not None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked")
+        if session.expires_at <= datetime.now(timezone.utc).replace(tzinfo=None):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+
+    admin_id = payload.get("sub")
+    if not admin_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+    if session and session.admin_id != int(admin_id):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session does not match token")
+
+    admin = db.query(Admin).filter(Admin.id == int(admin_id)).first()
+    if not admin:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
+
+    return admin
+
+
+def store_refresh_token(
+    db: Session,
+    admin_id: int,
+    refresh_token: str,
+    *,
+    expires_at: datetime,
+    request: Optional[Request] = None,
+) -> RefreshToken:
+    """
+    Store refresh token with session metadata.
+
+    Key behaviors:
+    - Parses user agent for device/browser/OS info
+    - Gets geolocation from IP (stub for MVP)
+    - Revokes existing active sessions from the same device fingerprint
+      (same device_type + browser_name + os_name)
+    """
+    from app.utils.user_agent_parser import parse_user_agent
+    from app.utils.ip_geolocation import get_location_from_ip
+
+    token_hash = hash_refresh_token(refresh_token)
+    ip_address, user_agent = _get_request_meta(request)
+    ua_info = parse_user_agent(user_agent)
+    location_info = get_location_from_ip(ip_address)
+
+    # Revoke existing active sessions from the same device fingerprint
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.query(RefreshToken).filter(
+        RefreshToken.admin_id == admin_id,
+        RefreshToken.device_type == ua_info["device_type"],
+        RefreshToken.browser_name == ua_info["browser_name"],
+        RefreshToken.os_name == ua_info["os_name"],
+        RefreshToken.revoked_at.is_(None),
+        RefreshToken.expires_at > now,
+    ).update({"revoked_at": now}, synchronize_session=False)
+
+    row = RefreshToken(
+        admin_id=admin_id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        session_name=ua_info["session_name"],
+        device_type=ua_info["device_type"],
+        browser_name=ua_info["browser_name"],
+        os_name=ua_info["os_name"],
+        location_city=location_info["city"],
+        location_country=location_info["country"],
+    )
+    db.add(row)
+    return row
+
+
+# Session Management Functions
+
+def get_active_sessions(db: Session, admin_id: int) -> list[RefreshToken]:
+    """Get all active (non-revoked, non-expired) sessions for an admin."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return (
+        db.query(RefreshToken)
+        .filter(RefreshToken.admin_id == admin_id)
+        .filter(RefreshToken.revoked_at.is_(None))
+        .filter(RefreshToken.expires_at > now)
+        .order_by(RefreshToken.last_used_at.desc())
+        .all()
+    )
+
+def revoke_session_by_id(db: Session, session_id: int, admin_id: int) -> bool:
+    """Revoke a specific session by ID."""
+    session = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.id == session_id, RefreshToken.admin_id == admin_id)
+        .one_or_none()
+    )
+    if not session or session.revoked_at is not None:
+        return False
+    session.revoked_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    return True
+
+def revoke_other_refresh_tokens(db: Session, admin_id: int, current_token_hash: str) -> int:
+    """Revoke all refresh tokens for an admin except the current session."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    updated = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.admin_id == admin_id)
+        .filter(RefreshToken.revoked_at.is_(None))
+        .filter(RefreshToken.token_hash != current_token_hash)
+        .update({RefreshToken.revoked_at: now}, synchronize_session=False)
+    )
+    return int(updated or 0)
+
+def get_current_session(db: Session, refresh_token: str) -> Optional[RefreshToken]:
+    """Get the current session from the refresh token cookie."""
+    token_hash = hash_refresh_token(refresh_token)
+    return db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).one_or_none()
+
+def cleanup_expired_sessions(db: Session, days_to_keep: int = 30) -> int:
+    """Delete expired sessions older than the specified number of days."""
+    cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_to_keep)
+    deleted = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.expires_at < cutoff_date)
+        .delete(synchronize_session=False)
+    )
+    return int(deleted or 0)
+```
+
+### Authentication Schemas
+
+**File: `app/schemas/auth.py`**
+
+```python
+from pydantic import BaseModel, Field
+
+class LoginRequest(BaseModel):
+    """Login request - credentials only, tokens are returned via cookies."""
+    username: str = Field(..., min_length=1, max_length=50)
+    password: str = Field(..., min_length=1)
+
+class LoginResponse(BaseModel):
+    """Login response - admin info only, raw tokens are NOT in JSON body."""
+    expires_in: int = Field(..., description="Access token expiration time in seconds")
+    admin: dict = Field(..., description="Admin user information")
+
+class TokenRefreshResponse(BaseModel):
+    """Token refresh response - refresh token is read from cookies."""
+    expires_in: int = Field(..., description="Access token expiration time in seconds")
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., description="Current password")
+    new_password: str = Field(..., min_length=6, description="New password")
+
+class PasswordChangeResponse(BaseModel):
+    message: str = Field(..., description="Success message")
+
+class LogoutResponse(BaseModel):
+    message: str = Field(..., description="Success message")
+```
+
+**File: `app/schemas/session.py`**
+
+```python
+from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel, Field
+
+class SessionInfo(BaseModel):
+    """Session information with device fingerprinting."""
+    id: int
+    session_name: str = Field(..., description="User-friendly name, e.g. 'Chrome on macOS'")
+    device_type: str = Field(..., description="desktop, mobile, tablet, unknown")
+    browser_name: str
+    os_name: str
+    ip_address: Optional[str] = None
+    location_city: Optional[str] = None
+    location_country: Optional[str] = None
+    created_at: datetime
+    last_used_at: Optional[datetime] = None
+    expires_at: datetime
+    is_current: bool = Field(..., description="Whether this is the current session")
+
+    class Config:
+        from_attributes = True
+
+class SessionListResponse(BaseModel):
+    sessions: list[SessionInfo]
+    total: int
+
+class SessionRevokeResponse(BaseModel):
+    message: str
+    session_id: int
+```
+
+### Authentication Endpoints
+
+**File: `app/api/endpoints/auth.py`**
+
+Key endpoints:
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| `POST` | `/login` | Login, sets httpOnly cookies | No (rate limited) |
+| `POST` | `/refresh` | Refresh access token from cookie | Cookie |
+| `POST` | `/logout` | Clear cookies, revoke session | Cookie |
+| `POST` | `/logout-all` | Revoke all sessions | Cookie |
+| `POST` | `/logout-others` | Revoke all sessions except current | Cookie |
+| `POST` | `/change-password` | Change password, revoke all sessions | Cookie |
+| `GET`  | `/me` | Get current admin info | Cookie |
+| `GET`  | `/sessions` | List active sessions with device info | Cookie |
+| `GET`  | `/sessions/current` | Get current session details | Cookie |
+| `GET`  | `/sessions/{id}` | Get specific session details | Cookie |
+| `DELETE` | `/sessions/{id}` | Revoke specific session (remote logout) | Cookie |
+
+**Login endpoint example**:
+
+```python
+@router.post("/login", response_model=LoginResponse)
+@limiter.limit(settings.LOGIN_RATE_LIMIT_STRING)
+def login(request: Request, login_data: LoginRequest, background: BackgroundTasks,
+          response: Response, db: Session = Depends(get_db)):
+    """Login: validates credentials, sets httpOnly cookies, returns admin info."""
+    admin = authenticate_admin(db, login_data.username, login_data.password)
+    if not admin:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    tokens = create_admin_tokens(admin)
+
+    # Store refresh token with device fingerprinting
+    refresh_payload = verify_token(tokens["refresh_token"])
+    refresh_expires_at = datetime.fromtimestamp(
+        int(refresh_payload["exp"]), tz=timezone.utc
+    ).replace(tzinfo=None)
+    store_refresh_token(db, admin.id, tokens["refresh_token"],
+                        expires_at=refresh_expires_at, request=request)
+    db.commit()
+
+    # Set auth cookies (access + refresh) on the response
+    set_auth_cookies(response, tokens["access_token"], tokens["refresh_token"])
+
+    return LoginResponse(expires_in=tokens["expires_in"], admin=tokens["admin"])
 ```
 
 ---
@@ -1454,7 +1857,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
 class ErrorHandlingMiddleware(BaseHTTPMiddleware):
     """Catch and format unhandled exceptions."""
-    
+
     async def dispatch(self, request: Request, call_next):
         try:
             return await call_next(request)
@@ -1469,6 +1872,51 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 }
             )
             raise
+
+
+class CORPMiddleware(BaseHTTPMiddleware):
+    """Add Cross-Origin Resource Policy header to all responses.
+
+    Configurable via CORP_POLICY setting: "same-origin", "same-site", or "cross-origin".
+    Default: "same-site".
+    """
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Cross-Origin-Resource-Policy"] = settings.CORP_POLICY
+        return response
+
+
+class OriginValidationMiddleware(BaseHTTPMiddleware):
+    """CSRF protection for cookie-based authentication.
+
+    Browsers always send the Origin header on cross-origin requests.
+    If the Origin header is present and doesn't match our allowed CORS origins,
+    the request is rejected with 403. Requests without an Origin header
+    (curl, Postman, server-to-server) are allowed through.
+
+    This is essential for cookie-based auth where the browser automatically
+    sends cookies — without origin validation, a malicious site could make
+    cross-origin requests that include the user's auth cookies.
+    """
+    UNSAFE_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method in self.UNSAFE_METHODS:
+            origin = request.headers.get("origin")
+            if not origin:
+                # Fall back to Referer for clients that send it instead
+                referer = request.headers.get("referer")
+                if referer:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(referer)
+                    origin = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else None
+
+            if origin:
+                allowed = {o.rstrip("/") for o in settings.CORS_ORIGINS}
+                if origin.rstrip("/") not in allowed:
+                    return JSONResponse(status_code=403, content={"detail": "Origin not allowed"})
+
+        return await call_next(request)
 ```
 
 ---
@@ -2085,52 +2533,59 @@ class EntityTestUtils:
 
 **File: `tests/integration/test_auth_utils.py`**
 
+Uses `requests.Session` to automatically track cookies across requests (matching the cookie-based auth approach).
+
 ```python
 import os
 import requests
 from typing import Optional
 
-class AuthUtils:
-    """Authentication utilities for tests."""
-    
+class AuthTestUtils:
+    """Authentication utilities for integration tests."""
+
     def __init__(self):
         self.api_base_url = os.environ.get("API_BASE_URL", "http://localhost:8000")
+        self.auth_url = f"{self.api_base_url}/api/v1/auth"
+        # Use a session to track cookies across requests
+        self.session = requests.Session()
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
-    
-    def login(self, username: str = None, password: str = None):
-        """Login and store tokens."""
-        username = username or os.environ.get("TEST_ADMIN_USERNAME", "admin")
-        password = password or os.environ.get("TEST_ADMIN_PASSWORD", "admin")
-        
-        response = requests.post(
-            f"{self.api_base_url}/api/v1/auth/login",
+
+    def login(self, username: str = "admin", password: str = "adminpass123") -> bool:
+        """Login and extract tokens from httpOnly cookies."""
+        response = self.session.post(
+            f"{self.auth_url}/login",
             json={"username": username, "password": password}
         )
-        
-        assert response.status_code == 200, f"Login failed: {response.text}"
-        
-        data = response.json()
-        self.access_token = data["access_token"]
-        self.refresh_token = data.get("refresh_token")
-    
-    def make_authenticated_request(
-        self,
-        method: str,
-        url: str,
-        **kwargs
-    ) -> requests.Response:
-        """Make authenticated request."""
-        if not self.access_token:
-            self.login()
-        
-        headers = kwargs.get("headers", {})
-        headers["Authorization"] = f"Bearer {self.access_token}"
-        kwargs["headers"] = headers
-        
-        return requests.request(method, url, **kwargs)
+        if response.status_code == 200:
+            # Tokens are delivered via httpOnly cookies
+            self.access_token = response.cookies.get("access_token")
+            self.refresh_token = response.cookies.get("refresh_token")
+            return True
+        else:
+            self.access_token = None
+            self.refresh_token = None
+            return False
 
-auth_utils = AuthUtils()
+    def make_authenticated_request(self, method: str, url: str, **kwargs) -> requests.Response:
+        """Make authenticated request using cookies (auto-sent by session)."""
+        response = self.session.request(method, url, **kwargs)
+        if response.status_code != 401:
+            return response
+
+        # If session was revoked/expired by another test, re-login and retry once.
+        try:
+            detail = response.json().get("detail")
+        except Exception:
+            detail = None
+
+        if detail in {"Session revoked", "Session expired", "Session not found"}:
+            if self.login():
+                return self.session.request(method, url, **kwargs)
+
+        return response
+
+auth_utils = AuthTestUtils()
 ```
 
 ### Example Test
@@ -2169,41 +2624,45 @@ def test_version_response_format(client: TestClient):
 
 ### Production Dockerfile
 
-**File: `docker/Dockerfile`**
+**File: `Dockerfile`**
 
 ```dockerfile
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    default-mysql-client \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first for better caching
+# Copy dependency specification and install system packages
 COPY requirements.txt .
+RUN apt-get update && apt-get install -y curl default-mysql-client && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy only the application code and required assets (not entire context)
+COPY app/ ./app/
+COPY migrations/ ./migrations/
+COPY db/ ./db/
+COPY alembic.ini.template logging.ini docker-entrypoint.sh ./
 
-# Create necessary directories
-RUN mkdir -p /app/logs /app/uploads
+# Run as unprivileged user (security best practice)
+ARG UID=1000
+ARG GID=1000
+RUN groupadd --gid $GID appuser \
+ && useradd --uid $UID --gid $GID --create-home appuser \
+ && mkdir -p /app/logs /app/uploads \
+ && chown -R appuser:appuser /app \
+ && chmod +x docker-entrypoint.sh
 
-# Use entrypoint script
-ENTRYPOINT ["./docker/docker-entrypoint.sh"]
+USER appuser
 
-# Expose port
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/ || exit 1
+ENTRYPOINT ["./docker-entrypoint.sh"]
 ```
+
+> **Key improvements over basic Dockerfile**:
+> - **Python 3.14-slim**: Uses latest Python for performance and security
+> - **Unprivileged user**: Runs as `appuser` (UID 1000) instead of root
+> - **Selective COPY**: Only copies needed files, not the entire context (smaller image, no secrets)
+> - **No EXPOSE/HEALTHCHECK in Dockerfile**: These are handled in docker-compose for flexibility
 
 ### Docker Entrypoint
 
@@ -2302,13 +2761,14 @@ exec uvicorn app.main:app \
 **File: `docker-compose.yml`**
 
 ```yaml
-version: '3.8'
-
 services:
   api:
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        UID: 1000
+        GID: 1000
     container_name: fastapi_template_api
     restart: unless-stopped
     ports:
@@ -2316,32 +2776,56 @@ services:
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - FRONTEND_URL=${FRONTEND_URL}
       - DB_HOST=db
       - DB_PORT=3306
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
+      - DB_USER=${MYSQL_USER}
+      - DB_PASSWORD=${MYSQL_PASSWORD}
+      - DB_NAME=${MYSQL_DATABASE}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+      - CORS_ORIGINS=${CORS_ORIGINS}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
       - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
       - ADMIN_USERNAME=${ADMIN_USERNAME}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - CORS_ORIGINS=${CORS_ORIGINS}
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}
-      - ENABLE_OPENAPI_DOCS=${ENABLE_OPENAPI_DOCS:-false}
-      - SKIP_MIGRATIONS=${SKIP_MIGRATIONS:-false}  # Set to true to disable auto-migrations
+      # Cookie-based auth (see app/core/config.py for defaults)
+      # - COOKIE_SECURE=${COOKIE_SECURE}
+      # - COOKIE_SAMESITE=${COOKIE_SAMESITE}
+      # - COOKIE_DOMAIN=${COOKIE_DOMAIN}
+      - ENABLE_OPENAPI_DOCS=true
+      # Rate limiting (per-IP)
+      - ORDER_RATE_LIMIT_MAX=${ORDER_RATE_LIMIT_MAX:-10}
+      - ORDER_RATE_LIMIT_WINDOW=${ORDER_RATE_LIMIT_WINDOW:-24hour}
+      - LOGIN_RATE_LIMIT_MAX=${LOGIN_RATE_LIMIT_MAX:-5}
+      - LOGIN_RATE_LIMIT_WINDOW=${LOGIN_RATE_LIMIT_WINDOW:-5minute}
+      - CORP_POLICY=${CORP_POLICY}
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./logs:/app/logs
       - ./uploads:/app/uploads
+      - ./logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - backend
       - frontend
@@ -2352,9 +2836,10 @@ services:
     restart: unless-stopped
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-      - MYSQL_DATABASE=${DB_NAME}
-      - MYSQL_USER=${DB_USER}
-      - MYSQL_PASSWORD=${DB_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    # Database port is NOT exposed in production (internal network only)
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -2362,6 +2847,19 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - backend
 
@@ -2370,54 +2868,112 @@ networks:
     driver: bridge
   backend:
     driver: bridge
-    internal: true
+    internal: true  # Backend network is internal only (DB not accessible from host)
 
 volumes:
   mysql_data:
     driver: local
 ```
 
+> **Key improvements**:
+> - **Resource limits**: Memory (1G) and CPU (1.0) limits with reservations for both API and DB
+> - **Log rotation**: JSON file logging driver with 10MB max-size, 3 files rotation
+> - **Internal network**: Database is on an internal-only network, not exposed to host
+> - **Health check on `/health`**: Uses dedicated health endpoint instead of root
+> - **Build args**: Passes UID/GID for unprivileged user
+
 ### Test Docker Compose
 
 **File: `docker-compose.test.yml`**
 
 ```yaml
-version: '3.8'
-
 services:
-  api-test:
+  # MySQL test database
+  mysql_test:
+    image: mysql:8.0
+    restart: "no"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${TEST_MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${TEST_MYSQL_DATABASE}
+      - MYSQL_USER=${TEST_MYSQL_USER}
+      - MYSQL_PASSWORD=${TEST_MYSQL_PASSWORD}
+    ports:
+      - "${TEST_MYSQL_PORT}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 5s
+      retries: 10
+    networks:
+      - test_network
+
+  # API server test container
+  api_server_test:
     build:
       context: .
-      dockerfile: docker/Dockerfile.test
+      dockerfile: Dockerfile
+    restart: "no"
+    ports:
+      - "8001:8000"  # Different port to avoid conflicts
     environment:
-      - ENVIRONMENT=test
-      - DB_HOST=db-test
+      - DB_HOST=mysql_test
       - DB_PORT=3306
-      - DB_USER=test_user
-      - DB_PASSWORD=test_password
-      - DB_NAME=test_db
-      - JWT_SECRET_KEY=test-secret-key
-      - ADMIN_USERNAME=test_admin
-      - ADMIN_PASSWORD=test_password
+      - DB_USER=${TEST_MYSQL_USER}
+      - DB_PASSWORD=${TEST_MYSQL_PASSWORD}
+      - DB_NAME=${TEST_MYSQL_DATABASE}
+      - ENVIRONMENT=test
+      - FRONTEND_URL=${TEST_FRONTEND_URL}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ENABLE_OPENAPI_DOCS=true
+      # Rate limits: high ceiling for tests to avoid interference
+      - ORDER_RATE_LIMIT_MAX=${ORDER_RATE_LIMIT_MAX:-1000}
+      - LOGIN_RATE_LIMIT_MAX=${LOGIN_RATE_LIMIT_MAX:-1000}
     depends_on:
-      - db-test
-    volumes:
-      - .:/app
-    command: pytest tests/ -v
+      mysql_test:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - test_network
 
-  db-test:
-    image: mysql:8.4
+  # Integration test runner
+  api_integration_tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    restart: "no"
     environment:
-      - MYSQL_ROOT_PASSWORD=test_root_password
-      - MYSQL_DATABASE=test_db
-      - MYSQL_USER=test_user
-      - MYSQL_PASSWORD=test_password
+      - API_BASE_URL=http://api_server_test:8000
+    depends_on:
+      api_server_test:
+        condition: service_healthy
     volumes:
-      - test_mysql_data:/var/lib/mysql
+      - ./test-reports:/test-reports
+    command: >
+      sh -c "python scripts/run_api_integration_tests.py"
+    networks:
+      - test_network
+
+networks:
+  test_network:
+    driver: bridge
 
 volumes:
-  test_mysql_data:
+  test_uploads_data:
+    driver: local
 ```
+
+> **Key improvements**:
+> - **Three-container architecture**: Separate DB, API server, and test runner
+> - **High rate limits**: 1000 max for orders and login to avoid test interference
+> - **Health check gating**: Test runner waits for API server health check
+> - **Separate test network**: Isolated from production
 
 ---
 
@@ -2437,16 +2993,16 @@ The automated pipeline ensures that:
 
 ### GitHub Actions - Automated Tests and Build
 
-**File: `.github/workflows/api-tests.yml`**
+**File: `.github/workflows/docker-build-automatic.yml`**
 
-This workflow runs automatically on push to `main`/`develop` or on pull requests. It runs tests first, and only builds/pushes Docker images if tests pass.
+This workflow runs automatically on push to `master`/`develop` or on pull requests. It uses a **4-job pipeline**: test → build amd64 (parallel with) build arm64 → publish multi-arch manifest.
 
 ```yaml
-name: API Tests and Docker Build
+name: API Tests and Docker Build (Automatic)
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ master, develop ]
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
@@ -2454,7 +3010,7 @@ on:
       - 'LICENSE*'
       - '.github/*.md'
   pull_request:
-    branches: [ main, develop ]
+    branches: [ master, develop ]
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
@@ -2472,79 +3028,103 @@ env:
 
 jobs:
   # Job 1: Run tests
-  run-api-tests:
+  test:
+    name: Run Tests
     runs-on: ubuntu-latest
-    
-    services:
-      docker:
-        image: docker:dind
-        options: --privileged
-    
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v4
       - name: Set up Docker and Docker Compose
         run: |
           sudo apt-get update
           sudo apt-get install -y docker-compose
-      
-      - name: Set up QEMU for multi-arch
-        uses: docker/setup-qemu-action@v3
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      
       - name: Set up environment
         run: |
           mkdir -p test-reports
           chmod 777 test-reports
-      
       - name: Run API Integration Tests
         run: |
           chmod +x ./run_api_integration_tests.sh
           ./run_api_integration_tests.sh
-      
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: api-test-reports
           path: test-reports/
-  
-  # Job 2: Build and push Docker image (only if tests pass)
-  build-and-push:
-    needs: run-api-tests  # ⚠️ CRITICAL: This ensures tests run first
-    if: success()  # Only run if tests passed
+
+  # Job 2a: Build amd64 image (runs in parallel with arm64)
+  build-amd64:
+    name: Build amd64
+    needs: test
     runs-on: ubuntu-latest
-    
-    services:
-      docker:
-        image: docker:dind
-        options: --privileged
-    
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up QEMU for multi-arch
-        uses: docker/setup-qemu-action@v3
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      
-      - name: Login to GitHub Container Registry
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+      - name: Build and push amd64
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          provenance: false
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,scope=amd64,mode=max
+
+  # Job 2b: Build arm64 image (runs in parallel with amd64)
+  build-arm64:
+    name: Build arm64
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push arm64
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/arm64
+          provenance: false
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,scope=arm64,mode=max
+
+  # Job 3: Create multi-arch manifest from both digests
+  publish:
+    name: Publish Multi-arch Image
+    needs: [build-amd64, build-arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Extract app version
         id: version
         run: |
           API_VERSION=$(grep -o 'API_VERSION = "[^"]*"' app/core/config.py | cut -d'"' -f2)
           echo "version=$API_VERSION" >> $GITHUB_OUTPUT
-          echo "API version: $API_VERSION"
-      
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -2557,26 +3137,27 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value={{date 'YYYY-MM-DD-HH-mm'}},enable={{is_default_branch}}
             type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
-      
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      
+      - name: Create multi-arch manifest and push
+        run: |
+          TAGS=$(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          docker buildx imagetools create $TAGS \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-amd64.outputs.digest }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-arm64.outputs.digest }}
       - name: Cleanup old images
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/master'
         run: |
           # Keep only the 5 most recent images (excluding latest and current version)
-          # Implementation depends on your registry setup
+          # Uses gh API to list and delete old package versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+> **Key improvements over single-build approach**:
+> - **Parallel architecture builds**: amd64 and arm64 build simultaneously (faster pipeline)
+> - **Push-by-digest**: Each architecture is pushed independently, then combined into a manifest
+> - **Per-architecture caching**: Separate GHA cache scopes for amd64 and arm64
+> - **Multi-arch manifest**: Final step creates a single manifest that works on both architectures
+> - **Old image cleanup**: Automatically removes old versions, keeping the latest 5
 
 ### GitHub Actions - Manual Build
 
@@ -2700,59 +3281,139 @@ jobs:
 
 ## Security Best Practices
 
-### Rate Limiting
+### Production Safety Enhancements
+
+The template enforces several security rules at startup that prevent common production misconfigurations:
+
+**Startup Validation** (in `app/core/config.py`):
+
+```python
+# Production must use explicit host(s) — wildcard is rejected
+if ENVIRONMENT == "production":
+    if not allowed_hosts_str or allowed_hosts_str.strip() == "*":
+        logger.error(
+            "CRITICAL: Production requires ALLOWED_HOSTS to be set to explicit host(s), not '*'. "
+            "Set ALLOWED_HOSTS to your API host(s), e.g. api.example.com"
+        )
+        sys.exit(1)
+
+# Cookie SameSite must be "lax" or "strict" — "none" is rejected
+if COOKIE_SAMESITE not in ("lax", "strict"):
+    logger.error(
+        "CRITICAL: COOKIE_SAMESITE must be 'lax' or 'strict', got '%s'. "
+        "'none' is not allowed as it disables CSRF protection.",
+        COOKIE_SAMESITE,
+    )
+    sys.exit(1)
+```
+
+**Environment-Aware Defaults**:
+
+| Setting | Production | Development/Test |
+|---------|-----------|-----------------|
+| `COOKIE_SECURE` | `true` (HTTPS only) | `false` |
+| `ENABLE_OPENAPI_DOCS` | `false` | `true` |
+| `LOGIN_RATE_LIMIT_MAX` | `5` (per 5 minutes) | `1000` (relaxed for tests) |
+| `ALLOWED_HOSTS` | Must be explicit | `*` allowed |
+
+**Required Environment Variables** (app exits on startup if missing):
+- `JWT_SECRET_KEY` — JWT signing key
+- `ADMIN_USERNAME` — Default admin user
+- `ADMIN_PASSWORD` — Default admin password
+
+**Global HTTPException Logging** (in `app/main.py`):
+
+```python
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Log HTTP exceptions with context for debugging."""
+    log_level = logging.WARNING if 400 <= exc.status_code < 500 else logging.ERROR
+    logger.log(log_level,
+        f"HTTP {exc.status_code} error on {request.method} {request.url.path}: {exc.detail}")
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+```
+
+**Startup Tasks**:
+- Expired session cleanup (removes sessions older than 30 days)
+- Background prune loop for inactive push subscriptions (every 24 hours)
+
+### Rate Limiting (slowapi)
+
+The template uses **slowapi** (built on top of limits) for per-IP, per-endpoint rate limiting instead of a custom middleware. This provides a battle-tested implementation with proper proxy support.
 
 **File: `app/core/rate_limit.py`**
 
 ```python
-from fastapi import Request, HTTPException, status
-from starlette.middleware.base import BaseHTTPMiddleware
-from collections import defaultdict
-from datetime import datetime, timedelta
-import time
+"""Rate limiting for the API (slowapi). Shared limiter instance."""
+from fastapi import Request
+from slowapi import Limiter
 
+def _rate_limit_key(request: Request) -> str:
+    """Client IP for rate limiting: X-Forwarded-For (first IP) if present, else request.client.host."""
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return request.scope.get("client", ("unknown",))[0]
+
+limiter = Limiter(key_func=_rate_limit_key)
+```
+
+**Registration in `app/main.py`**:
+
+```python
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from app.core.rate_limit import limiter
+
+app.state.limiter = limiter
+
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Please try again later."})
+
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+```
+
+**Per-endpoint usage** (decorator-based, not global):
+
+```python
+# In endpoint files:
+from app.core.rate_limit import limiter
 from app.core.config import settings
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Rate limiting middleware."""
-    
-    def __init__(self, app, calls: int = 60, period: int = 60):
-        super().__init__(app)
-        self.calls = calls
-        self.period = period
-        self.clients = defaultdict(list)
-    
-    async def dispatch(self, request: Request, call_next):
-        if not settings.RATE_LIMIT_ENABLED:
-            return await call_next(request)
-        
-        client_ip = request.client.host
-        now = time.time()
-        
-        # Clean old entries
-        self.clients[client_ip] = [
-            timestamp for timestamp in self.clients[client_ip]
-            if now - timestamp < self.period
-        ]
-        
-        # Check rate limit
-        if len(self.clients[client_ip]) >= self.calls:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Rate limit exceeded"
-            )
-        
-        # Add current request
-        self.clients[client_ip].append(now)
-        
-        response = await call_next(request)
-        response.headers["X-RateLimit-Limit"] = str(self.calls)
-        response.headers["X-RateLimit-Remaining"] = str(
-            self.calls - len(self.clients[client_ip])
-        )
-        
-        return response
+@router.post("/login")
+@limiter.limit(settings.LOGIN_RATE_LIMIT_STRING)  # e.g. "5/5minute"
+def login(request: Request, ...):
+    ...
+
+@router.post("/")
+@limiter.limit(settings.ORDER_RATE_LIMIT_STRING)  # e.g. "10/24hour"
+def create_order(request: Request, ...):
+    ...
 ```
+
+**Configuration** (in `app/core/config.py`):
+
+```python
+# Order creation rate limit
+ORDER_RATE_LIMIT_MAX = 10        # Max orders per IP per window
+ORDER_RATE_LIMIT_WINDOW = "24hour"  # slowapi window format
+ORDER_RATE_LIMIT_STRING = f"{ORDER_RATE_LIMIT_MAX}/{ORDER_RATE_LIMIT_WINDOW}"
+
+# Admin login brute-force protection
+# Production: conservative (5/5minute); Non-production: high ceiling (1000/5minute)
+LOGIN_RATE_LIMIT_MAX = 5 if ENVIRONMENT == "production" else 1000
+LOGIN_RATE_LIMIT_WINDOW = "5minute"
+LOGIN_RATE_LIMIT_STRING = f"{LOGIN_RATE_LIMIT_MAX}/{LOGIN_RATE_LIMIT_WINDOW}"
+```
+
+**Key benefits over custom middleware**:
+- Per-endpoint granularity (not blanket rate limiting)
+- Proven implementation with proper edge case handling
+- Proxy-aware via `X-Forwarded-For` header parsing
+- Environment-specific defaults (strict in production, relaxed in dev/test)
 
 ### Input Sanitization
 
@@ -2789,6 +3450,102 @@ def validate_url(url: str) -> bool:
     """Validate URL format."""
     pattern = r'^https?://[^\s/$.?#].[^\s]*$'
     return bool(re.match(pattern, url))
+```
+
+### User Agent Parser
+
+**File: `app/utils/user_agent_parser.py`**
+
+Parses user agent strings to extract device, browser, and OS information for session fingerprinting. Uses a dual-mode approach: the `user-agents` library when available, with a regex-based fallback.
+
+```python
+from typing import Dict, Optional
+
+try:
+    from user_agents import parse
+    USER_AGENTS_AVAILABLE = True
+except ImportError:
+    USER_AGENTS_AVAILABLE = False
+
+def parse_user_agent(user_agent: Optional[str]) -> Dict[str, str]:
+    """
+    Parse user agent string to extract device, browser, and OS info.
+
+    Returns:
+        Dictionary with keys: device_type, browser_name, os_name, session_name
+
+    Example:
+        >>> parse_user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)...")
+        {
+            "device_type": "desktop",
+            "browser_name": "Chrome",
+            "os_name": "macOS",
+            "session_name": "Chrome on macOS"
+        }
+    """
+    if not user_agent:
+        return {
+            "device_type": "unknown",
+            "browser_name": "unknown",
+            "os_name": "unknown",
+            "session_name": "Unknown Device"
+        }
+
+    if USER_AGENTS_AVAILABLE:
+        return _parse_with_library(user_agent)
+    else:
+        return _parse_with_regex(user_agent)
+
+def _parse_with_library(user_agent: str) -> Dict[str, str]:
+    """Parse user agent using the user-agents library."""
+    ua = parse(user_agent)
+
+    if ua.is_mobile:
+        device_type = "mobile"
+    elif ua.is_tablet:
+        device_type = "tablet"
+    elif ua.is_pc:
+        device_type = "desktop"
+    else:
+        device_type = "unknown"
+
+    browser_name = ua.browser.family if ua.browser.family else "Unknown"
+    os_name = ua.os.family if ua.os.family else "Unknown"
+
+    session_name = f"{browser_name} on {os_name}"
+    if device_type not in ("desktop", "unknown"):
+        session_name = f"{browser_name} on {os_name} ({device_type.title()})"
+
+    return {
+        "device_type": device_type,
+        "browser_name": browser_name,
+        "os_name": os_name,
+        "session_name": session_name
+    }
+
+def _parse_with_regex(user_agent: str) -> Dict[str, str]:
+    """Parse user agent using simple regex patterns (fallback)."""
+    # ... covers common browsers (Chrome, Firefox, Safari, Edge, Opera)
+    # ... and OS (Windows, macOS, Linux, Android, iOS)
+    # ... see full implementation for details
+```
+
+### IP Geolocation Stub
+
+**File: `app/utils/ip_geolocation.py`**
+
+Placeholder architecture for IP-to-location resolution. Returns `None` for both fields in MVP, ready for future MaxMind GeoLite2 or external API integration.
+
+```python
+from typing import Optional, Dict
+
+def get_location_from_ip(ip_address: Optional[str]) -> Dict[str, Optional[str]]:
+    """Get approximate location from IP address (stub for MVP)."""
+    return {"city": None, "country": None}
+
+def is_geolocation_available() -> bool:
+    """Check if geolocation functionality is available."""
+    return False
 ```
 
 ---
@@ -2900,28 +3657,28 @@ echo "Environment setup complete!"
 **File: `requirements.txt`**
 
 ```
-fastapi==0.115.14
-uvicorn[standard]==0.35.0
-pydantic==2.11.7
-pydantic-settings==2.6.1
-sqlalchemy==2.0.41
-alembic==1.16.5
-mysql-connector-python==9.3.0
+fastapi==0.128.0
+uvicorn==0.40.0
+pydantic==2.12.5
+sqlalchemy==2.0.46
+alembic==1.18.3
+mysql-connector-python==9.5.0
 PyMySQL==1.1.2
-python-multipart==0.0.20
-PyJWT==2.10.1
+python-multipart==0.0.22
+Pillow==11.3.0
+PyJWT==2.11.0
 passlib[argon2]==1.7.4
-prometheus-client==0.21.0  # Prometheus metrics (optional, enable via ENABLE_METRICS)
+debugpy==1.8.20
+slowapi==0.1.9
+user-agents==2.2.0
 ```
 
 **File: `requirements-test.txt`**
 
 ```
-pytest==8.3.4
-pytest-asyncio==0.24.0
-pytest-cov==6.0.0
-httpx==0.27.2
-faker==33.1.0
+pytest
+requests
+pytest-json-report
 ```
 
 ---
@@ -2930,7 +3687,64 @@ faker==33.1.0
 
 The template includes several convenience scripts to streamline common development and deployment tasks. These scripts automate repetitive operations and reduce the chance of errors.
 
-### Integration Test Runner
+### Python Test Runner
+
+**File: `scripts/run_api_integration_tests.py`**
+
+Python-based test runner that generates structured JSON reports with per-module aggregation. Runs inside the test container.
+
+```python
+import os, sys, json, pytest
+from typing import Tuple, Dict, Any
+
+TEST_DIR = "/app/tests/integration"
+JSON_REPORT_PATH = "/tmp/pytest_report.json"
+
+def run_tests() -> Tuple[int, Dict[str, Any]]:
+    """Run pytest, parse its report, and return the exit code and results."""
+    exit_code = pytest.main([
+        TEST_DIR,
+        "--json-report",
+        f"--json-report-file={JSON_REPORT_PATH}"
+    ])
+
+    if not os.path.exists(JSON_REPORT_PATH):
+        return 1, {}
+
+    with open(JSON_REPORT_PATH) as f:
+        report = json.load(f)
+
+    final_results = {
+        "timestamp": report.get("created"),
+        "total_tests": report.get("summary", {}).get("total", 0),
+        "passed": report.get("summary", {}).get("passed", 0),
+        "failed": report.get("summary", {}).get("failed", 0),
+        "results": {}
+    }
+
+    # Group test results by module
+    for test in report.get("tests", []):
+        module_name = test["nodeid"].split("::")[0].replace("tests/integration/", "").replace(".py", "")
+        if module_name not in final_results["results"]:
+            final_results["results"][module_name] = {"status": "passed", "tests_run": 0, "failures": 0}
+        final_results["results"][module_name]["tests_run"] += 1
+        if test["outcome"] == "failed":
+            final_results["results"][module_name]["status"] = "failed"
+            final_results["results"][module_name]["failures"] += 1
+
+    return exit_code, final_results
+
+if __name__ == "__main__":
+    exit_code, test_results = run_tests()
+    if test_results:
+        report_dir = "/test-reports/integration"
+        os.makedirs(report_dir, exist_ok=True)
+        with open(os.path.join(report_dir, "integration_test_report.json"), "w") as f:
+            json.dump(test_results, f, indent=4)
+    sys.exit(exit_code)
+```
+
+### Shell Integration Test Runner
 
 **File: `scripts/run_api_integration_tests.sh`**
 

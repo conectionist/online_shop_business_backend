@@ -1148,6 +1148,44 @@ def test_create_product_without_category():
         print(f"Error during test cleanup: {e}")
 
 
+def test_product_name_update_diacritics_and_case():
+    entity_id_1 = None
+    entity_id_2 = None
+    try:
+        name_plain = product_utils.generate_unique_name("Paine")
+        created_1, entity_id_1 = product_utils.create_entity(name=name_plain)
+
+        name_diacritic = f"{name_plain}â"
+        updated_1 = product_utils.update_entity(entity_id_1, name=name_diacritic)
+        assert updated_1["nume"] == name_diacritic
+
+        name_upper = name_diacritic.upper()
+        updated_2 = product_utils.update_entity(entity_id_1, name=name_upper)
+        assert updated_2["nume"] == name_upper
+
+        created_2, entity_id_2 = product_utils.create_entity(name=product_utils.generate_unique_name("Other"))
+
+        duplicate_rename_response = auth_utils.make_authenticated_request(
+            "PATCH",
+            f"{product_utils.base_url}/{entity_id_2}",
+            data={"nume": name_diacritic},
+        )
+        assert duplicate_rename_response.status_code == 409, (
+            f"Expected 409 for duplicate rename, got {duplicate_rename_response.status_code}: {duplicate_rename_response.text}"
+        )
+    finally:
+        try:
+            if entity_id_2:
+                product_utils.hard_delete_entity(entity_id_2)
+        except Exception as e:
+            print(f"Error during test cleanup: {e}")
+        try:
+            if entity_id_1:
+                product_utils.hard_delete_entity(entity_id_1)
+        except Exception as e:
+            print(f"Error during test cleanup: {e}")
+
+
 def test_create_product_with_empty_category():
     """
     Tests creating a product with empty category_id string.

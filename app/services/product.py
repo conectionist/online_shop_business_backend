@@ -325,7 +325,15 @@ def update_product(db: Session, product_id: int, product: ProductUpdate) -> Prod
             
         # If updating the name, check if it would cause a duplicate
         if "nume" in update_data and update_data["nume"] != db_product.nume:
-            existing_product = get_product_by_name(db, update_data["nume"])
+            existing_product = (
+                db.query(Product)
+                .filter(
+                    Product.nume == update_data["nume"],
+                    Product.id != product_id,
+                    Product.is_deleted == False,
+                )
+                .first()
+            )
             if existing_product:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,

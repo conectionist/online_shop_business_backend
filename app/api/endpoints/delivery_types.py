@@ -1,9 +1,10 @@
+import json
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Body, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse
 from app.core.cache import build_cache_key, get_cached_response, set_cached_response, invalidate_for_reference_data
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
@@ -34,13 +35,21 @@ def read_delivery_types(
     cache_key = build_cache_key("delivery_types_list", skip=skip, limit=limit)
     cached = get_cached_response(cache_key)
     if cached is not None:
-        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+        try:
+            payload = json.loads(cached)
+            validated_payload = [
+                DeliveryType.model_validate(item).model_dump()
+                for item in payload
+            ]
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
 
     try:
         delivery_types = get_delivery_types(db, skip=skip, limit=limit)
-        serialized = [DeliveryType.model_validate(dt, from_attributes=True).model_dump() for dt in delivery_types]
-        set_cached_response(cache_key, serialized)
-        return delivery_types
+        payload = [DeliveryType.model_validate(dt, from_attributes=True).model_dump() for dt in delivery_types]
+        set_cached_response(cache_key, payload)
+        return payload
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -115,13 +124,23 @@ def read_delivery_type(
     cache_key = build_cache_key("delivery_types_detail", delivery_type_id=delivery_type_id)
     cached = get_cached_response(cache_key)
     if cached is not None:
-        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+        try:
+            payload = json.loads(cached)
+            validated_payload = DeliveryType.model_validate(payload).model_dump()
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
 
     try:
         delivery_type = get_delivery_type_by_id(db=db, delivery_type_id=delivery_type_id)
-        serialized = DeliveryType.model_validate(delivery_type, from_attributes=True).model_dump()
-        set_cached_response(cache_key, serialized)
-        return delivery_type
+        if delivery_type is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Delivery type with ID {delivery_type_id} not found",
+            )
+        payload = DeliveryType.model_validate(delivery_type, from_attributes=True).model_dump()
+        set_cached_response(cache_key, payload)
+        return payload
     except HTTPException as e:
         raise e
     except Exception as e:

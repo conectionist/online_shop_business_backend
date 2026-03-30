@@ -1,9 +1,10 @@
+import json
 from typing import List
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse
 from app.core.cache import build_cache_key, get_cached_response, set_cached_response, invalidate_for_reference_data
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
@@ -33,13 +34,22 @@ def read_business_details(
     cache_key = build_cache_key("business_details_list", skip=skip, limit=limit)
     cached = get_cached_response(cache_key)
     if cached is not None:
-        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+        try:
+            payload = json.loads(cached)
+            validated_payload = [
+                BusinessDetails.model_validate(item).model_dump()
+                for item in payload
+            ]
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            # Corrupted/stale cache payload: ignore and fallback to DB
+            pass
 
     try:
         rows = get_business_details(db, skip=skip, limit=limit)
-        serialized = [BusinessDetails.model_validate(r, from_attributes=True).model_dump() for r in rows]
-        set_cached_response(cache_key, serialized)
-        return rows
+        payload = [BusinessDetails.model_validate(r, from_attributes=True).model_dump() for r in rows]
+        set_cached_response(cache_key, payload)
+        return payload
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -87,13 +97,24 @@ def read_business_details_by_id(
     cache_key = build_cache_key("business_details_detail", business_details_id=business_details_id)
     cached = get_cached_response(cache_key)
     if cached is not None:
-        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+        try:
+            payload = json.loads(cached)
+            validated_payload = BusinessDetails.model_validate(payload).model_dump()
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            # Corrupted/stale cache payload: ignore and fallback to DB
+            pass
 
     try:
         row = get_business_details_by_id(db=db, business_details_id=business_details_id)
-        serialized = BusinessDetails.model_validate(row, from_attributes=True).model_dump()
-        set_cached_response(cache_key, serialized)
-        return row
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Business details with ID {business_details_id} not found",
+            )
+        payload = BusinessDetails.model_validate(row, from_attributes=True).model_dump()
+        set_cached_response(cache_key, payload)
+        return payload
     except HTTPException as e:
         raise e
     except Exception as e:

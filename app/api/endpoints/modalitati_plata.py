@@ -1,3 +1,4 @@
+import json
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status, Query
@@ -5,7 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse
 from app.core.cache import build_cache_key, get_cached_response, set_cached_response, invalidate_for_reference_data
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
@@ -40,7 +41,15 @@ def read_modalitati_plata(
     cache_key = build_cache_key("modalitati_plata_list", skip=skip, limit=limit)
     cached = get_cached_response(cache_key)
     if cached is not None:
-        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+        try:
+            payload = json.loads(cached)
+            validated_payload = [
+                ModalitatePlata.model_validate(item).model_dump()
+                for item in payload
+            ]
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
 
     try:
         modalitati = get_modalitati_plata(db, skip=skip, limit=limit)
@@ -124,7 +133,12 @@ def read_modalitate_plata(
     cache_key = build_cache_key("modalitati_plata_detail", modalitate_id=modalitate_id)
     cached = get_cached_response(cache_key)
     if cached is not None:
-        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+        try:
+            payload = json.loads(cached)
+            validated_payload = ModalitatePlata.model_validate(payload).model_dump()
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
 
     try:
         db_modalitate = get_modalitate_plata_by_id(db, modalitate_id=modalitate_id)
@@ -144,7 +158,7 @@ def read_modalitate_plata(
         }
         serialized = ModalitatePlata.model_validate(payload).model_dump()
         set_cached_response(cache_key, serialized)
-        return payload
+        return serialized
     except HTTPException:
         raise
     except ValidationError as e:

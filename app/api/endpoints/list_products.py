@@ -58,7 +58,8 @@ def get_list_products_endpoint(
     if cached is not None:
         return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
 
-    if not acquire_computation_lock(cache_key):
+    lock_acquired = acquire_computation_lock(cache_key)
+    if not lock_acquired:
         cached = wait_for_cache(cache_key)
         if cached is not None:
             return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
@@ -75,7 +76,8 @@ def get_list_products_endpoint(
             detail=f"An unexpected error occurred: {str(e)}"
         )
     finally:
-        release_computation_lock(cache_key)
+        if lock_acquired:
+            release_computation_lock(cache_key)
 
 
 @router.post("/{list_id}/products/{product_id}", response_model=dict, status_code=status.HTTP_201_CREATED, responses={

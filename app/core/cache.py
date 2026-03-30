@@ -9,7 +9,7 @@ the database path.
 import json
 import time
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import redis as redis_lib
@@ -29,9 +29,11 @@ _LOCK_RETRY_DELAY_SECONDS = 0.2
 
 
 def _json_serializer(obj: Any) -> str:
-    """Handle non-standard types that json.dumps cannot serialize by default."""
+    """Match FastAPI ``jsonable_encoder`` so cached JSON matches uncached responses."""
     if isinstance(obj, datetime):
-        return obj.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        return obj.isoformat()
+    if isinstance(obj, date):
+        return obj.isoformat()
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
@@ -82,6 +84,9 @@ def set_cached_response(key: str, data: Any) -> None:
     try:
         payload = json.dumps(data, default=_json_serializer, ensure_ascii=False)
         client.set(key, payload)
+    except (TypeError, ValueError) as exc:
+        # Serialization errors should not fail requests; just skip caching this payload.
+        logger.warning("Cache serialization error for %s: %s", key, exc)
     except redis_lib.RedisError as exc:
         logger.warning("Redis SET error for %s: %s", key, exc)
         disable_redis(exc)

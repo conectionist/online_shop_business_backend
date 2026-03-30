@@ -1,8 +1,10 @@
+import json
 from typing import List, Optional
 import os
 import shutil
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, UploadFile, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -79,14 +81,23 @@ def read_products(
     )
     cached = get_cached_response(cache_key)
     if cached is not None:
-        from fastapi.responses import Response
-        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+        try:
+            payload = json.loads(cached)
+            validated_payload = [ProductSchema.model_validate(item).model_dump() for item in payload]
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
 
-    if not acquire_computation_lock(cache_key):
+    lock_acquired = acquire_computation_lock(cache_key)
+    if not lock_acquired:
         cached = wait_for_cache(cache_key)
         if cached is not None:
-            from fastapi.responses import Response
-            return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+            try:
+                payload = json.loads(cached)
+                validated_payload = [ProductSchema.model_validate(item).model_dump() for item in payload]
+                return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+            except Exception:
+                pass
 
     try:
         products = get_products(
@@ -96,9 +107,9 @@ def read_products(
             include_deleted=include_deleted,
             category_id=category_filter,
         )
-        serialized = [ProductSchema.model_validate(p, from_attributes=True).model_dump() for p in products]
-        set_cached_response(cache_key, serialized)
-        return products
+        payload = [ProductSchema.model_validate(p, from_attributes=True).model_dump() for p in products]
+        set_cached_response(cache_key, payload)
+        return payload
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -109,7 +120,8 @@ def read_products(
             }]
         )
     finally:
-        release_computation_lock(cache_key)
+        if lock_acquired:
+            release_computation_lock(cache_key)
 
 
 @router.get("/{product_id}", response_model=ProductSchema, 
@@ -157,13 +169,18 @@ def read_product(
     cache_key = build_cache_key("product_detail", product_id=product_id, include_deleted=include_deleted)
     cached = get_cached_response(cache_key)
     if cached is not None:
-        from fastapi.responses import Response
-        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+        try:
+            payload = json.loads(cached)
+            validated_payload = ProductSchema.model_validate(payload).model_dump()
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
 
     product = get_product_by_id(db=db, product_id=product_id, include_deleted=include_deleted)
     if product is not None:
-        serialized = ProductSchema.model_validate(product, from_attributes=True).model_dump()
-        set_cached_response(cache_key, serialized)
+        payload = ProductSchema.model_validate(product, from_attributes=True).model_dump()
+        set_cached_response(cache_key, payload)
+        return payload
     return product
 
 

@@ -142,5 +142,4 @@ def clone_list_endpoint(
 ):
     """Clone an existing list with all its structure, ordering, and products"""
     result = clone_list(db=db, source_list_id=list_id)
-    invalidate_for_list(list_id)
     return result

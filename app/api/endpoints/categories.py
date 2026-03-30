@@ -1,9 +1,11 @@
+import json
 from typing import List, Optional, Annotated
 import math
 import os
 import shutil
 
 from fastapi import APIRouter, Depends, Path, Query, HTTPException, Body, status, UploadFile, File, Form
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
@@ -139,20 +141,29 @@ def read_categories(
     cache_key = build_cache_key("categories_all", skip=skip, limit=limit)
     cached = get_cached_response(cache_key)
     if cached is not None:
-        from fastapi.responses import Response
-        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+        try:
+            payload = json.loads(cached)
+            validated_payload = [Category.model_validate(item).model_dump() for item in payload]
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
 
-    if not acquire_computation_lock(cache_key):
+    lock_acquired = acquire_computation_lock(cache_key)
+    if not lock_acquired:
         cached = wait_for_cache(cache_key)
         if cached is not None:
-            from fastapi.responses import Response
-            return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+            try:
+                payload = json.loads(cached)
+                validated_payload = [Category.model_validate(item).model_dump() for item in payload]
+                return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+            except Exception:
+                pass
 
     try:
         categories = get_categories(db, skip=skip, limit=limit)
-        serialized = [Category.model_validate(c, from_attributes=True).model_dump() for c in categories]
-        set_cached_response(cache_key, serialized)
-        return categories
+        payload = [Category.model_validate(c, from_attributes=True).model_dump() for c in categories]
+        set_cached_response(cache_key, payload)
+        return payload
     except HTTPException:
         raise
     except Exception as e:
@@ -161,7 +172,8 @@ def read_categories(
             detail=f"An unexpected error occurred: {str(e)}"
         )
     finally:
-        release_computation_lock(cache_key)
+        if lock_acquired:
+            release_computation_lock(cache_key)
 
 
 @router.put("/reorder", response_model=List[Category], responses={

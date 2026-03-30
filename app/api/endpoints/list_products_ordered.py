@@ -1,9 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Path
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
+from app.core.cache import (
+    build_cache_key, get_cached_response, set_cached_response,
+    acquire_computation_lock, release_computation_lock, wait_for_cache,
+    invalidate_for_list,
+)
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.services.list_product_ordered import (
@@ -55,8 +61,20 @@ def get_list_products_ordered_endpoint(
     Returns a structured response with categories and their products,
     all ordered by their respective positions.
     """
+    cache_key = build_cache_key("list_products_ordered", list_id=list_id)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
+    if not acquire_computation_lock(cache_key):
+        cached = wait_for_cache(cache_key)
+        if cached is not None:
+            return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
     try:
-        return get_list_products_by_category(db=db, list_id=list_id)
+        result = get_list_products_by_category(db=db, list_id=list_id)
+        set_cached_response(cache_key, result)
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -64,6 +82,8 @@ def get_list_products_ordered_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)}"
         )
+    finally:
+        release_computation_lock(cache_key)
 
 
 @router.post("/{list_id}/categories/{category_id}/products/{product_id}", response_model=dict, status_code=status.HTTP_201_CREATED, responses={
@@ -98,6 +118,7 @@ def add_product_to_category_endpoint(
             position=request.position,
             stoc_produs=request.stoc_produs
         )
+        invalidate_for_list(list_id)
         return {
             "message": f"Product {product_id} added to category {category_id} in list {list_id} successfully",
             "list_id": list_id,
@@ -143,6 +164,7 @@ def update_product_position_endpoint(
             product_id=product_id, 
             new_position=request.new_position
         )
+        invalidate_for_list(list_id)
         return {
             "message": f"Product {product_id} position updated successfully",
             "list_id": list_id,
@@ -188,6 +210,7 @@ def move_product_between_categories_endpoint(
             new_category_id=request.new_category_id,
             position=request.new_position
         )
+        invalidate_for_list(list_id)
         return {
             "message": f"Product {product_id} moved to category {request.new_category_id} successfully",
             "list_id": list_id,
@@ -231,6 +254,7 @@ def remove_product_from_list_endpoint(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Product {product_id} is not in list {list_id}"
             )
+        invalidate_for_list(list_id)
         return None
     except HTTPException:
         raise
@@ -289,6 +313,7 @@ def bulk_update_positions_endpoint(
             list_id=list_id, 
             positions_data=positions_data
         )
+        invalidate_for_list(list_id)
         
         return {
             "message": f"Bulk position update completed successfully for list {list_id}",

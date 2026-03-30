@@ -9,6 +9,11 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from app.core.database import get_db
+from app.core.cache import (
+    build_cache_key, get_cached_response, set_cached_response,
+    acquire_computation_lock, release_computation_lock, wait_for_cache,
+    invalidate_for_categories,
+)
 from app.core.file_upload import delete_file, is_valid_image, get_upload_dir
 from app.core.image_errors import image_validation_detail
 from app.core.image_processing import process_and_save_image_versions
@@ -109,6 +114,7 @@ def upload_category_image(
             category=CategoryUpdate(image_path=image_dir_path)
         )
         
+        invalidate_for_categories()
         return updated_category
     except HTTPException:
         raise
@@ -130,8 +136,22 @@ def read_categories(
     db: Session = Depends(get_db)
 ):
     """Get all categories with pagination"""
+    cache_key = build_cache_key("categories_all", skip=skip, limit=limit)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        from fastapi.responses import Response
+        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
+    if not acquire_computation_lock(cache_key):
+        cached = wait_for_cache(cache_key)
+        if cached is not None:
+            from fastapi.responses import Response
+            return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
     try:
         categories = get_categories(db, skip=skip, limit=limit)
+        serialized = [Category.model_validate(c, from_attributes=True).model_dump() for c in categories]
+        set_cached_response(cache_key, serialized)
         return categories
     except HTTPException:
         raise
@@ -140,6 +160,8 @@ def read_categories(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)}"
         )
+    finally:
+        release_computation_lock(cache_key)
 
 
 @router.put("/reorder", response_model=List[Category], responses={
@@ -157,7 +179,9 @@ def reorder_categories_endpoint(
 ):
     """Atomically reorder categories by providing the full ordered list of IDs."""
     try:
-        return reorder_categories(db=db, ordered_ids=ordered_ids)
+        reordered = reorder_categories(db=db, ordered_ids=ordered_ids)
+        invalidate_for_categories()
+        return reordered
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -285,6 +309,7 @@ def create_category_endpoint(
         # If we successfully linked a staged image, clean up the staging directory.
         if staged_upload_id:
             delete_staged_image(staged_upload_id)
+        invalidate_for_categories()
         return created_category
     except HTTPException as e:
         # If an HTTP exception occurred and an image directory was created, clean it up
@@ -334,8 +359,18 @@ def read_category(
     db: Session = Depends(get_db)
 ):
     """Get a specific category by ID"""
+    cache_key = build_cache_key("category_detail", category_id=category_id)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        from fastapi.responses import Response
+        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
     try:
-        return get_category_by_id(db, category_id=category_id)
+        category = get_category_by_id(db, category_id=category_id)
+        if category is not None:
+            serialized = Category.model_validate(category, from_attributes=True).model_dump()
+            set_cached_response(cache_key, serialized)
+        return category
     except HTTPException:
         raise
     except ValidationError as e:
@@ -463,6 +498,7 @@ def update_category_endpoint(
             category_id=category_id,
             category=category_update
         )
+        invalidate_for_categories()
         return updated_category
     except HTTPException as e:
         # Re-raise HTTP exceptions
@@ -576,6 +612,7 @@ def patch_category_endpoint(
             category_id=category_id,
             category=category_update
         )
+        invalidate_for_categories()
         return updated_category
     except HTTPException as e:
         # If an HTTP exception occurred and an image directory was created, clean it up
@@ -630,6 +667,7 @@ def delete_category_endpoint(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Category not found"
             )
+        invalidate_for_categories()
         return None
     except HTTPException:
         raise

@@ -8,6 +8,11 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.core.database import get_db
 from app.core.constants import UNCATEGORIZED_CATEGORY_ID
+from app.core.cache import (
+    build_cache_key, get_cached_response, set_cached_response,
+    acquire_computation_lock, release_computation_lock, wait_for_cache,
+    invalidate_for_product,
+)
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.core.file_upload import (
@@ -59,25 +64,42 @@ def read_products(
     - **include_deleted**: Whether to include soft-deleted products
     - **category_id**: Filter products by category ID
     """
+    # Apply safe limits to pagination parameters to prevent SQL errors
+    safe_skip = min(max(0, skip), 10000)  # Between 0 and 10000
+    safe_limit = min(max(1, limit), 1000)  # Between 1 and 1000
+
+    category_filter = None
+    if category_id is not None and category_id > 0:
+        category_filter = category_id
+
+    cache_key = build_cache_key(
+        "products_list",
+        skip=safe_skip, limit=safe_limit,
+        include_deleted=include_deleted, category_id=category_filter,
+    )
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        from fastapi.responses import Response
+        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
+    if not acquire_computation_lock(cache_key):
+        cached = wait_for_cache(cache_key)
+        if cached is not None:
+            from fastapi.responses import Response
+            return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
     try:
-        # Apply safe limits to pagination parameters to prevent SQL errors
-        safe_skip = min(max(0, skip), 10000)  # Between 0 and 10000
-        safe_limit = min(max(1, limit), 1000)  # Between 1 and 1000
-        
-        # Only pass category_id if it's valid
-        category_filter = None
-        if category_id is not None and category_id > 0:
-            category_filter = category_id
-            
-        return get_products(
-            db=db, 
-            skip=safe_skip, 
-            limit=safe_limit, 
+        products = get_products(
+            db=db,
+            skip=safe_skip,
+            limit=safe_limit,
             include_deleted=include_deleted,
-            category_id=category_filter
+            category_id=category_filter,
         )
+        serialized = [ProductSchema.model_validate(p, from_attributes=True).model_dump() for p in products]
+        set_cached_response(cache_key, serialized)
+        return products
     except Exception as e:
-        # Catch any unexpected errors and return a proper error response
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=[{
@@ -86,6 +108,8 @@ def read_products(
                 "type": "server_error"
             }]
         )
+    finally:
+        release_computation_lock(cache_key)
 
 
 @router.get("/{product_id}", response_model=ProductSchema, 
@@ -117,7 +141,6 @@ def read_product(
     - **product_id**: ID of the product to retrieve (must be positive)
     - **include_deleted**: Whether to include soft-deleted products
     """
-    # Validate ID first
     if product_id <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -130,7 +153,18 @@ def read_product(
                 }
             ]
         )
-    return get_product_by_id(db=db, product_id=product_id, include_deleted=include_deleted)
+
+    cache_key = build_cache_key("product_detail", product_id=product_id, include_deleted=include_deleted)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        from fastapi.responses import Response
+        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
+    product = get_product_by_id(db=db, product_id=product_id, include_deleted=include_deleted)
+    if product is not None:
+        serialized = ProductSchema.model_validate(product, from_attributes=True).model_dump()
+        set_cached_response(cache_key, serialized)
+    return product
 
 
 @router.post("/", response_model=ProductSchema, status_code=status.HTTP_201_CREATED, 
@@ -435,6 +469,7 @@ def create_product_endpoint(
         if staged_upload_id:
             delete_staged_image(staged_upload_id)
 
+        invalidate_for_product(created_product.id)
         return get_product_by_id(db=db, product_id=created_product.id)
         
     except HTTPException:
@@ -655,6 +690,7 @@ def update_product_endpoint(
         # Update the product
         updated_product = update_product(db, product_id, update_data)
         
+        invalidate_for_product(product_id)
         return updated_product
     except HTTPException:
         # Re-raise the exception
@@ -716,4 +752,5 @@ def delete_product(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Product with ID {product_id} not found"
         )
+    invalidate_for_product(product_id)
     return None  # 204 No Content

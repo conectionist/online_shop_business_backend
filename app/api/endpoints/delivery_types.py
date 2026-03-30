@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Body, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from fastapi.responses import Response
+from app.core.cache import build_cache_key, get_cached_response, set_cached_response, invalidate_for_reference_data
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.delivery_type import DeliveryType, DeliveryTypeCreate, DeliveryTypeUpdate
@@ -29,8 +31,15 @@ def read_delivery_types(
     db: Session = Depends(get_db)
 ):
     """Get all delivery types with pagination support"""
+    cache_key = build_cache_key("delivery_types_list", skip=skip, limit=limit)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
     try:
         delivery_types = get_delivery_types(db, skip=skip, limit=limit)
+        serialized = [DeliveryType.model_validate(dt, from_attributes=True).model_dump() for dt in delivery_types]
+        set_cached_response(cache_key, serialized)
         return delivery_types
     except Exception as e:
         raise HTTPException(
@@ -53,7 +62,9 @@ def create_delivery_type_endpoint(
 ):
     """Create a new delivery type"""
     try:
-        return create_delivery_type(db=db, delivery_type=delivery_type)
+        created = create_delivery_type(db=db, delivery_type=delivery_type)
+        invalidate_for_reference_data("delivery_types")
+        return created
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -78,7 +89,9 @@ def reorder_delivery_types_endpoint(
 ):
     """Atomically reorder delivery types by providing the full ordered list of IDs."""
     try:
-        return reorder_delivery_types(db=db, ordered_ids=ordered_ids)
+        reordered = reorder_delivery_types(db=db, ordered_ids=ordered_ids)
+        invalidate_for_reference_data("delivery_types")
+        return reordered
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -99,8 +112,16 @@ def read_delivery_type(
     db: Session = Depends(get_db)
 ):
     """Get a specific delivery type by ID"""
+    cache_key = build_cache_key("delivery_types_detail", delivery_type_id=delivery_type_id)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
     try:
-        return get_delivery_type_by_id(db=db, delivery_type_id=delivery_type_id)
+        delivery_type = get_delivery_type_by_id(db=db, delivery_type_id=delivery_type_id)
+        serialized = DeliveryType.model_validate(delivery_type, from_attributes=True).model_dump()
+        set_cached_response(cache_key, serialized)
+        return delivery_type
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -126,7 +147,9 @@ def update_delivery_type_endpoint(
 ):
     """Update a delivery type (PUT - full replacement)"""
     try:
-        return update_delivery_type(db=db, delivery_type_id=delivery_type_id, delivery_type=delivery_type)
+        updated = update_delivery_type(db=db, delivery_type_id=delivery_type_id, delivery_type=delivery_type)
+        invalidate_for_reference_data("delivery_types")
+        return updated
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -152,7 +175,9 @@ def patch_delivery_type_endpoint(
 ):
     """Partially update a delivery type (PATCH - only update provided fields)"""
     try:
-        return update_delivery_type(db=db, delivery_type_id=delivery_type_id, delivery_type=delivery_type)
+        updated = update_delivery_type(db=db, delivery_type_id=delivery_type_id, delivery_type=delivery_type)
+        invalidate_for_reference_data("delivery_types")
+        return updated
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -182,6 +207,7 @@ def delete_delivery_type_endpoint(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Delivery type with ID {delivery_type_id} not found"
             )
+        invalidate_for_reference_data("delivery_types")
         return None
     except HTTPException as e:
         raise e
@@ -207,7 +233,9 @@ def reorder_delivery_types_endpoint(
 ):
     """Atomically reorder delivery types by providing the full ordered list of IDs."""
     try:
-        return reorder_delivery_types(db=db, ordered_ids=ordered_ids)
+        reordered = reorder_delivery_types(db=db, ordered_ids=ordered_ids)
+        invalidate_for_reference_data("delivery_types")
+        return reordered
     except HTTPException as e:
         raise e
     except Exception as e:

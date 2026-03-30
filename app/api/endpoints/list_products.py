@@ -1,9 +1,15 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, status, Body
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.database import get_db
+from app.core.cache import (
+    build_cache_key, get_cached_response, set_cached_response,
+    acquire_computation_lock, release_computation_lock, wait_for_cache,
+    invalidate_for_list,
+)
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.product import Product as ProductSchema
@@ -47,8 +53,20 @@ def get_list_products_endpoint(
     
     Returns a list of all products that are associated with the specified list.
     """
+    cache_key = build_cache_key("list_products", list_id=list_id)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
+    if not acquire_computation_lock(cache_key):
+        cached = wait_for_cache(cache_key)
+        if cached is not None:
+            return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
     try:
-        return get_list_products(db=db, list_id=list_id)
+        result = get_list_products(db=db, list_id=list_id)
+        set_cached_response(cache_key, result)
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -56,6 +74,8 @@ def get_list_products_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)}"
         )
+    finally:
+        release_computation_lock(cache_key)
 
 
 @router.post("/{list_id}/products/{product_id}", response_model=dict, status_code=status.HTTP_201_CREATED, responses={
@@ -81,6 +101,7 @@ def add_product_to_list_endpoint(
     """
     try:
         relationship = add_product_to_list(db=db, list_id=list_id, product_id=product_id, stoc_produs=request.stoc_produs)
+        invalidate_for_list(list_id)
         return {
             "message": f"Product {product_id} added to list {list_id} successfully",
             "list_id": list_id,
@@ -122,6 +143,7 @@ def remove_product_from_list_endpoint(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Product {product_id} is not in list {list_id}"
             )
+        invalidate_for_list(list_id)
         return None
     except HTTPException:
         raise
@@ -153,7 +175,9 @@ def replace_list_products_endpoint(
     This operation removes all existing products from the list and adds the new ones.
     """
     try:
-        return replace_list_products(db=db, list_id=list_id, product_ids=product_ids)
+        result = replace_list_products(db=db, list_id=list_id, product_ids=product_ids)
+        invalidate_for_list(list_id)
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -185,7 +209,9 @@ def add_products_to_list_endpoint(
     Returns only the products that were actually added.
     """
     try:
-        return add_products_to_list(db=db, list_id=list_id, product_ids=product_ids)
+        result = add_products_to_list(db=db, list_id=list_id, product_ids=product_ids)
+        invalidate_for_list(list_id)
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -218,6 +244,7 @@ def update_list_product_availability_endpoint(
             product_id=product_id,
             stoc_produs=request.stoc_produs,
         )
+        invalidate_for_list(list_id)
         # Minimal, idempotent response; does not alter other fields
         return {
             "list_id": list_id,

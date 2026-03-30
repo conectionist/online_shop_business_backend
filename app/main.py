@@ -27,6 +27,7 @@ from app.core.rate_limit import limiter
 from app.api.api import api_router
 from app.api.endpoints.system_config import mount_static_files
 from app.core.admin_init import initialize_default_admin
+from app.core.redis import init_redis, close_redis
 from app.services.push_notifications import prune_inactive_subscriptions
 
 app = FastAPI(
@@ -146,6 +147,9 @@ mount_static_files(app)
 @app.on_event("startup")
 async def startup_event():
     """Initialize application on startup"""
+    # Connect to Redis (cache layer)
+    init_redis()
+
     try:
         # Initialize default admin user
         # Note: Database tables are created by Alembic migrations in docker-entrypoint.sh
@@ -187,6 +191,12 @@ async def startup_event():
             await asyncio.sleep(60 * 60 * 24)
 
     asyncio.create_task(prune_loop())
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    close_redis()
 
 
 class HealthResponse(BaseModel):

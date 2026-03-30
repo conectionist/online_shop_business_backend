@@ -5,6 +5,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from fastapi.responses import Response
+from app.core.cache import build_cache_key, get_cached_response, set_cached_response, invalidate_for_reference_data
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.modalitati_plata import (
@@ -35,6 +37,11 @@ def read_modalitati_plata(
     db: Session = Depends(get_db)
 ):
     """Get all payment methods with pagination support"""
+    cache_key = build_cache_key("modalitati_plata_list", skip=skip, limit=limit)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
     try:
         modalitati = get_modalitati_plata(db, skip=skip, limit=limit)
         # Add required_fields_schema to each payment method
@@ -49,6 +56,7 @@ def read_modalitati_plata(
                 "required_fields_schema": _get_required_fields_schema(modalitate.payment_type_id)
             }
             result.append(modalitate_dict)
+        set_cached_response(cache_key, result)
         return result
     except Exception as e:
         raise HTTPException(
@@ -78,6 +86,7 @@ def create_modalitati_plata(
     try:
         db_modalitate = create_modalitate_plata(db=db, modalitate=modalitate)
         # Add required_fields_schema to response
+        invalidate_for_reference_data("modalitati_plata")
         return {
             "id": db_modalitate.id,
             "name": db_modalitate.name,
@@ -112,6 +121,11 @@ def read_modalitate_plata(
     db: Session = Depends(get_db)
 ):
     """Get a specific payment method by ID"""
+    cache_key = build_cache_key("modalitati_plata_detail", modalitate_id=modalitate_id)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
     try:
         db_modalitate = get_modalitate_plata_by_id(db, modalitate_id=modalitate_id)
         if db_modalitate is None:
@@ -120,7 +134,7 @@ def read_modalitate_plata(
                 detail="Payment method not found"
             )
         # Add required_fields_schema to response
-        return {
+        payload = {
             "id": db_modalitate.id,
             "name": db_modalitate.name,
             "description": db_modalitate.description,
@@ -128,6 +142,9 @@ def read_modalitate_plata(
             "required_data": db_modalitate.required_data,
             "required_fields_schema": _get_required_fields_schema(db_modalitate.payment_type_id)
         }
+        serialized = ModalitatePlata.model_validate(payload).model_dump()
+        set_cached_response(cache_key, serialized)
+        return payload
     except HTTPException:
         raise
     except ValidationError as e:
@@ -171,6 +188,7 @@ def update_modalitati_plata(
             )
         
         # Add required_fields_schema to response
+        invalidate_for_reference_data("modalitati_plata")
         return {
             "id": db_modalitate.id,
             "name": db_modalitate.name,
@@ -223,6 +241,7 @@ def patch_modalitati_plata(
             )
         
         # Add required_fields_schema to response
+        invalidate_for_reference_data("modalitati_plata")
         return {
             "id": db_modalitate.id,
             "name": db_modalitate.name,
@@ -267,6 +286,7 @@ def delete_modalitati_plata(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Payment method not found"
             )
+        invalidate_for_reference_data("modalitati_plata")
         return None  # Will return 204 No Content
         
     except HTTPException:

@@ -43,8 +43,13 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       # Enable OpenAPI docs in development environment
       - ENABLE_OPENAPI_DOCS=true
+      # Redis cache
+      - REDIS_HOST=redis_debug
+      - REDIS_PORT=6379
     depends_on:
       db_debug:
+        condition: service_healthy
+      redis_debug:
         condition: service_healthy
     volumes:
       - ./uploads:/app/uploads
@@ -105,6 +110,20 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    networks:
+      - debug_backend
+
+  redis_debug:
+    image: redis:8-alpine
+    container_name: online_shop_redis_debug
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - debug_backend
 

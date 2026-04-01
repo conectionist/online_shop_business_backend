@@ -11,7 +11,7 @@ import socket
 import time
 import redis
 
-from app.core.config import REDIS_HOST, REDIS_PORT, REDIS_DB
+from app.core.config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_USERNAME, REDIS_PASSWORD
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +71,14 @@ def disable_redis(reason: Exception | str) -> None:
 def _build_client() -> redis.Redis:
     """Create a Redis client with current settings."""
     host = _resolved_redis_host or REDIS_HOST
+    username = REDIS_USERNAME or None
+    password = REDIS_PASSWORD or None
     return redis.Redis(
         host=host,
         port=REDIS_PORT,
         db=REDIS_DB,
+        username=username,
+        password=password,
         decode_responses=True,
         socket_connect_timeout=_SOCKET_CONNECT_TIMEOUT,
         socket_timeout=_SOCKET_TIMEOUT,

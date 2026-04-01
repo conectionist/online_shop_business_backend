@@ -185,6 +185,20 @@ ALLOW_PUBLIC_PUSH_SUBSCRIBE = get_optional_env_var(
 REDIS_HOST = get_optional_env_var("REDIS_HOST", "redis", "Redis hostname")
 REDIS_PORT = int(get_optional_env_var("REDIS_PORT", "6379", "Redis port"))
 REDIS_DB = int(get_optional_env_var("REDIS_DB", "0", "Redis database number"))
+REDIS_USERNAME = get_optional_env_var("REDIS_USERNAME", "", "Redis ACL username").strip()
+REDIS_PASSWORD = get_optional_env_var("REDIS_PASSWORD", "", "Redis ACL password").strip()
+
+if ENVIRONMENT == "production":
+    if not REDIS_USERNAME:
+        logger.error(
+            "CRITICAL: Production requires REDIS_USERNAME to be set for authenticated Redis access."
+        )
+        sys.exit(1)
+    if not REDIS_PASSWORD:
+        logger.error(
+            "CRITICAL: Production requires REDIS_PASSWORD to be set for authenticated Redis access."
+        )
+        sys.exit(1)
 
 # Image upload: max file size in MB (product/category images)
 MAX_IMAGE_SIZE_MB = int(get_optional_env_var("MAX_IMAGE_SIZE_MB", "15", "Max image upload size in MB"))
@@ -261,6 +275,8 @@ class Settings:
         self.REDIS_HOST = REDIS_HOST
         self.REDIS_PORT = REDIS_PORT
         self.REDIS_DB = REDIS_DB
+        self.REDIS_USERNAME = REDIS_USERNAME
+        self.REDIS_PASSWORD = REDIS_PASSWORD
 
         # Image upload
         self.MAX_IMAGE_SIZE_MB = MAX_IMAGE_SIZE_MB

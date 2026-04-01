@@ -80,6 +80,9 @@ services:
       # Redis cache
       - REDIS_HOST=redis_test
       - REDIS_PORT=6379
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_USERNAME=${REDIS_USERNAME:-default}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     depends_on:
       mysql_test:
         condition: service_healthy
@@ -122,9 +125,12 @@ services:
     image: redis:8-alpine
     container_name: online_shop_redis_test
     restart: "no"
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      - REDIS_USERNAME=${REDIS_USERNAME:-default}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli --user \"${REDIS_USERNAME:-default}\" -a \"${REDIS_PASSWORD}\" ping"]
       interval: 5s
       timeout: 3s
       retries: 5

@@ -14,6 +14,7 @@ from app.core.cache import (
     build_cache_key, get_cached_response, set_cached_response,
     acquire_computation_lock, release_computation_lock, wait_for_cache,
     invalidate_for_product,
+    invalidate_image_versions_path,
 )
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
@@ -487,6 +488,8 @@ def create_product_endpoint(
             delete_staged_image(staged_upload_id)
 
         invalidate_for_product(created_product.id)
+        if image_dir_path is not None:
+            invalidate_image_versions_path(image_dir_path)
         return get_product_by_id(db=db, product_id=created_product.id)
         
     except HTTPException:
@@ -759,15 +762,21 @@ def delete_product(
             ]
         )
         
+    image_paths_for_cache: list[str] = []
     if permanent:
+        prod = db.query(Product).filter(Product.id == product_id).first()
+        if prod:
+            image_paths_for_cache = [img.path for img in prod.images if img.path]
         result = hard_delete_product(db=db, product_id=product_id)
     else:
         result = soft_delete_product(db=db, product_id=product_id)
-        
+
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Product with ID {product_id} not found"
         )
+    for p in image_paths_for_cache:
+        invalidate_image_versions_path(p)
     invalidate_for_product(product_id)
     return None  # 204 No Content

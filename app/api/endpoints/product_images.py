@@ -11,7 +11,7 @@ from app.services.auth import get_current_admin_from_cookie
 from app.core.file_upload import is_valid_image, get_upload_dir
 from app.core.image_errors import image_validation_detail
 from app.core.image_processing import process_and_save_image_versions
-from app.core.cache import invalidate_for_product
+from app.core.cache import invalidate_for_product, invalidate_image_versions_path
 from app.models.admin import Admin
 from app.models.product import Product
 from app.schemas.product_image import ProductImage as ProductImageSchema
@@ -89,7 +89,8 @@ async def upload_product_image(
         # Create the product image record
         image_data = ProductImageCreate(path=image_dir_path, position=position)
         db_image = create_product_image(db, product_id, image_data)
-        
+
+        invalidate_image_versions_path(image_dir_path)
         invalidate_for_product(product_id)
         return db_image
     except HTTPException:
@@ -290,7 +291,8 @@ async def delete_product_image_endpoint(
     image_dir_path = os.path.join(get_upload_dir(), image_path)
     if os.path.exists(image_dir_path) and os.path.isdir(image_dir_path):
         shutil.rmtree(image_dir_path)
-    
+
+    invalidate_image_versions_path(image_path)
     invalidate_for_product(product_id)
     return None
 

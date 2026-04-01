@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 # Key prefixes (include API version for safe future migrations)
 _RESP_PREFIX = "cache:resp:v1"
 _LOCK_PREFIX = "cache:lock:v1"
+_IMGVER_PREFIX = "cache:imgver:v1"
 
 # Stampede lock defaults
 _LOCK_TTL_SECONDS = 5
@@ -53,6 +54,55 @@ def build_cache_key(route_name: str, **params: Any) -> str:
     for k, v in sorted(params.items()):
         parts.append(f"{k}={v}")
     return ":".join(parts)
+
+
+def build_image_versions_key(image_path: str) -> str:
+    """Redis key for cached ``image_versions`` dict for a storage path."""
+    return f"{_IMGVER_PREFIX}:{image_path}"
+
+
+# ---------------------------------------------------------------------------
+# Image version cache (per-path dict, invalidated on image writes)
+# ---------------------------------------------------------------------------
+
+
+def get_cached_image_versions(image_path: str) -> dict[str, str] | None:
+    """
+    Return cached ``{original, medium, thumbnail}`` for *image_path*, or None on miss/error.
+    """
+    if not image_path:
+        return None
+    key = build_image_versions_key(image_path)
+    raw = get_cached_response(key)
+    if raw is None:
+        return None
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return None
+        o, m, t = data.get("original"), data.get("medium"), data.get("thumbnail")
+        if not all(isinstance(x, str) for x in (o, m, t)):
+            return None
+        return {"original": o, "medium": m, "thumbnail": t}
+    except json.JSONDecodeError:
+        logger.warning("Invalid JSON in image_versions cache for %s", key)
+        delete_key(key)
+        return None
+
+
+def set_cached_image_versions(image_path: str, versions: dict[str, str]) -> None:
+    """Store resolved image versions under *image_path* (no TTL; invalidated explicitly)."""
+    if not image_path:
+        return
+    key = build_image_versions_key(image_path)
+    set_cached_response(key, versions)
+
+
+def invalidate_image_versions_path(image_path: str | None) -> None:
+    """Remove cached image versions for *image_path* if set."""
+    if not image_path or not str(image_path).strip():
+        return
+    delete_key(build_image_versions_key(image_path.strip()))
 
 
 # ---------------------------------------------------------------------------

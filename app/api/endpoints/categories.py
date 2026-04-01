@@ -15,6 +15,7 @@ from app.core.cache import (
     build_cache_key, get_cached_response, set_cached_response,
     acquire_computation_lock, release_computation_lock, wait_for_cache,
     invalidate_for_categories,
+    invalidate_image_versions_path,
 )
 from app.core.file_upload import delete_file, is_valid_image, get_upload_dir
 from app.core.image_errors import image_validation_detail
@@ -97,7 +98,8 @@ def upload_category_image(
         # Process and save multiple versions of the image
         # This will create a directory with the original, medium, and thumbnail versions
         image_dir_path = process_and_save_image_versions(file, subdirectory="categories")
-        
+        old_image_path = category.image_path
+
         # If category already has an image, delete the old directory and all its contents
         if category.image_path:
             # We need to delete all files in the directory
@@ -115,7 +117,9 @@ def upload_category_image(
             category_id=category_id, 
             category=CategoryUpdate(image_path=image_dir_path)
         )
-        
+
+        invalidate_image_versions_path(old_image_path)
+        invalidate_image_versions_path(image_dir_path)
         invalidate_for_categories()
         return updated_category
     except HTTPException:
@@ -321,6 +325,7 @@ def create_category_endpoint(
         # If we successfully linked a staged image, clean up the staging directory.
         if staged_upload_id:
             delete_staged_image(staged_upload_id)
+        invalidate_image_versions_path(created_category.image_path)
         invalidate_for_categories()
         return created_category
     except HTTPException as e:
@@ -431,6 +436,10 @@ def update_category_endpoint(
                 detail=f"Category with ID {category_id} not found"
             )
             
+        # Snapshot old path before any mutation so cache invalidation targets the
+        # pre-update key even if ORM state changes in-place.
+        old_image_path = existing_category.image_path
+
         # Initialize update data and image path
         update_dict = {}
         primary_image_path = None
@@ -510,6 +519,8 @@ def update_category_endpoint(
             category_id=category_id,
             category=category_update
         )
+        invalidate_image_versions_path(old_image_path)
+        invalidate_image_versions_path(updated_category.image_path)
         invalidate_for_categories()
         return updated_category
     except HTTPException as e:
@@ -555,6 +566,10 @@ def patch_category_endpoint(
                 detail=f"Category with ID {category_id} not found"
             )
         
+        # Snapshot old path before any mutation so cache invalidation targets the
+        # pre-update key even if ORM state changes in-place.
+        old_image_path = existing_category.image_path
+
         # Initialize update data and image path
         update_dict = {}
         primary_image_path = None
@@ -624,6 +639,8 @@ def patch_category_endpoint(
             category_id=category_id,
             category=category_update
         )
+        invalidate_image_versions_path(old_image_path)
+        invalidate_image_versions_path(updated_category.image_path)
         invalidate_for_categories()
         return updated_category
     except HTTPException as e:
@@ -673,12 +690,15 @@ def delete_category_endpoint(
 ):
     """Delete a category (permanently)"""
     try:
+        existing = get_category_by_id(db, category_id=category_id)
+        image_path_before = existing.image_path if existing else None
         result = delete_category(db=db, category_id=category_id)
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Category not found"
             )
+        invalidate_image_versions_path(image_path_before)
         invalidate_for_categories()
         return None
     except HTTPException:

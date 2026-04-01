@@ -3,15 +3,13 @@ from __future__ import annotations
 import os
 
 from app.core.file_upload import get_upload_dir
+from app.core.cache import get_cached_image_versions, set_cached_image_versions
 
 _KNOWN_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".gif")
 
 
-def resolve_image_versions(image_path: str | None, placeholder_url: str) -> dict[str, str]:
-    """Resolve image version paths with dynamic extension detection.
-
-    Returns placeholder URLs when ``image_path`` is empty.
-    """
+def _compute_image_versions_from_fs(image_path: str, placeholder_url: str) -> dict[str, str]:
+    """Filesystem resolution only (no Redis). Used after cache miss."""
     if not image_path:
         return {
             "original": placeholder_url,
@@ -38,3 +36,21 @@ def resolve_image_versions(image_path: str | None, placeholder_url: str) -> dict
         "medium": f"{image_path}/{image_id}-medium.jpg",
         "thumbnail": f"{image_path}/{image_id}-thumbnail.jpg",
     }
+
+
+def resolve_image_versions(image_path: str | None, placeholder_url: str) -> dict[str, str]:
+    """Resolve image version paths with dynamic extension detection.
+
+    Returns placeholder URLs when ``image_path`` is empty.
+    Uses Redis read-through/cache-aside for non-empty paths.
+    """
+    if not image_path:
+        return _compute_image_versions_from_fs("", placeholder_url)
+
+    cached = get_cached_image_versions(image_path)
+    if cached is not None:
+        return cached
+
+    result = _compute_image_versions_from_fs(image_path, placeholder_url)
+    set_cached_image_versions(image_path, result)
+    return result

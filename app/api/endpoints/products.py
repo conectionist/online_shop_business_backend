@@ -1,7 +1,10 @@
 import json
+import logging
 from typing import List, Optional
 import os
 import shutil
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, UploadFile, status
 from fastapi.responses import JSONResponse
@@ -84,10 +87,16 @@ def read_products(
     if cached is not None:
         try:
             payload = json.loads(cached)
-            validated_payload = [ProductSchema.model_validate(item).model_dump() for item in payload]
+            validated_payload = [
+                ProductSchema.model_validate(item).model_dump(mode="json") for item in payload
+            ]
             return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
         except Exception:
-            pass
+            logger.warning(
+                "Product list cache HIT path failed (invalid JSON or schema); key=%s — refetching",
+                cache_key,
+                exc_info=True,
+            )
 
     lock_acquired = acquire_computation_lock(cache_key)
     if not lock_acquired:
@@ -95,10 +104,16 @@ def read_products(
         if cached is not None:
             try:
                 payload = json.loads(cached)
-                validated_payload = [ProductSchema.model_validate(item).model_dump() for item in payload]
+                validated_payload = [
+                    ProductSchema.model_validate(item).model_dump(mode="json") for item in payload
+                ]
                 return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
             except Exception:
-                pass
+                logger.warning(
+                    "Product list cache HIT after lock wait failed; key=%s — refetching",
+                    cache_key,
+                    exc_info=True,
+                )
 
     try:
         products = get_products(
@@ -108,10 +123,20 @@ def read_products(
             include_deleted=include_deleted,
             category_id=category_filter,
         )
-        payload = [ProductSchema.model_validate(p, from_attributes=True).model_dump() for p in products]
+        payload = [
+            ProductSchema.model_validate(p, from_attributes=True).model_dump(mode="json") for p in products
+        ]
         set_cached_response(cache_key, payload)
         return payload
-    except Exception as e:
+    except Exception:
+        logger.exception(
+            "read_products failed: skip=%s limit=%s include_deleted=%s category_id=%s cache_key=%s",
+            safe_skip,
+            safe_limit,
+            include_deleted,
+            category_filter,
+            cache_key,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=[{
@@ -172,14 +197,14 @@ def read_product(
     if cached is not None:
         try:
             payload = json.loads(cached)
-            validated_payload = ProductSchema.model_validate(payload).model_dump()
+            validated_payload = ProductSchema.model_validate(payload).model_dump(mode="json")
             return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
         except Exception:
             pass
 
     product = get_product_by_id(db=db, product_id=product_id, include_deleted=include_deleted)
     if product is not None:
-        payload = ProductSchema.model_validate(product, from_attributes=True).model_dump()
+        payload = ProductSchema.model_validate(product, from_attributes=True).model_dump(mode="json")
         set_cached_response(cache_key, payload)
         return payload
     return product

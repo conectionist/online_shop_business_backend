@@ -1,13 +1,24 @@
+import json
+import logging
 from typing import List, Optional
 import os
 import shutil
 
+logger = logging.getLogger(__name__)
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, UploadFile, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.core.database import get_db
 from app.core.constants import UNCATEGORIZED_CATEGORY_ID
+from app.core.cache import (
+    build_cache_key, get_cached_response, set_cached_response,
+    acquire_computation_lock, release_computation_lock, wait_for_cache,
+    invalidate_for_product,
+    invalidate_image_versions_path,
+)
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.core.file_upload import (
@@ -59,25 +70,73 @@ def read_products(
     - **include_deleted**: Whether to include soft-deleted products
     - **category_id**: Filter products by category ID
     """
+    # Apply safe limits to pagination parameters to prevent SQL errors
+    safe_skip = min(max(0, skip), 10000)  # Between 0 and 10000
+    safe_limit = min(max(1, limit), 1000)  # Between 1 and 1000
+
+    category_filter = None
+    if category_id is not None and category_id > 0:
+        category_filter = category_id
+
+    cache_key = build_cache_key(
+        "products_list",
+        skip=safe_skip, limit=safe_limit,
+        include_deleted=include_deleted, category_id=category_filter,
+    )
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        try:
+            payload = json.loads(cached)
+            validated_payload = [
+                ProductSchema.model_validate(item).model_dump(mode="json") for item in payload
+            ]
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            logger.warning(
+                "Product list cache HIT path failed (invalid JSON or schema); key=%s — refetching",
+                cache_key,
+                exc_info=True,
+            )
+
+    lock_acquired = acquire_computation_lock(cache_key)
+    if not lock_acquired:
+        cached = wait_for_cache(cache_key)
+        if cached is not None:
+            try:
+                payload = json.loads(cached)
+                validated_payload = [
+                    ProductSchema.model_validate(item).model_dump(mode="json") for item in payload
+                ]
+                return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+            except Exception:
+                logger.warning(
+                    "Product list cache HIT after lock wait failed; key=%s — refetching",
+                    cache_key,
+                    exc_info=True,
+                )
+
     try:
-        # Apply safe limits to pagination parameters to prevent SQL errors
-        safe_skip = min(max(0, skip), 10000)  # Between 0 and 10000
-        safe_limit = min(max(1, limit), 1000)  # Between 1 and 1000
-        
-        # Only pass category_id if it's valid
-        category_filter = None
-        if category_id is not None and category_id > 0:
-            category_filter = category_id
-            
-        return get_products(
-            db=db, 
-            skip=safe_skip, 
-            limit=safe_limit, 
+        products = get_products(
+            db=db,
+            skip=safe_skip,
+            limit=safe_limit,
             include_deleted=include_deleted,
-            category_id=category_filter
+            category_id=category_filter,
         )
-    except Exception as e:
-        # Catch any unexpected errors and return a proper error response
+        payload = [
+            ProductSchema.model_validate(p, from_attributes=True).model_dump(mode="json") for p in products
+        ]
+        set_cached_response(cache_key, payload)
+        return payload
+    except Exception:
+        logger.exception(
+            "read_products failed: skip=%s limit=%s include_deleted=%s category_id=%s cache_key=%s",
+            safe_skip,
+            safe_limit,
+            include_deleted,
+            category_filter,
+            cache_key,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=[{
@@ -86,6 +145,9 @@ def read_products(
                 "type": "server_error"
             }]
         )
+    finally:
+        if lock_acquired:
+            release_computation_lock(cache_key)
 
 
 @router.get("/{product_id}", response_model=ProductSchema, 
@@ -117,7 +179,6 @@ def read_product(
     - **product_id**: ID of the product to retrieve (must be positive)
     - **include_deleted**: Whether to include soft-deleted products
     """
-    # Validate ID first
     if product_id <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -130,7 +191,23 @@ def read_product(
                 }
             ]
         )
-    return get_product_by_id(db=db, product_id=product_id, include_deleted=include_deleted)
+
+    cache_key = build_cache_key("product_detail", product_id=product_id, include_deleted=include_deleted)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        try:
+            payload = json.loads(cached)
+            validated_payload = ProductSchema.model_validate(payload).model_dump(mode="json")
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
+
+    product = get_product_by_id(db=db, product_id=product_id, include_deleted=include_deleted)
+    if product is not None:
+        payload = ProductSchema.model_validate(product, from_attributes=True).model_dump(mode="json")
+        set_cached_response(cache_key, payload)
+        return payload
+    return product
 
 
 @router.post("/", response_model=ProductSchema, status_code=status.HTTP_201_CREATED, 
@@ -435,6 +512,9 @@ def create_product_endpoint(
         if staged_upload_id:
             delete_staged_image(staged_upload_id)
 
+        invalidate_for_product(created_product.id)
+        if image_dir_path is not None:
+            invalidate_image_versions_path(image_dir_path)
         return get_product_by_id(db=db, product_id=created_product.id)
         
     except HTTPException:
@@ -655,6 +735,7 @@ def update_product_endpoint(
         # Update the product
         updated_product = update_product(db, product_id, update_data)
         
+        invalidate_for_product(product_id)
         return updated_product
     except HTTPException:
         # Re-raise the exception
@@ -706,14 +787,21 @@ def delete_product(
             ]
         )
         
+    image_paths_for_cache: list[str] = []
     if permanent:
+        prod = db.query(Product).filter(Product.id == product_id).first()
+        if prod:
+            image_paths_for_cache = [img.path for img in prod.images if img.path]
         result = hard_delete_product(db=db, product_id=product_id)
     else:
         result = soft_delete_product(db=db, product_id=product_id)
-        
+
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Product with ID {product_id} not found"
         )
+    for p in image_paths_for_cache:
+        invalidate_image_versions_path(p)
+    invalidate_for_product(product_id)
     return None  # 204 No Content

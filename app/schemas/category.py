@@ -1,9 +1,9 @@
 from typing import Optional, Annotated, Dict
 from datetime import datetime
-import os
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
 
+from app.core.image_versions import resolve_image_versions
 
 class CategoryBase(BaseModel):
     """Base schema for category attributes"""
@@ -80,36 +80,10 @@ class Category(CategoryBase):
     @property
     def image_versions(self) -> Dict[str, str]:
         """Generate paths for different image versions based on the image directory"""
-        if not self.image_path:
-            # Return placeholder image path from system config
-            # The client should use the system config endpoint to get the actual placeholder path
-            return {
-                "original": "/api/v1/static/placeholders/category_placeholder.jpg",
-                "medium": "/api/v1/static/placeholders/category_placeholder.jpg",
-                "thumbnail": "/api/v1/static/placeholders/category_placeholder.jpg"
-            }
-        
-        # Extract the image ID from the path
-        image_id = os.path.basename(self.image_path)
-        
-        # Detect the actual file extension by checking what files exist
-        # This handles cases where images are uploaded in different formats
-        upload_dir = os.path.join("/app/uploads", self.image_path)
-        ext = ".jpg"  # Default fallback
-        
-        # Check for common image extensions
-        for test_ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
-            test_file = os.path.join(upload_dir, f"{image_id}{test_ext}")
-            if os.path.exists(test_file):
-                ext = test_ext
-                break
-        
-        # Return paths for all versions
-        return {
-            "original": os.path.join(self.image_path, f"{image_id}{ext}"),
-            "medium": os.path.join(self.image_path, f"{image_id}-medium{ext}"),
-            "thumbnail": os.path.join(self.image_path, f"{image_id}-thumbnail{ext}")
-        }
+        return resolve_image_versions(
+            self.image_path,
+            placeholder_url="/api/v1/static/placeholders/category_placeholder.jpg",
+        )
     
     model_config = ConfigDict(
         from_attributes=True,

@@ -1,8 +1,8 @@
 from typing import Dict, Annotated
-import os
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from app.core.image_versions import resolve_image_versions
 
 class ProductImageBase(BaseModel):
     """Base schema for product image attributes"""
@@ -46,39 +46,10 @@ class ProductImage(ProductImageBase):
     @computed_field
     def image_versions(self) -> Dict[str, str]:
         """Generate paths for different versions of this image"""
-        if not self.path:
-            # Return placeholder image path from system config
-            return {
-                "original": "/api/v1/static/placeholders/product_placeholder.jpg",
-                "medium": "/api/v1/static/placeholders/product_placeholder.jpg",
-                "thumbnail": "/api/v1/static/placeholders/product_placeholder.jpg"
-            }
-        
-        # Extract the image ID from the path (last part of the path)
-        image_id = os.path.basename(self.path)
-        
-        # Detect the actual file extension by checking what files exist
-        from app.core.file_upload import get_upload_dir
-        
-        full_path = os.path.join(get_upload_dir(), self.path)
-        if os.path.exists(full_path):
-            # Check for common extensions
-            for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
-                original_file = os.path.join(full_path, f"{image_id}{ext}")
-                if os.path.exists(original_file):
-                    # Found the actual extension, use it for all versions
-                    return {
-                        "original": f"{self.path}/{image_id}{ext}",
-                        "medium": f"{self.path}/{image_id}-medium{ext}",
-                        "thumbnail": f"{self.path}/{image_id}-thumbnail{ext}"
-                    }
-        
-        # Fallback to jpg if no files found
-        return {
-            "original": f"{self.path}/{image_id}.jpg",
-            "medium": f"{self.path}/{image_id}-medium.jpg",
-            "thumbnail": f"{self.path}/{image_id}-thumbnail.jpg"
-        }
+        return resolve_image_versions(
+            self.path,
+            placeholder_url="/api/v1/static/placeholders/product_placeholder.jpg",
+        )
     
     model_config = ConfigDict(
         from_attributes=True

@@ -1,8 +1,11 @@
+import json
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from fastapi.responses import JSONResponse
+from app.core.cache import build_cache_key, get_cached_response, set_cached_response, invalidate_for_reference_data
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.delivery_schedule import DeliverySchedule, DeliveryScheduleCreate, DeliveryScheduleUpdate
@@ -28,9 +31,24 @@ def read_delivery_schedules(
     db: Session = Depends(get_db)
 ):
     """Get all delivery schedules with pagination support"""
+    cache_key = build_cache_key("delivery_schedules_list", skip=skip, limit=limit)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        try:
+            payload = json.loads(cached)
+            validated_payload = [
+                DeliverySchedule.model_validate(item).model_dump()
+                for item in payload
+            ]
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
+
     try:
         delivery_schedules = get_delivery_schedules(db, skip=skip, limit=limit)
-        return delivery_schedules
+        payload = [DeliverySchedule.model_validate(ds, from_attributes=True).model_dump() for ds in delivery_schedules]
+        set_cached_response(cache_key, payload)
+        return payload
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -51,7 +69,9 @@ def create_delivery_schedule_endpoint(
 ):
     """Create a new delivery schedule"""
     try:
-        return create_delivery_schedule(db=db, delivery_schedule=delivery_schedule)
+        created = create_delivery_schedule(db=db, delivery_schedule=delivery_schedule)
+        invalidate_for_reference_data("delivery_schedules")
+        return created
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -72,8 +92,26 @@ def read_delivery_schedule(
     db: Session = Depends(get_db)
 ):
     """Get a specific delivery schedule by ID"""
+    cache_key = build_cache_key("delivery_schedules_detail", delivery_schedule_id=delivery_schedule_id)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        try:
+            payload = json.loads(cached)
+            validated_payload = DeliverySchedule.model_validate(payload).model_dump()
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
+
     try:
-        return get_delivery_schedule_by_id(db=db, delivery_schedule_id=delivery_schedule_id)
+        delivery_schedule = get_delivery_schedule_by_id(db=db, delivery_schedule_id=delivery_schedule_id)
+        if delivery_schedule is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Delivery schedule with ID {delivery_schedule_id} not found",
+            )
+        payload = DeliverySchedule.model_validate(delivery_schedule, from_attributes=True).model_dump()
+        set_cached_response(cache_key, payload)
+        return payload
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -99,11 +137,13 @@ def update_delivery_schedule_endpoint(
 ):
     """Update a delivery schedule (PUT - full replacement)"""
     try:
-        return update_delivery_schedule(
+        updated = update_delivery_schedule(
             db=db, 
             delivery_schedule_id=delivery_schedule_id, 
             delivery_schedule=delivery_schedule
         )
+        invalidate_for_reference_data("delivery_schedules")
+        return updated
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -129,11 +169,13 @@ def patch_delivery_schedule(
 ):
     """Partially update a delivery schedule (PATCH - only update provided fields)"""
     try:
-        return update_delivery_schedule(
+        updated = update_delivery_schedule(
             db=db, 
             delivery_schedule_id=delivery_schedule_id, 
             delivery_schedule=delivery_schedule
         )
+        invalidate_for_reference_data("delivery_schedules")
+        return updated
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -163,6 +205,7 @@ def delete_delivery_schedule_endpoint(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Delivery schedule with ID {delivery_schedule_id} not found"
             )
+        invalidate_for_reference_data("delivery_schedules")
         return None
     except HTTPException as e:
         raise e

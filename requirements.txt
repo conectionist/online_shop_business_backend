@@ -13,3 +13,4 @@ alembic==1.18.3
 pywebpush==2.2.0
 slowapi==0.1.9
 user-agents==2.2.0
+redis==7.4.0

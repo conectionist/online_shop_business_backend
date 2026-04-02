@@ -1,8 +1,11 @@
+import json
 from typing import List
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from fastapi.responses import JSONResponse
+from app.core.cache import build_cache_key, get_cached_response, set_cached_response, invalidate_for_reference_data
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.business_details import BusinessDetails, BusinessDetailsCreate, BusinessDetailsUpdate
@@ -28,8 +31,25 @@ def read_business_details(
     db: Session = Depends(get_db)
 ):
     """Get all business details with pagination support"""
+    cache_key = build_cache_key("business_details_list", skip=skip, limit=limit)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        try:
+            payload = json.loads(cached)
+            validated_payload = [
+                BusinessDetails.model_validate(item).model_dump()
+                for item in payload
+            ]
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            # Corrupted/stale cache payload: ignore and fallback to DB
+            pass
+
     try:
-        return get_business_details(db, skip=skip, limit=limit)
+        rows = get_business_details(db, skip=skip, limit=limit)
+        payload = [BusinessDetails.model_validate(r, from_attributes=True).model_dump() for r in rows]
+        set_cached_response(cache_key, payload)
+        return payload
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -51,7 +71,9 @@ def create_business_details_endpoint(
 ):
     """Create a new business details record (fails with 409 if a record already exists)"""
     try:
-        return create_business_details(db=db, business_details=business_details)
+        created = create_business_details(db=db, business_details=business_details)
+        invalidate_for_reference_data("business_details")
+        return created
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -72,8 +94,27 @@ def read_business_details_by_id(
     db: Session = Depends(get_db)
 ):
     """Get a specific business details record by ID"""
+    cache_key = build_cache_key("business_details_detail", business_details_id=business_details_id)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        try:
+            payload = json.loads(cached)
+            validated_payload = BusinessDetails.model_validate(payload).model_dump()
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            # Corrupted/stale cache payload: ignore and fallback to DB
+            pass
+
     try:
-        return get_business_details_by_id(db=db, business_details_id=business_details_id)
+        row = get_business_details_by_id(db=db, business_details_id=business_details_id)
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Business details with ID {business_details_id} not found",
+            )
+        payload = BusinessDetails.model_validate(row, from_attributes=True).model_dump()
+        set_cached_response(cache_key, payload)
+        return payload
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -99,7 +140,9 @@ def update_business_details_endpoint(
 ):
     """Update a business details record (PUT - full replacement)"""
     try:
-        return update_business_details(db=db, business_details_id=business_details_id, business_details=business_details)
+        updated = update_business_details(db=db, business_details_id=business_details_id, business_details=business_details)
+        invalidate_for_reference_data("business_details")
+        return updated
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -125,7 +168,9 @@ def patch_business_details_endpoint(
 ):
     """Partially update a business details record (PATCH - only update provided fields)"""
     try:
-        return update_business_details(db=db, business_details_id=business_details_id, business_details=business_details)
+        updated = update_business_details(db=db, business_details_id=business_details_id, business_details=business_details)
+        invalidate_for_reference_data("business_details")
+        return updated
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -155,6 +200,7 @@ def delete_business_details_endpoint(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Business details with ID {business_details_id} not found"
             )
+        invalidate_for_reference_data("business_details")
         return None
     except HTTPException as e:
         raise e

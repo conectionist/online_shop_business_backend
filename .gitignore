@@ -63,6 +63,9 @@ reports/
 ehthumbs.db
 Thumbs.db
 
+# k6 benchmark output (local runs)
+scripts/k6/out/
+
 # Test reports
 test-reports/
 

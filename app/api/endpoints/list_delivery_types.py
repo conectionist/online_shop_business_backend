@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.cache import invalidate_for_list
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.delivery_type import DeliveryType as DeliveryTypeSchema
@@ -64,6 +65,7 @@ def add_delivery_type_to_list_endpoint(
     """
     try:
         relationship = add_delivery_type_to_list(db=db, list_id=list_id, delivery_type_id=delivery_type_id)
+        invalidate_for_list(list_id)
         return {
             "message": f"Delivery type {delivery_type_id} added to list {list_id} successfully",
             "list_id": list_id,
@@ -104,6 +106,7 @@ def remove_delivery_type_from_list_endpoint(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Delivery type {delivery_type_id} is not in list {list_id}"
             )
+        invalidate_for_list(list_id)
         return None
     except HTTPException:
         raise
@@ -135,7 +138,9 @@ def replace_list_delivery_types_endpoint(
     This operation removes all existing delivery types from the list and adds the new ones.
     """
     try:
-        return replace_list_delivery_types(db=db, list_id=list_id, delivery_type_ids=delivery_type_ids)
+        result = replace_list_delivery_types(db=db, list_id=list_id, delivery_type_ids=delivery_type_ids)
+        invalidate_for_list(list_id)
+        return result
     except HTTPException:
         raise
     except Exception as e:

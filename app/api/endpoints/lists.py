@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 
 from app.core.database import get_db
+from app.core.cache import invalidate_for_list
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.list import List as ListSchema, ListCreate, ListUpdate
@@ -81,7 +82,9 @@ def update_list_endpoint(
     db: Session = Depends(get_db)
 ):
     """Update an existing list (PUT - full replacement)"""
-    return update_list(db=db, list_id=list_id, list_data=list_data, background=background)
+    result = update_list(db=db, list_id=list_id, list_data=list_data, background=background)
+    invalidate_for_list(list_id)
+    return result
 
 
 @router.patch("/{list_id}", response_model=ListSchema, responses={
@@ -100,7 +103,9 @@ def patch_list_endpoint(
     db: Session = Depends(get_db)
 ):
     """Partially update an existing list (PATCH - only update provided fields)"""
-    return update_list(db=db, list_id=list_id, list_data=list_data, background=background)
+    result = update_list(db=db, list_id=list_id, list_data=list_data, background=background)
+    invalidate_for_list(list_id)
+    return result
 
 
 @router.delete("/{list_id}", response_model=Dict[str, str], responses={
@@ -117,7 +122,9 @@ def delete_list_endpoint(
     db: Session = Depends(get_db)
 ):
     """Delete a list"""
-    return delete_list(db=db, list_id=list_id, soft_delete=soft_delete)
+    result = delete_list(db=db, list_id=list_id, soft_delete=soft_delete)
+    invalidate_for_list(list_id)
+    return result
 
 
 @router.post("/{list_id}/clone", response_model=ListSchema, status_code=status.HTTP_201_CREATED, responses={
@@ -134,4 +141,5 @@ def clone_list_endpoint(
     db: Session = Depends(get_db)
 ):
     """Clone an existing list with all its structure, ordering, and products"""
-    return clone_list(db=db, source_list_id=list_id)
+    result = clone_list(db=db, source_list_id=list_id)
+    return result

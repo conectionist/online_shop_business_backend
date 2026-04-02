@@ -11,6 +11,7 @@ from app.services.auth import get_current_admin_from_cookie
 from app.core.file_upload import is_valid_image, get_upload_dir
 from app.core.image_errors import image_validation_detail
 from app.core.image_processing import process_and_save_image_versions
+from app.core.cache import invalidate_for_product, invalidate_image_versions_path
 from app.models.admin import Admin
 from app.models.product import Product
 from app.schemas.product_image import ProductImage as ProductImageSchema
@@ -88,7 +89,9 @@ async def upload_product_image(
         # Create the product image record
         image_data = ProductImageCreate(path=image_dir_path, position=position)
         db_image = create_product_image(db, product_id, image_data)
-        
+
+        invalidate_image_versions_path(image_dir_path)
+        invalidate_for_product(product_id)
         return db_image
     except HTTPException:
         # If an HTTP exception occurred and an image directory was created, clean it up
@@ -196,6 +199,7 @@ async def update_product_image_position(
     image_data = ProductImageUpdate(position=position)
     updated_image = update_product_image(db, image_id, image_data)
     
+    invalidate_for_product(product_id)
     return updated_image
 
 
@@ -235,6 +239,7 @@ async def set_product_image_as_primary(
     image_data = ProductImageUpdate(position=0)
     updated_image = update_product_image(db, image_id, image_data)
     
+    invalidate_for_product(product_id)
     return updated_image
 
 
@@ -286,7 +291,9 @@ async def delete_product_image_endpoint(
     image_dir_path = os.path.join(get_upload_dir(), image_path)
     if os.path.exists(image_dir_path) and os.path.isdir(image_dir_path):
         shutil.rmtree(image_dir_path)
-    
+
+    invalidate_image_versions_path(image_path)
+    invalidate_for_product(product_id)
     return None
 
 
@@ -381,4 +388,5 @@ async def reorder_product_images_endpoint(
         )
     
     logger.info(f"Reorder images successful for product_id={product_id}, reordered {len(updated_images)} images")
+    invalidate_for_product(product_id)
     return updated_images

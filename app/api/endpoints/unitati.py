@@ -1,3 +1,4 @@
+import json
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status, Query
@@ -5,6 +6,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from fastapi.responses import JSONResponse
+from app.core.cache import build_cache_key, get_cached_response, set_cached_response, invalidate_for_reference_data
 from app.services.auth import get_current_admin_from_cookie
 from app.models.admin import Admin
 from app.schemas.unitati import Unit, UnitCreate, UnitUpdate
@@ -30,9 +33,21 @@ def read_units(
     db: Session = Depends(get_db)
 ):
     """Get all units with pagination support"""
+    cache_key = build_cache_key("unitati_list", skip=skip, limit=limit)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        try:
+            payload = json.loads(cached)
+            validated_payload = [Unit.model_validate(item).model_dump() for item in payload]
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
+
     try:
         units = get_units(db, skip=skip, limit=limit)
-        return units
+        payload = [Unit.model_validate(u, from_attributes=True).model_dump() for u in units]
+        set_cached_response(cache_key, payload)
+        return payload
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -54,7 +69,9 @@ def create_units(
 ):
     """Create a new unit"""
     try:
-        return create_unit(db=db, unit=unit)
+        created = create_unit(db=db, unit=unit)
+        invalidate_for_reference_data("unitati")
+        return created
     except HTTPException:
         # Re-raise HTTP exceptions from the service layer
         raise
@@ -81,6 +98,16 @@ def read_unit(
     db: Session = Depends(get_db)
 ):
     """Get a specific unit by ID"""
+    cache_key = build_cache_key("unitati_detail", unit_id=unit_id)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        try:
+            payload = json.loads(cached)
+            validated_payload = Unit.model_validate(payload).model_dump()
+            return JSONResponse(content=validated_payload, headers={"X-Cache": "HIT"})
+        except Exception:
+            pass
+
     try:
         db_unit = get_unit_by_id(db, unit_id=unit_id)
         if db_unit is None:
@@ -88,7 +115,9 @@ def read_unit(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Unit not found"
             )
-        return db_unit
+        payload = Unit.model_validate(db_unit, from_attributes=True).model_dump()
+        set_cached_response(cache_key, payload)
+        return payload
     except HTTPException:
         raise
     except ValidationError as e:
@@ -125,6 +154,7 @@ def update_units(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Unit not found"
             )
+        invalidate_for_reference_data("unitati")
         return db_unit
     except HTTPException:
         raise
@@ -162,6 +192,7 @@ def patch_units(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Unit not found"
             )
+        invalidate_for_reference_data("unitati")
         return db_unit
     except HTTPException:
         raise
@@ -198,6 +229,7 @@ def delete_units(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Unit not found"
             )
+        invalidate_for_reference_data("unitati")
         return None
     except HTTPException:
         raise

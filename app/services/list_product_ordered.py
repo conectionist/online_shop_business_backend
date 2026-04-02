@@ -1,5 +1,4 @@
 from typing import List as TypeList
-import os
 import logging
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -12,41 +11,7 @@ from app.models.list import List
 from app.models.product import Product
 from app.models.category import Category
 from app.models.list_product_ordered import ListProductOrdered
-
-
-def _get_image_versions(image_path: str) -> dict:
-    """Generate image versions with dynamic extension detection"""
-    if not image_path:
-        return {
-            "original": "/api/v1/static/placeholders/product_placeholder.jpg",
-            "medium": "/api/v1/static/placeholders/product_placeholder.jpg",
-            "thumbnail": "/api/v1/static/placeholders/product_placeholder.jpg"
-        }
-    
-    # Extract the image ID from the path
-    image_id = os.path.basename(image_path)
-    
-    # Detect the actual file extension by checking what files exist
-    from app.core.file_upload import get_upload_dir
-    full_path = os.path.join(get_upload_dir(), image_path)
-    if os.path.exists(full_path):
-        # Check for common extensions
-        for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
-            original_file = os.path.join(full_path, f"{image_id}{ext}")
-            if os.path.exists(original_file):
-                # Found the actual extension, use it for all versions
-                return {
-                    "original": f"{image_path}/{image_id}{ext}",
-                    "medium": f"{image_path}/{image_id}-medium{ext}",
-                    "thumbnail": f"{image_path}/{image_id}-thumbnail{ext}"
-                }
-    
-    # Fallback to jpg if no files found
-    return {
-        "original": f"{image_path}/{image_id}.jpg",
-        "medium": f"{image_path}/{image_id}-medium.jpg",
-        "thumbnail": f"{image_path}/{image_id}-thumbnail.jpg"
-    }
+from app.core.image_versions import resolve_image_versions
 
 
 def get_list_products_by_category(db: Session, list_id: int) -> dict:
@@ -138,7 +103,10 @@ def get_list_products_by_category(db: Session, list_id: int) -> dict:
                         "position": img.position,
                         "produse_id": img.produse_id,
                         "is_primary": img.position == 0,
-                        "image_versions": _get_image_versions(img.path)
+                        "image_versions": resolve_image_versions(
+                            img.path,
+                            placeholder_url="/api/v1/static/placeholders/product_placeholder.jpg",
+                        ),
                     }
                     for img in product.images
                 ]

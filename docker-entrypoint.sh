@@ -116,5 +116,5 @@ else
 fi
 
 # Start the application
-echo "Starting FastAPI application with 2 workers..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 ${UVICORN_PROXY_FLAGS} --log-config logging.ini
+echo "Starting FastAPI application with 1 worker..."
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 ${UVICORN_PROXY_FLAGS} --log-config logging.ini

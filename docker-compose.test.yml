@@ -83,6 +83,9 @@ services:
       - REDIS_DB=${REDIS_DB:-0}
       - REDIS_USERNAME=${REDIS_USERNAME:-default}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - ENABLE_METRICS=${ENABLE_METRICS:-true}
+      - METRICS_AUTH_REQUIRED=${METRICS_AUTH_REQUIRED:-true}
+      - METRICS_BEARER_TOKENS=${METRICS_BEARER_TOKENS}
     depends_on:
       mysql_test:
         condition: service_healthy
@@ -146,6 +149,8 @@ services:
     restart: "no"
     environment:
       - API_BASE_URL=http://api_server_test:8000
+      - METRICS_TEST_BEARER_TOKEN=${METRICS_TEST_BEARER_TOKEN}
+      - EXPECT_METRICS_DISABLED_404=${EXPECT_METRICS_DISABLED_404:-false}
     depends_on:
       api_server_test:
         condition: service_healthy

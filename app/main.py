@@ -1,4 +1,5 @@
 import os
+import hmac
 from fastapi import FastAPI, Depends, Request, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -218,8 +219,26 @@ async def health():
 
 
 @app.get("/metrics", include_in_schema=False)
-async def metrics():
+async def metrics(request: Request):
     """Prometheus metrics endpoint."""
     if not settings.ENABLE_METRICS:
         raise HTTPException(status_code=404, detail="Not Found")
+
+    if settings.METRICS_AUTH_REQUIRED:
+        auth_header = request.headers.get("Authorization", "")
+        scheme, _, provided_token = auth_header.partition(" ")
+        is_valid = (
+            scheme.lower() == "bearer"
+            and any(
+                hmac.compare_digest(provided_token, expected_token)
+                for expected_token in settings.METRICS_BEARER_TOKENS
+            )
+        )
+        if not is_valid:
+            return Response(
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+                content="Unauthorized",
+            )
+
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

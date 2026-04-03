@@ -68,6 +68,8 @@ services:
       - REDIS_USERNAME=${REDIS_USERNAME:-default}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - ENABLE_METRICS=${ENABLE_METRICS:-true}
+      - METRICS_AUTH_REQUIRED=${METRICS_AUTH_REQUIRED:-true}
+      - METRICS_BEARER_TOKENS=${METRICS_BEARER_TOKENS}
     depends_on:
       db:
         condition: service_healthy

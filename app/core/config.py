@@ -32,6 +32,11 @@ def get_optional_env_var(var_name: str, default: str, description: str) -> str:
     return os.getenv(var_name, default)
 
 
+def _parse_comma_separated_secrets(raw_value: str) -> List[str]:
+    """Parse comma-separated secret values while ignoring empty entries."""
+    return [item.strip() for item in raw_value.split(",") if item.strip()]
+
+
 # CORS Configuration
 # Get CORS_ORIGINS from environment variable or use defaults
 cors_origins_str = os.getenv("CORS_ORIGINS", "")
@@ -164,6 +169,26 @@ ENABLE_METRICS = get_optional_env_var(
     "Enable/disable Prometheus metrics endpoint and metric collection"
 ).lower() in ("true", "1", "yes")
 
+_default_metrics_auth_required = "true" if ENVIRONMENT == "production" else "false"
+METRICS_AUTH_REQUIRED = get_optional_env_var(
+    "METRICS_AUTH_REQUIRED",
+    _default_metrics_auth_required,
+    "Require Bearer authentication for /metrics endpoint"
+).lower() in ("true", "1", "yes")
+METRICS_BEARER_TOKENS = _parse_comma_separated_secrets(
+    get_optional_env_var(
+        "METRICS_BEARER_TOKENS",
+        "",
+        "Comma-separated Bearer tokens accepted by /metrics endpoint",
+    )
+)
+
+if METRICS_AUTH_REQUIRED and not METRICS_BEARER_TOKENS:
+    logger.error(
+        "CRITICAL: METRICS_AUTH_REQUIRED is enabled but METRICS_BEARER_TOKENS is empty."
+    )
+    sys.exit(1)
+
 # Web Push (VAPID) Configuration - optional for now; required when sending notifications
 VAPID_PUBLIC_KEY = get_optional_env_var(
     "VAPID_PUBLIC_KEY",
@@ -270,6 +295,8 @@ class Settings:
         # OpenAPI Settings
         self.ENABLE_OPENAPI_DOCS = ENABLE_OPENAPI_DOCS
         self.ENABLE_METRICS = ENABLE_METRICS
+        self.METRICS_AUTH_REQUIRED = METRICS_AUTH_REQUIRED
+        self.METRICS_BEARER_TOKENS = METRICS_BEARER_TOKENS
 
         # Web Push (VAPID) Settings
         self.VAPID_PUBLIC_KEY = VAPID_PUBLIC_KEY

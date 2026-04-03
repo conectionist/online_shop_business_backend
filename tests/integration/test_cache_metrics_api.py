@@ -2,6 +2,7 @@ import os
 import random
 import re
 
+import pytest
 import requests
 
 
@@ -9,8 +10,19 @@ def _api_base_url() -> str:
     return os.environ.get("API_BASE_URL", "http://localhost:8000")
 
 
-def _metrics_text() -> str:
-    response = requests.get(f"{_api_base_url()}/metrics")
+def _metrics_token() -> str:
+    token = os.environ.get("METRICS_TEST_BEARER_TOKEN", "").strip()
+    assert token, "METRICS_TEST_BEARER_TOKEN must be set for metrics auth tests."
+    return token
+
+
+def _auth_headers(token: str | None = None) -> dict[str, str]:
+    resolved = token if token is not None else _metrics_token()
+    return {"Authorization": f"Bearer {resolved}"}
+
+
+def _metrics_text(token: str | None = None) -> str:
+    response = requests.get(f"{_api_base_url()}/metrics", headers=_auth_headers(token))
     assert response.status_code == 200, (
         f"/metrics should return 200, got {response.status_code}: {response.text}"
     )
@@ -37,6 +49,44 @@ def test_metrics_endpoint_exposes_cache_series():
     assert "redis_cache_lookups_total" in text
     assert "redis_cache_sets_total" in text
     assert "redis_cache_invalidations_total" in text
+
+
+def test_metrics_endpoint_requires_authentication():
+    response = requests.get(f"{_api_base_url()}/metrics")
+    assert response.status_code == 401, (
+        f"/metrics without token should return 401, got {response.status_code}: {response.text}"
+    )
+    assert response.headers.get("WWW-Authenticate") == "Bearer", (
+        "Unauthorized /metrics response should advertise Bearer auth."
+    )
+
+
+def test_metrics_endpoint_rejects_invalid_token():
+    response = requests.get(
+        f"{_api_base_url()}/metrics",
+        headers=_auth_headers("definitely-invalid-token"),
+    )
+    assert response.status_code == 401, (
+        f"/metrics with invalid token should return 401, got {response.status_code}: {response.text}"
+    )
+
+
+def test_metrics_endpoint_returns_404_when_disabled():
+    should_assert_disabled = os.environ.get("EXPECT_METRICS_DISABLED_404", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    if not should_assert_disabled:
+        pytest.skip("Enabled only for dedicated metrics-disabled validation run.")
+
+    response = requests.get(
+        f"{_api_base_url()}/metrics",
+        headers=_auth_headers(),
+    )
+    assert response.status_code == 404, (
+        f"/metrics should return 404 when disabled, got {response.status_code}: {response.text}"
+    )
 
 
 def test_per_endpoint_cache_hit_and_miss_counters_increase():

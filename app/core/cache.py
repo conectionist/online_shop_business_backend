@@ -15,6 +15,11 @@ from typing import Any
 import redis as redis_lib
 
 from app.core.redis import get_redis_client, disable_redis
+from app.core.metrics import (
+    record_cache_invalidation,
+    record_cache_lookup,
+    record_cache_set,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -115,10 +120,17 @@ def get_cached_response(key: str) -> str | None:
     """
     client = get_redis_client()
     if client is None:
+        record_cache_lookup(key, "bypass")
         return None
     try:
-        return client.get(key)
+        cached = client.get(key)
+        if cached is None:
+            record_cache_lookup(key, "miss")
+        else:
+            record_cache_lookup(key, "hit")
+        return cached
     except redis_lib.RedisError as exc:
+        record_cache_lookup(key, "error")
         logger.warning("Redis GET error for %s: %s", key, exc)
         disable_redis(exc)
         return None
@@ -134,6 +146,7 @@ def set_cached_response(key: str, data: Any) -> None:
     try:
         payload = json.dumps(data, default=_json_serializer, ensure_ascii=False)
         client.set(key, payload)
+        record_cache_set(key)
     except (TypeError, ValueError) as exc:
         # Serialization errors should not fail requests; just skip caching this payload.
         logger.warning("Cache serialization error for %s: %s", key, exc)
@@ -222,27 +235,39 @@ def wait_for_cache(key: str) -> str | None:
 
 def invalidate_for_list(list_id: int) -> None:
     """Invalidate cached responses for list product endpoints."""
-    n = _delete_by_pattern(f"{_RESP_PREFIX}:list_products_ordered:*list_id={list_id}*")
-    n += _delete_by_pattern(f"{_RESP_PREFIX}:list_products:*list_id={list_id}*")
+    n_ordered = _delete_by_pattern(f"{_RESP_PREFIX}:list_products_ordered:*list_id={list_id}*")
+    n_list = _delete_by_pattern(f"{_RESP_PREFIX}:list_products:*list_id={list_id}*")
+    n = n_ordered + n_list
+    record_cache_invalidation("list_products_ordered", n_ordered)
+    record_cache_invalidation("list_products", n_list)
     if n:
         logger.info("Cache invalidated %d key(s) for list_id=%s", n, list_id)
 
 
 def invalidate_for_product(product_id: int) -> None:
     """Invalidate caches containing product data (detail, list, and list endpoints that embed products)."""
-    n = _delete_by_pattern(f"{_RESP_PREFIX}:product_detail:*product_id={product_id}*")
-    n += _delete_by_pattern(f"{_RESP_PREFIX}:products_list:*")
-    n += _delete_by_pattern(f"{_RESP_PREFIX}:list_products_ordered:*")
-    n += _delete_by_pattern(f"{_RESP_PREFIX}:list_products:*")
+    n_product_detail = _delete_by_pattern(f"{_RESP_PREFIX}:product_detail:*product_id={product_id}*")
+    n_products_list = _delete_by_pattern(f"{_RESP_PREFIX}:products_list:*")
+    n_list_ordered = _delete_by_pattern(f"{_RESP_PREFIX}:list_products_ordered:*")
+    n_list = _delete_by_pattern(f"{_RESP_PREFIX}:list_products:*")
+    n = n_product_detail + n_products_list + n_list_ordered + n_list
+    record_cache_invalidation("product_detail", n_product_detail)
+    record_cache_invalidation("products_list", n_products_list)
+    record_cache_invalidation("list_products_ordered", n_list_ordered)
+    record_cache_invalidation("list_products", n_list)
     if n:
         logger.info("Cache invalidated %d key(s) for product_id=%s", n, product_id)
 
 
 def invalidate_for_categories() -> None:
     """Invalidate all category caches and list endpoints that embed category data."""
-    n = _delete_by_pattern(f"{_RESP_PREFIX}:categories_all:*")
-    n += _delete_by_pattern(f"{_RESP_PREFIX}:category_detail:*")
-    n += _delete_by_pattern(f"{_RESP_PREFIX}:list_products_ordered:*")
+    n_categories_all = _delete_by_pattern(f"{_RESP_PREFIX}:categories_all:*")
+    n_category_detail = _delete_by_pattern(f"{_RESP_PREFIX}:category_detail:*")
+    n_list_ordered = _delete_by_pattern(f"{_RESP_PREFIX}:list_products_ordered:*")
+    n = n_categories_all + n_category_detail + n_list_ordered
+    record_cache_invalidation("categories_all", n_categories_all)
+    record_cache_invalidation("category_detail", n_category_detail)
+    record_cache_invalidation("list_products_ordered", n_list_ordered)
     if n:
         logger.info("Cache invalidated %d category key(s)", n)
 
@@ -250,5 +275,8 @@ def invalidate_for_categories() -> None:
 def invalidate_for_reference_data(entity_name: str) -> None:
     """Invalidate cached reference-data responses for *entity_name*."""
     n = _delete_by_pattern(f"{_RESP_PREFIX}:{entity_name}_*")
+    # This helper invalidates list/detail groups in one pattern, so the
+    # label is tracked at entity granularity.
+    record_cache_invalidation(entity_name, n)
     if n:
         logger.info("Cache invalidated %d key(s) for %s", n, entity_name)

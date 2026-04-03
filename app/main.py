@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Depends, Request, HTTPException
+from fastapi import FastAPI, Depends, Request, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import asyncio
 import logging
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 # Initialize debugpy if DEBUG=1
 if os.getenv("DEBUG", "0") == "1":
@@ -214,3 +215,11 @@ async def root():
 async def health():
     """Health check endpoint"""
     return {"status": "online", "version": API_VERSION}
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics():
+    """Prometheus metrics endpoint."""
+    if not settings.ENABLE_METRICS:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

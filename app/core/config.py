@@ -12,7 +12,7 @@ logging.getLogger(__name__).setLevel(_log_level)
 logger = logging.getLogger(__name__)
 
 # API version information
-API_VERSION = "6.2.1"
+API_VERSION = "6.3.1"
 API_TITLE = "Online Shop API"
 API_DESCRIPTION = "API for online shop business"
 
@@ -157,6 +157,13 @@ ENABLE_OPENAPI_DOCS = get_optional_env_var(
     "Enable/disable OpenAPI documentation endpoints"
 ).lower() in ("true", "1", "yes")
 
+# Metrics endpoint and Prometheus counters
+ENABLE_METRICS = get_optional_env_var(
+    "ENABLE_METRICS",
+    "true",
+    "Enable/disable Prometheus metrics endpoint and metric collection"
+).lower() in ("true", "1", "yes")
+
 # Web Push (VAPID) Configuration - optional for now; required when sending notifications
 VAPID_PUBLIC_KEY = get_optional_env_var(
     "VAPID_PUBLIC_KEY",
@@ -262,6 +269,7 @@ class Settings:
         
         # OpenAPI Settings
         self.ENABLE_OPENAPI_DOCS = ENABLE_OPENAPI_DOCS
+        self.ENABLE_METRICS = ENABLE_METRICS
 
         # Web Push (VAPID) Settings
         self.VAPID_PUBLIC_KEY = VAPID_PUBLIC_KEY

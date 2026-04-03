@@ -6,6 +6,21 @@ from this API, including Bearer token authentication for `GET /metrics`.
 ## Files
 
 - `prometheus.yml`: Example scrape config.
+- `grafana-dashboard-online-shop-redis-cache.json`: Grafana dashboard (import JSON) for Redis cache metrics.
+
+## Grafana dashboard
+
+The dashboard visualizes `redis_cache_lookups_total`, `redis_cache_sets_total`, and
+`redis_cache_invalidations_total` (rates, hit/miss breakdown by `route_name`, and hit ratio).
+
+### Import
+
+1. In Grafana: **Dashboards → New → Import**.
+2. Upload `grafana-dashboard-online-shop-redis-cache.json` or paste its contents.
+3. When prompted, pick your **Prometheus** datasource (the JSON uses a placeholder `DS_PROMETHEUS`).
+4. Save; the dashboard UID is `online-shop-redis-cache`.
+
+Requires a Prometheus instance that already scrapes this API (see above). Refresh is 30s; adjust in the dashboard if needed.
 
 ## How token auth works
 

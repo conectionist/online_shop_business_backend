@@ -1,7 +1,5 @@
 from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime
-import unicodedata
-import re
 import logging
 
 from fastapi import HTTPException, status, BackgroundTasks
@@ -19,6 +17,7 @@ from app.models.delivery_type import DeliveryType
 from app.models.modalitati_plata import ModalitatiPlata
 from app.models.business_details import BusinessDetails
 from app.core.config import settings
+from app.utils.text_matching import normalize_name_for_matching, normalize_romanian
 from app.schemas.order import (
     Order as OrderSchema,
     OrderCreate,
@@ -471,7 +470,7 @@ def _is_duplicate_order(db: Session, order_in: OrderCreate) -> Optional[OrderMod
 
     Returns the existing duplicate Order if found, otherwise None.
     """
-    normalized_name = _normalize_name_for_matching(order_in.nume_client)
+    normalized_name = normalize_name_for_matching(order_in.nume_client)
     incoming_items_map = _items_to_quantity_map(order_in.items)
 
     candidates: List[OrderModel] = (
@@ -491,7 +490,7 @@ def _is_duplicate_order(db: Session, order_in: OrderCreate) -> Optional[OrderMod
 
     # Filter by normalized name equality in Python
     for candidate in candidates:
-        if _normalize_name_for_matching(candidate.nume_client) != normalized_name:
+        if normalize_name_for_matching(candidate.nume_client) != normalized_name:
             continue
         existing_map = _existing_order_items_quantity_map(db, candidate.id)
         if existing_map == incoming_items_map:
@@ -703,31 +702,6 @@ def list_orders(db: Session, filters: Optional[OrderFilterParams] = None) -> Lis
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database error: {str(e)}")
 
 
-def _normalize_romanian(text: Optional[str]) -> str:
-    if text is None:
-        return ""
-    # Lowercase and strip diacritics via NFD decomposition
-    lowered = text.strip().lower()
-    normalized = unicodedata.normalize('NFD', lowered)
-    without_marks = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
-    return without_marks
-
-
-def _normalize_name_for_matching(text: Optional[str]) -> str:
-    """Normalize names for matching:
-
-    - Trim leading/trailing spaces
-    - Lowercase and remove diacritics (Romanian included)
-    - Collapse any internal whitespace runs to a single space
-    """
-    if text is None:
-        return ""
-    base = _normalize_romanian(text)
-    # Collapse all Unicode whitespace to single ASCII space
-    collapsed = re.sub(r"\s+", " ", base)
-    return collapsed.strip()
-
-
 def _merge_order_group(orders: List[OrderModel]) -> Dict[str, Any]:
     # Determine oldest and newest with business-oriented semantics
     # Oldest: by created_at (fallback to id)
@@ -767,7 +741,7 @@ def _merge_order_group(orders: List[OrderModel]) -> Dict[str, Any]:
 
     # Order notes merge per rules
     def equals_notes(a: Optional[str], b: Optional[str]) -> bool:
-        return _normalize_romanian(a) == _normalize_romanian(b) and a is not None and b is not None
+        return normalize_romanian(a) == normalize_romanian(b) and a is not None and b is not None
 
     notes_present = [o for o in orders if o.order_notes]
     if not notes_present:
@@ -775,7 +749,7 @@ def _merge_order_group(orders: List[OrderModel]) -> Dict[str, Any]:
     else:
         # If multiple notes exist
         # Check if all notes are equal ignoring diacritics/case
-        normalized_set = { _normalize_romanian(o.order_notes) for o in notes_present }
+        normalized_set = { normalize_romanian(o.order_notes) for o in notes_present }
         if len(normalized_set) == 1:
             # Equal → use newest's note
             newest_with_note = max(
@@ -847,7 +821,7 @@ def list_orders_merged(db: Session, filters: Optional[OrderFilterParams] = None)
 
     groups: Dict[Tuple[int, str], List[OrderModel]] = {}
     for o in raw:
-        key = (o.liste_id, _normalize_name_for_matching(o.nume_client))
+        key = (o.liste_id, normalize_name_for_matching(o.nume_client))
         groups.setdefault(key, []).append(o)
 
     merged_results: List[Dict[str, Any]] = []

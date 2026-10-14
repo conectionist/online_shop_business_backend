@@ -24,7 +24,8 @@ from app.services.statistics import (
 router = APIRouter()
 
 # Period selection shared by the period-based endpoints: a range of list delivery
-# dates. Without a start date the period is all time, with no comparison period.
+# dates; without a start date the period is all time. The comparison period is the
+# same number of lists right before it, when there are that many.
 START_DATE = Query(None, description="First list delivery date (inclusive)")
 END_DATE = Query(None, description="Last list delivery date (inclusive)")
 
@@ -55,8 +56,8 @@ def read_product_stats(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin_from_cookie),
 ):
-    """Top products by quantity and revenue, revenue per category and products
-    that were offered in the period but never ordered."""
+    """Top products by quantity and revenue, revenue per category, products that
+    were offered in the period but never ordered, and how often products sold out."""
     return get_product_stats(db, start_date=start_date, end_date=end_date, limit=limit)
 
 
@@ -82,5 +83,5 @@ def read_current_list_stats(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin_from_cookie),
 ):
-    """Live figures for the current (published) list, including stock sell-through."""
+    """Live figures for the current (published) list, including the products that sold out."""
     return get_current_list_stats(db)

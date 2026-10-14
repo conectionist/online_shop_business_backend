@@ -5,6 +5,10 @@ Conventions shared by every function here:
   period by its delivery date (``liste.data``), so a list is never split.
 - Only non-deleted lists that received at least one order take part.
 - Revenue is product revenue only: sum(pret_produs * cantitate_produs), whole RON.
+- stoc_produs is an availability flag, not a stock count: the admin's toggle stores 0
+  for "unavailable" and null for available, and nothing counts it down. A product
+  marked unavailable after it had orders in a list sold out there; one marked
+  unavailable without orders was never on sale in that list.
 - A customer is identified by phone number (last 9 digits) and falls back to the
   normalized name; orders without a phone inherit the phone last used with the
   same name.
@@ -19,7 +23,7 @@ import re
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -42,18 +46,16 @@ from app.schemas.statistics import (
     HeatmapCell,
     ListStatsPoint,
     PreviousListInfo,
+    ProductSellOut,
     ProductStat,
     ProductStatsResponse,
+    SoldOutProduct,
     StatsOverview,
     StatsPeriod,
     StatsSummary,
-    StockItem,
     UnsoldProduct,
 )
-from app.services.order import _normalize_name_for_matching
-
-
-LOW_STOCK_THRESHOLD = 0.8
+from app.utils.text_matching import normalize_name_for_matching
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +112,7 @@ class _ListRef:
 class _Period:
     lists: List[_ListRef]
     previous_lists: Optional[List[_ListRef]]
+    all_lists: List[_ListRef]
     info: StatsPeriod
 
 
@@ -188,10 +191,6 @@ def _resolve_period(
         )
 
     all_lists = _lists_with_orders(db)
-    previous: Optional[List[_ListRef]] = None
-    prev_start: Optional[date] = None
-    prev_end: Optional[date] = None
-
     current = [
         lst for lst in all_lists
         if (start_date is None or lst.data >= start_date)
@@ -199,25 +198,26 @@ def _resolve_period(
     ]
     # Report the delivery dates of the lists actually included
     start, end = (current[0].data, current[-1].data) if current else (start_date, end_date)
-    # The comparison period is the same length, right before the start; "all time"
-    # (no start date) has none
-    if start_date is not None:
-        effective_end = end_date or (all_lists[-1].data if all_lists else date.today())
-        effective_end = max(effective_end, start_date)
-        length = (effective_end - start_date).days + 1
-        prev_start = start_date - timedelta(days=length)
-        prev_end = start_date - timedelta(days=1)
-        previous = [lst for lst in all_lists if prev_start <= lst.data <= prev_end]
+
+    # The comparison period is the same number of lists right before the first one.
+    # Deliveries are not spread evenly over the calendar, so a window of equal length
+    # can hold a different number of lists and skew every total. Its dates may span a
+    # few more or fewer days instead. Without that many earlier lists (always the case
+    # for "all time") there is no comparison, since a partial one would skew it too.
+    previous: Optional[List[_ListRef]] = None
+    if current and current[0].rank >= len(current):
+        first = current[0].rank
+        previous = all_lists[first - len(current):first]
 
     info = StatsPeriod(
         start_date=start,
         end_date=end,
         list_count=len(current),
-        previous_start_date=prev_start,
-        previous_end_date=prev_end,
+        previous_start_date=previous[0].data if previous else None,
+        previous_end_date=previous[-1].data if previous else None,
         previous_list_count=len(previous) if previous else 0,
     )
-    return _Period(lists=current, previous_lists=previous, info=info)
+    return _Period(lists=current, previous_lists=previous, all_lists=all_lists, info=info)
 
 
 # ---------------------------------------------------------------------------
@@ -239,10 +239,10 @@ def _customer_keys(rows: List[_OrderRow]) -> Dict[int, str]:
     for row in sorted(rows, key=lambda r: r.placed_at or datetime.min):
         key = _phone_key(row.phone_number)
         if key:
-            name_to_phone[_normalize_name_for_matching(row.nume_client)] = key
+            name_to_phone[normalize_name_for_matching(row.nume_client)] = key
     keys: Dict[int, str] = {}
     for row in rows:
-        name = _normalize_name_for_matching(row.nume_client)
+        name = normalize_name_for_matching(row.nume_client)
         keys[row.id] = _phone_key(row.phone_number) or name_to_phone.get(name) or "n:" + name
     return keys
 
@@ -335,8 +335,7 @@ def get_overview(
         period = _resolve_period(db, start_date, end_date)
         all_rows = _load_orders(db)
         keys = _customer_keys(all_rows)
-        all_lists = _lists_with_orders(db)
-        first_rank = _first_rank_by_customer(all_rows, keys, {lst.id: lst.rank for lst in all_lists})
+        first_rank = _first_rank_by_customer(all_rows, keys, {lst.id: lst.rank for lst in period.all_lists})
 
         summary = _summarize(db, period.lists, all_rows, keys, first_rank)
         previous_summary = (
@@ -413,52 +412,85 @@ def get_product_stats(
         period = _resolve_period(db, start_date, end_date)
         list_ids = [lst.id for lst in period.lists]
         empty = ProductStatsResponse(
-            period=period.info, top_by_quantity=[], top_by_revenue=[], categories=[], unsold_products=[]
+            period=period.info,
+            top_by_quantity=[],
+            top_by_revenue=[],
+            categories=[],
+            unsold_products=[],
+            sell_outs=[],
         )
         if not list_ids:
             return empty
 
+        # Sales per product and per category it was listed under in each list, so past
+        # periods keep their category figures when a product later moves to another one.
+        # An order belongs to one list, where a product has one category, so per-category
+        # order counts add up to the product's.
         sales = (
             db.query(
                 OrderItemModel.produse_id,
+                ListProductOrdered.category_id,
                 func.sum(OrderItemModel.cantitate_produs),
                 func.sum(OrderItemModel.pret_produs * OrderItemModel.cantitate_produs),
                 func.count(func.distinct(OrderItemModel.comenzi_id)),
             )
             .join(OrderModel, OrderModel.id == OrderItemModel.comenzi_id)
+            .outerjoin(
+                ListProductOrdered,
+                and_(
+                    ListProductOrdered.liste_id == OrderModel.liste_id,
+                    ListProductOrdered.produse_id == OrderItemModel.produse_id,
+                ),
+            )
             .filter(OrderModel.is_deleted == 0, OrderModel.liste_id.in_(list_ids))
-            .group_by(OrderItemModel.produse_id)
+            .group_by(OrderItemModel.produse_id, ListProductOrdered.category_id)
             .all()
         )
-        offered = (
-            db.query(ListProductOrdered.produse_id, func.count(ListProductOrdered.liste_id))
+        # Where each product was on sale and where it sold out (see stoc_produs in the
+        # module docstring)
+        listings = (
+            db.query(ListProductOrdered.liste_id, ListProductOrdered.produse_id, ListProductOrdered.stoc_produs)
             .filter(ListProductOrdered.liste_id.in_(list_ids))
-            .group_by(ListProductOrdered.produse_id)
             .all()
         )
+        ordered_in_list = {
+            (liste_id, produse_id)
+            for liste_id, produse_id in (
+                db.query(OrderModel.liste_id, OrderItemModel.produse_id)
+                .join(OrderItemModel, OrderItemModel.comenzi_id == OrderModel.id)
+                .filter(OrderModel.is_deleted == 0, OrderModel.liste_id.in_(list_ids))
+                .distinct()
+                .all()
+            )
+        }
+        offered: Dict[int, int] = defaultdict(int)
+        sold_out: Dict[int, int] = defaultdict(int)
+        for liste_id, produse_id, stoc in listings:
+            had_orders = (liste_id, produse_id) in ordered_in_list
+            if stoc == 0 and not had_orders:
+                continue
+            offered[produse_id] += 1
+            if stoc == 0:
+                sold_out[produse_id] += 1
 
-        product_ids = {r[0] for r in sales} | {r[0] for r in offered}
+        product_ids = {r[0] for r in sales} | set(offered)
         products = {
             p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()
         } if product_ids else {}
         category_names = {c.id: c.name for c in db.query(Category).all()}
         unit_names = {u.id: u.denumire for u in db.query(Unitati).all()}
 
-        stats: List[ProductStat] = []
+        product_totals: Dict[int, List[int]] = {}  # quantity, revenue, orders
         categories: Dict[int, CategoryStat] = {}
-        for produse_id, qty, revenue, order_count in sales:
+        for produse_id, listed_category_id, qty, revenue, order_count in sales:
             product = products.get(produse_id)
-            category_id = product.category_id if product else None
-            stat = ProductStat(
-                product_id=produse_id,
-                name=product.nume if product else f"Produs #{produse_id}",
-                category_name=category_names.get(category_id) if category_id else None,
-                unit=unit_names.get(product.unitati_id) if product else None,
-                quantity=int(qty or 0),
-                revenue=int(revenue or 0),
-                orders=int(order_count or 0),
-            )
-            stats.append(stat)
+            qty, revenue, order_count = int(qty or 0), int(revenue or 0), int(order_count or 0)
+            totals = product_totals.setdefault(produse_id, [0, 0, 0])
+            totals[0] += qty
+            totals[1] += revenue
+            totals[2] += order_count
+            # Products since removed from the list fall back to their current category
+            category_id = listed_category_id or (product.category_id if product else None)
             if category_id is not None:
                 cat = categories.setdefault(
                     category_id,
@@ -469,21 +501,50 @@ def get_product_stats(
                         revenue=0,
                     ),
                 )
-                cat.quantity += stat.quantity
-                cat.revenue += stat.revenue
+                cat.quantity += qty
+                cat.revenue += revenue
 
-        sold_ids = {r[0] for r in sales}
+        # Product rows are labelled with the product's current category
+        stats: List[ProductStat] = []
+        for produse_id, (qty, revenue, order_count) in product_totals.items():
+            product = products.get(produse_id)
+            category_id = product.category_id if product else None
+            stats.append(
+                ProductStat(
+                    product_id=produse_id,
+                    name=product.nume if product else f"Produs #{produse_id}",
+                    category_name=category_names.get(category_id) if category_id else None,
+                    unit=unit_names.get(product.unitati_id) if product else None,
+                    quantity=qty,
+                    revenue=revenue,
+                    orders=order_count,
+                )
+            )
+
+        # Deleted products are left out: there is nothing left to act on
+        def is_active(produse_id: int) -> bool:
+            return produse_id in products and not products[produse_id].is_deleted
+
         unsold = [
             UnsoldProduct(
                 product_id=produse_id,
                 name=products[produse_id].nume,
                 category_name=category_names.get(products[produse_id].category_id),
-                times_offered=int(count),
+                times_offered=count,
             )
-            for produse_id, count in offered
-            if produse_id not in sold_ids
-            and produse_id in products
-            and not products[produse_id].is_deleted
+            for produse_id, count in offered.items()
+            if produse_id not in product_totals and is_active(produse_id)
+        ]
+        sell_outs = [
+            ProductSellOut(
+                product_id=produse_id,
+                name=products[produse_id].nume,
+                category_name=category_names.get(products[produse_id].category_id),
+                sold_out=count,
+                offered=offered[produse_id],
+            )
+            for produse_id, count in sold_out.items()
+            if is_active(produse_id)
         ]
 
         return ProductStatsResponse(
@@ -492,6 +553,7 @@ def get_product_stats(
             top_by_revenue=sorted(stats, key=lambda s: (s.revenue, s.quantity), reverse=True)[:limit],
             categories=sorted(categories.values(), key=lambda c: c.revenue, reverse=True),
             unsold_products=sorted(unsold, key=lambda u: (-u.times_offered, u.name)),
+            sell_outs=sorted(sell_outs, key=lambda o: (-o.sold_out, -o.sold_out / o.offered, o.name)),
         )
     except SQLAlchemyError as e:
         db.rollback()
@@ -608,12 +670,21 @@ def get_current_list_stats(db: Session) -> CurrentListStats:
         rows = _load_orders(db, [current.id])
         keys = _customer_keys(rows)
 
-        previous_ref = next(
-            (
-                lst for lst in reversed(_lists_with_orders(db))
-                if (lst.data, lst.id) < (current.data, current.id)
-            ),
-            None,
+        # The last earlier list with active orders: one whose orders were all cancelled
+        # has nothing to compare with
+        previous_ref = (
+            db.query(ListModel.id, ListModel.data)
+            .join(OrderModel, OrderModel.liste_id == ListModel.id)
+            .filter(
+                ListModel.is_deleted == 0,
+                OrderModel.is_deleted == 0,
+                or_(
+                    ListModel.data < current.data,
+                    and_(ListModel.data == current.data, ListModel.id < current.id),
+                ),
+            )
+            .order_by(ListModel.data.desc(), ListModel.id.desc())
+            .first()
         )
         previous = None
         if previous_ref is not None:
@@ -632,32 +703,23 @@ def get_current_list_stats(db: Session) -> CurrentListStats:
             .group_by(OrderItemModel.produse_id)
             .all()
         )
-        stock_rows = (
-            db.query(ListProductOrdered.produse_id, ListProductOrdered.stoc_produs, Product.nume, Unitati.denumire)
+        # Products marked unavailable once they had orders (see stoc_produs in the
+        # module docstring)
+        marked_unavailable = (
+            db.query(ListProductOrdered.produse_id, Product.nume, Unitati.denumire)
             .join(Product, Product.id == ListProductOrdered.produse_id)
             .outerjoin(Unitati, Unitati.id == Product.unitati_id)
-            .filter(
-                ListProductOrdered.liste_id == current.id,
-                ListProductOrdered.stoc_produs.isnot(None),
-                ListProductOrdered.stoc_produs > 0,
-            )
+            .filter(ListProductOrdered.liste_id == current.id, ListProductOrdered.stoc_produs == 0)
             .all()
         )
-        stock: List[StockItem] = []
-        for produse_id, stoc, name, unit in stock_rows:
-            ordered = int(ordered_by_product.get(produse_id) or 0)
-            stock.append(
-                StockItem(
-                    product_id=produse_id,
-                    name=name,
-                    unit=unit,
-                    stock=stoc,
-                    ordered=ordered,
-                    remaining=max(stoc - ordered, 0),
-                    sell_through=round(ordered / stoc, 4),
-                )
-            )
-        stock.sort(key=lambda s: (s.sell_through, s.ordered), reverse=True)
+        sold_out = sorted(
+            (
+                SoldOutProduct(product_id=produse_id, name=name, unit=unit, ordered=int(ordered_by_product[produse_id]))
+                for produse_id, name, unit in marked_unavailable
+                if ordered_by_product.get(produse_id)
+            ),
+            key=lambda p: (-p.ordered, p.name),
+        )
 
         return CurrentListStats(
             list=CurrentListInfo(
@@ -671,9 +733,7 @@ def get_current_list_stats(db: Session) -> CurrentListStats:
             customers=len(set(keys.values())),
             items_sold=sum(r.items for r in rows),
             previous=previous,
-            stock=stock,
-            sold_out_count=sum(1 for s in stock if s.sell_through >= 1),
-            low_stock_count=sum(1 for s in stock if LOW_STOCK_THRESHOLD <= s.sell_through < 1),
+            sold_out=sold_out,
         )
     except SQLAlchemyError as e:
         db.rollback()

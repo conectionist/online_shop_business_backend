@@ -16,9 +16,11 @@ class StatsPeriod(BaseModel):
     start_date: Optional[date] = Field(None, description="Delivery date of the first list in the period")
     end_date: Optional[date] = Field(None, description="Delivery date of the last list in the period")
     list_count: int = Field(..., description="Number of lists (with orders) in the period")
-    previous_start_date: Optional[date] = Field(None, description="Start of the comparison period")
-    previous_end_date: Optional[date] = Field(None, description="End of the comparison period")
-    previous_list_count: int = Field(0, description="Number of lists in the comparison period")
+    previous_start_date: Optional[date] = Field(
+        None, description="Delivery date of the first list in the comparison period (the same number of lists right before the period)"
+    )
+    previous_end_date: Optional[date] = Field(None, description="Delivery date of the last list in the comparison period")
+    previous_list_count: int = Field(0, description="Number of lists in the comparison period: list_count, or 0 without a comparison")
 
 
 class StatsSummary(BaseModel):
@@ -99,12 +101,21 @@ class UnsoldProduct(BaseModel):
     times_offered: int = Field(..., description="Number of lists in the period that offered the product")
 
 
+class ProductSellOut(BaseModel):
+    product_id: int
+    name: str
+    category_name: Optional[str] = None
+    sold_out: int = Field(..., description="Lists in the period where it sold out: marked unavailable after it had orders")
+    offered: int = Field(..., description="Lists in the period where it could be ordered, including those where it sold out")
+
+
 class ProductStatsResponse(BaseModel):
     period: StatsPeriod
     top_by_quantity: List[ProductStat]
     top_by_revenue: List[ProductStat]
     categories: List[CategoryStat]
     unsold_products: List[UnsoldProduct]
+    sell_outs: List[ProductSellOut] = Field(..., description="Products that sold out at least once, most often first")
 
 
 class CustomerStat(BaseModel):
@@ -122,14 +133,11 @@ class CustomerStatsResponse(BaseModel):
     top_customers_by_orders: List[CustomerStat] = Field(..., description="Top customers by number of orders")
 
 
-class StockItem(BaseModel):
+class SoldOutProduct(BaseModel):
     product_id: int
     name: str
     unit: Optional[str] = None
-    stock: int
-    ordered: int
-    remaining: int
-    sell_through: float = Field(..., description="ordered / stock (0-1, may exceed 1)")
+    ordered: int = Field(..., description="Quantity ordered on the list")
 
 
 class CurrentListInfo(BaseModel):
@@ -153,6 +161,6 @@ class CurrentListStats(BaseModel):
     customers: int = 0
     items_sold: int = 0
     previous: Optional[PreviousListInfo] = None
-    stock: List[StockItem] = []
-    sold_out_count: int = 0
-    low_stock_count: int = Field(0, description="Products at >= 80% sell-through but not sold out")
+    sold_out: List[SoldOutProduct] = Field(
+        [], description="Products marked unavailable after they had orders, most ordered first"
+    )

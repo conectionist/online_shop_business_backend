@@ -4,19 +4,16 @@ Builds an RSS 2.0 feed in Google's product data format, so Merchant Center can r
 prices, availability and unit pricing without rendering the client-side storefront.
 """
 import logging
-from datetime import datetime
-from typing import Optional
+from typing import Iterable, Optional
 from xml.etree import ElementTree as ET
-from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.image_versions import resolve_image_versions
-from app.models.list import List
 from app.models.list_product_ordered import ListProductOrdered
 from app.models.product import Product
-from app.utils.unit_pricing import get_unit_pricing
+from app.services.list import get_current_published_list
+from app.utils.unit_pricing import UnitPricing, get_unit_pricing
 
 logger = logging.getLogger(__name__)
 
@@ -26,28 +23,65 @@ ET.register_namespace("g", GOOGLE_NS)
 # Matches the brand in the storefront's product JSON-LD (frontend src/utils/schema.ts)
 BRAND_NAME = "Paine cu Maia de la Andreea"
 CURRENCY = "RON"
-SHOP_TIMEZONE = ZoneInfo("Europe/Bucharest")
 MAX_ADDITIONAL_IMAGES = 10
 PRODUCT_PLACEHOLDER_URL = "/api/v1/static/placeholders/product_placeholder.jpg"
 
 
-def get_current_published_list(db: Session) -> Optional[List]:
-    """Return the list customers can order from right now, or None.
+def get_current_stock(db: Session, product_ids: Optional[Iterable[int]] = None) -> dict[int, Optional[int]]:
+    """Map product ID -> stock in the current published list (None means no limit).
 
-    Mirrors listService.getPublishedList in the frontend: published, not deleted and
-    not expired. expiration_date is stored as naive Romania-local time.
+    Products missing from the result are not in the current list. Empty when no
+    list is published or the published list has expired.
     """
-    now_local = datetime.now(SHOP_TIMEZONE).replace(tzinfo=None)
-    return (
-        db.query(List)
-        .filter(
-            List.is_published == 1,
-            List.is_deleted == 0,
-            or_(List.expiration_date.is_(None), List.expiration_date > now_local),
-        )
-        .order_by(List.id.desc())
+    current_list = get_current_published_list(db)
+    if current_list is None:
+        return {}
+    query = db.query(ListProductOrdered).filter(ListProductOrdered.liste_id == current_list.id)
+    if product_ids is not None:
+        query = query.filter(ListProductOrdered.produse_id.in_(list(product_ids)))
+    return {entry.produse_id: entry.stoc_produs for entry in query}
+
+
+def get_availability(product_id: int, stock_by_product: dict[int, Optional[int]]) -> str:
+    """Products in the current list are in stock unless their list stock is 0.
+
+    Every other product is out of stock, so it stays approved between lists.
+    """
+    in_stock = product_id in stock_by_product and stock_by_product[product_id] != 0
+    return "in_stock" if in_stock else "out_of_stock"
+
+
+def _unit_pricing(product: Product) -> Optional[UnitPricing]:
+    return get_unit_pricing(product.cantitate, product.unit.denumire if product.unit else None)
+
+
+def build_product_offer(db: Session, product_id: int) -> Optional[dict]:
+    """Price, availability and unit pricing of one product, computed as the feed computes them.
+
+    The storefront builds its product JSON-LD from this, so Merchant Center finds the
+    same values on the landing page as in the feed. Returns None for missing or
+    deleted products, which the feed leaves out.
+    """
+    product = (
+        db.query(Product)
+        .options(joinedload(Product.unit))
+        .filter(Product.id == product_id, Product.is_deleted == False)  # noqa: E712
         .first()
     )
+    if product is None:
+        return None
+
+    unit_pricing = _unit_pricing(product)
+    return {
+        "product_id": product.id,
+        "price": product.pret,
+        "currency": CURRENCY,
+        "availability": get_availability(product.id, get_current_stock(db, product_ids=[product.id])),
+        "unit_pricing": None if unit_pricing is None else {
+            "measure": {"value": unit_pricing.measure_value, "unit": unit_pricing.measure_unit},
+            "base": {"value": unit_pricing.base_value, "unit": unit_pricing.base_unit},
+        },
+    }
 
 
 def _image_url(api_base_url: str, image_path: str) -> str:
@@ -56,18 +90,8 @@ def _image_url(api_base_url: str, image_path: str) -> str:
 
 
 def build_feed_items(db: Session, frontend_url: str, api_base_url: str) -> list[dict]:
-    """Collect feed entries for every non-deleted product that has at least one image.
-
-    Products in the current published list are in stock unless their list stock is 0;
-    every other product is listed as out of stock so it stays approved between lists.
-    """
-    current_list = get_current_published_list(db)
-    stock_by_product: dict[int, Optional[int]] = {}
-    if current_list is not None:
-        stock_by_product = {
-            entry.produse_id: entry.stoc_produs
-            for entry in db.query(ListProductOrdered).filter(ListProductOrdered.liste_id == current_list.id)
-        }
+    """Collect feed entries for every non-deleted product that has at least one image."""
+    stock_by_product = get_current_stock(db)
 
     products = (
         db.query(Product)
@@ -87,7 +111,6 @@ def build_feed_items(db: Session, frontend_url: str, api_base_url: str) -> list[
             skipped_without_image += 1
             continue
 
-        in_stock = product.id in stock_by_product and stock_by_product[product.id] != 0
         items.append({
             "id": str(product.id),
             "title": product.nume,
@@ -97,9 +120,9 @@ def build_feed_items(db: Session, frontend_url: str, api_base_url: str) -> list[
             "additional_image_links": image_urls[1:1 + MAX_ADDITIONAL_IMAGES],
             # pret is stored in whole lei (16 means 16 RON), not cents
             "price": f"{product.pret:.2f} {CURRENCY}",
-            "availability": "in_stock" if in_stock else "out_of_stock",
+            "availability": get_availability(product.id, stock_by_product),
             "product_type": product.category.name if product.category else None,
-            "unit_pricing": get_unit_pricing(product.cantitate, product.unit.denumire if product.unit else None),
+            "unit_pricing": _unit_pricing(product),
         })
 
     if skipped_without_image:
@@ -140,7 +163,7 @@ def render_feed_xml(items: list[dict], frontend_url: str) -> bytes:
         _add_g(entry, "identifier_exists", "no")
         _add_g(entry, "product_type", item["product_type"])
         if item["unit_pricing"]:
-            measure, base_measure = item["unit_pricing"]
+            measure, base_measure = item["unit_pricing"].feed_values()
             _add_g(entry, "unit_pricing_measure", measure)
             _add_g(entry, "unit_pricing_base_measure", base_measure)
 

@@ -2,6 +2,7 @@ import os
 import uuid
 import xml.etree.ElementTree as ET
 
+import pytest
 import requests
 
 from integration.test_utils import EntityTestUtils
@@ -15,6 +16,7 @@ G = "{http://base.google.com/ns/1.0}"
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 FEED_URL = f"{API_BASE_URL}/api/v1/feeds/google.xml"
 LISTE_URL = f"{API_BASE_URL}/api/v1/liste"
+PRODUCTS_URL = f"{API_BASE_URL}/api/v1/products"
 
 unit_utils = EntityTestUtils(entity_name="Unit", endpoint_path="unitati")
 list_utils = ListTestUtils()
@@ -72,6 +74,24 @@ def fetch_feed_items():
     return {item.findtext(f"{G}id"): item for item in root.iter("item")}
 
 
+def fetch_offer(product_id):
+    response = requests.get(f"{PRODUCTS_URL}/{product_id}/offer")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def assert_offer_matches_feed_item(offer, item):
+    """The storefront JSON-LD is built from the offer, so it must say what the feed says."""
+    assert offer["availability"] == item.findtext(f"{G}availability")
+    assert f"{offer['price']:.2f} {offer['currency']}" == item.findtext(f"{G}price")
+    if offer["unit_pricing"] is None:
+        assert item.find(f"{G}unit_pricing_measure") is None
+    else:
+        measure, base = offer["unit_pricing"]["measure"], offer["unit_pricing"]["base"]
+        assert f"{measure['value']:g}{measure['unit']}" == item.findtext(f"{G}unit_pricing_measure")
+        assert f"{base['value']:g}{base['unit']}" == item.findtext(f"{G}unit_pricing_base_measure")
+
+
 def test_google_feed_lists_products_with_price_availability_and_unit_pricing():
     if not auth_utils.access_token:
         auth_utils.login()
@@ -122,6 +142,15 @@ def test_google_feed_lists_products_with_price_availability_and_unit_pricing():
 
         assert str(without_image) not in items
         assert str(deleted) not in items
+
+        for product_id in (by_weight, sold_out, not_listed_tray, bad_quantity):
+            assert_offer_matches_feed_item(fetch_offer(product_id), items[str(product_id)])
+        assert fetch_offer(by_weight)["unit_pricing"] == {
+            "measure": {"value": 600, "unit": "g"},
+            "base": {"value": 1, "unit": "kg"},
+        }
+        # Deleted products are left out of the feed, so they have no offer either
+        assert requests.get(f"{PRODUCTS_URL}/{deleted}/offer").status_code == 404
     finally:
         list_utils.delete_entity(list_id)
         for product_id in product_ids:
@@ -144,6 +173,52 @@ def test_google_feed_treats_expired_list_as_unavailable():
         items = fetch_feed_items()
 
         assert items[str(product_id)].findtext(f"{G}availability") == "out_of_stock"
+        assert fetch_offer(product_id)["availability"] == "out_of_stock"
     finally:
         list_utils.delete_entity(list_id)
         product_utils.delete_entity(product_id)
+
+
+@pytest.mark.parametrize("unit_name, shared, cantitate, expected", [
+    # A diacritic after the number's g or l is part of a word, not a unit
+    ("Tava de 12 găluște", False, 1, None),
+    ("Set 20 lămâi", False, 1, None),
+    ("Pachet 2x400g", False, 1, (800, "g", "kg")),
+    ("Borcan 1/2 kg", False, 1, (0.5, "kg", "kg")),
+    # Two sizes in one name are ambiguous, so no unit price is published
+    ("Cutie 2x250g + 1kg", False, 1, None),
+    ("Sticla de 0,75l", False, 1, (0.75, "l", "l")),
+    ("gr.", True, 600, (600, "g", "kg")),
+    ("kg.", True, 1, (1, "kg", "kg")),
+    ("kilograme", True, 2, (2, "kg", "kg")),
+    ("mililitri", True, 500, (500, "ml", "l")),
+    ("buc", True, 1, None),
+])
+def test_product_offer_unit_pricing(unit_name, shared, cantitate, expected):
+    if not auth_utils.access_token:
+        auth_utils.login()
+
+    # Unit names are unique; container names get a suffix (hex has no unit letters)
+    if shared:
+        unit_id = get_or_create_unit(unit_name)
+    else:
+        _, unit_id = unit_utils.create_entity(f"{unit_name} {uuid.uuid4().hex[:8]}")
+    _, category_id = category_utils.create_entity(f"Offer Category {str(uuid.uuid4())[:8]}")
+    product_id = create_product(category_id, unit_id, cantitate=cantitate, pret=10, with_image=False)
+    try:
+        offer = fetch_offer(product_id)
+
+        if expected is None:
+            assert offer["unit_pricing"] is None
+        else:
+            value, unit, base_unit = expected
+            assert offer["unit_pricing"] == {
+                "measure": {"value": value, "unit": unit},
+                "base": {"value": 1, "unit": base_unit},
+            }
+    finally:
+        product_utils.delete_entity(product_id)
+
+
+def test_product_offer_for_missing_product_is_not_found():
+    assert requests.get(f"{PRODUCTS_URL}/999999999/offer").status_code == 404

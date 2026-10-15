@@ -10,6 +10,8 @@ from app.schemas.list import List as ListSchema, ListCreate, ListUpdate
 from app.services.list import (
     create_list,
     delete_list,
+    get_current_published_list,
+    get_last_expired_published_list,
     get_list_by_id,
     get_lists,
     update_list,
@@ -32,6 +34,30 @@ def read_lists(
 ):
     """Get all lists with pagination"""
     return get_lists(db=db, skip=skip, limit=limit, include_deleted=include_deleted)
+
+
+# Declared before /{list_id} so "published" and "last-expired" aren't read as list IDs
+@router.get("/published", response_model=Optional[ListSchema], responses={
+    200: {"description": "The list customers can order from, or null"},
+    500: {"description": "Internal server error"}
+})
+def read_published_list(db: Session = Depends(get_db)):
+    """
+    Get the list customers can order from right now (PUBLIC).
+
+    Returns null when no list is published or the published list has expired.
+    Expiry is checked in Romania time, as the Merchant feed checks it.
+    """
+    return get_current_published_list(db)
+
+
+@router.get("/last-expired", response_model=Optional[ListSchema], responses={
+    200: {"description": "The most recently expired published list, or null"},
+    500: {"description": "Internal server error"}
+})
+def read_last_expired_list(db: Session = Depends(get_db)):
+    """Get the most recently expired published list, for showing archived products (PUBLIC)."""
+    return get_last_expired_published_list(db)
 
 
 @router.get("/{list_id}", response_model=ListSchema, responses={

@@ -17,6 +17,7 @@ from app.models.delivery_type import DeliveryType
 from app.models.modalitati_plata import ModalitatiPlata
 from app.models.business_details import BusinessDetails
 from app.core.config import settings
+from app.services.list import get_current_published_list
 from app.utils.text_matching import normalize_name_for_matching, normalize_romanian
 from app.schemas.order import (
     Order as OrderSchema,
@@ -365,6 +366,25 @@ def _validate_foreign_keys(db: Session, order_in: OrderCreate):
                 )
 
 
+def _validate_list_open(db: Session, liste_id: int):
+    """Only the list customers can order from right now accepts orders.
+
+    Same rule as GET /liste/published and the Merchant feed (published, not deleted,
+    not expired). 400 rather than 409: the storefront treats a 409 it doesn't know
+    as a duplicate order, i.e. as success.
+    """
+    current_list = get_current_published_list(db)
+    if current_list is None or current_list.id != liste_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "LIST_NOT_OPEN",
+                "message": f"List {liste_id} is not open for orders",
+                "list_id": liste_id,
+            },
+        )
+
+
 def _fill_missing_item_price(db: Session, item: OrderItemBase, liste_id: int) -> int:
     # If price is missing, fallback to product price (or overridden price if business rules later require)
     if item.pret_produs is not None:
@@ -507,7 +527,10 @@ def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = Non
             items_count = 0
 
         _validate_foreign_keys(db, order_in)
-        
+
+        # Reject orders for unpublished, deleted or expired lists
+        _validate_list_open(db, order_in.liste_id)
+
         # Validate delivery method availability for the selected list
         _validate_delivery_method_availability(db, order_in.liste_id, order_in.delivery_type_id)
         

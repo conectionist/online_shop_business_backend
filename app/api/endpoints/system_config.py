@@ -5,16 +5,18 @@ from datetime import datetime
 import os
 from pathlib import Path
 from app.core.config import MAX_IMAGE_SIZE_MB
-from app.core.constants import UNCATEGORIZED_CATEGORY_ID, UNCATEGORIZED_CATEGORY_NAME
+from app.core.constants import (
+    PLACEHOLDER_URL_BASE,
+    UNCATEGORIZED_CATEGORY_ID,
+    UNCATEGORIZED_CATEGORY_NAME,
+    UPLOADS_URL_BASE,
+)
 from app.utils.macro_processor import _compute_next_delivery_date, _format_date_ro_long
 
 router = APIRouter()
 
 # Define the base path for placeholders
 PLACEHOLDER_DIR = Path("/app/config/placeholders")
-
-# Define the base URL path for accessing placeholders
-PLACEHOLDER_URL_BASE = "/api/v1/static/placeholders"
 
 class SystemConfigResponse(BaseModel):
     category_placeholder: str
@@ -95,11 +97,9 @@ def mount_static_files(app: FastAPI):
     """
     # Mount placeholders
     placeholder_directory = "/app/config/placeholders"
-    placeholder_url_path = "/api/v1/static/placeholders"
-    app.mount(placeholder_url_path, StaticFiles(directory=placeholder_directory), name="placeholders")
-    
+    app.mount(PLACEHOLDER_URL_BASE, StaticFiles(directory=placeholder_directory), name="placeholders")
+
     # Mount uploads
     uploads_directory = "/app/uploads"
-    uploads_url_path = "/api/v1/static/uploads"
-    app.mount(uploads_url_path, StaticFiles(directory=uploads_directory), name="uploads")
+    app.mount(UPLOADS_URL_BASE, StaticFiles(directory=uploads_directory), name="uploads")
 

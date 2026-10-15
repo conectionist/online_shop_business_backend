@@ -108,13 +108,14 @@ def test_google_feed_lists_products_with_price_availability_and_unit_pricing():
     bad_quantity = create_product(category_id, ml_unit, cantitate=1, pret=28)
     without_image = create_product(category_id, gr_unit, cantitate=500, pret=12, with_image=False)
     deleted = create_product(category_id, gr_unit, cantitate=500, pret=12)
-    product_ids = [by_weight, sold_out, not_listed_tray, bad_quantity, without_image, deleted]
+    # Deleted right away, so it is cleaned up even if the test fails early
+    product_utils.delete_entity(deleted)
+    product_ids = [by_weight, sold_out, not_listed_tray, bad_quantity, without_image]
 
     _, list_id = list_utils.create_entity(is_published=True)
     try:
         add_to_list(list_id, category_id, by_weight)
         add_to_list(list_id, category_id, sold_out, stoc_produs=0)
-        product_utils.delete_entity(deleted)
 
         items = fetch_feed_items()
 
@@ -154,8 +155,9 @@ def test_google_feed_lists_products_with_price_availability_and_unit_pricing():
     finally:
         list_utils.delete_entity(list_id)
         for product_id in product_ids:
-            if product_id != deleted:
-                product_utils.delete_entity(product_id)
+            product_utils.delete_entity(product_id)
+        # Categories have only 127 order_index slots per test run; products move to category 1
+        category_utils.delete_entity(category_id)
 
 
 def test_google_feed_treats_expired_list_as_unavailable():
@@ -177,6 +179,21 @@ def test_google_feed_treats_expired_list_as_unavailable():
     finally:
         list_utils.delete_entity(list_id)
         product_utils.delete_entity(product_id)
+        category_utils.delete_entity(category_id)
+
+
+def test_google_feed_strips_characters_xml_does_not_allow():
+    # Text pasted from Word can carry control characters; one of them would make the
+    # whole document unreadable for Merchant Center, not just this product
+    product_id = create_product(1, get_or_create_unit("buc"), cantitate=1, pret=10)
+    try:
+        product_utils.update_entity(product_id, description="Paine\x0bneagra\x01")
+
+        items = fetch_feed_items()
+
+        assert items[str(product_id)].findtext("description") == "Paineneagra"
+    finally:
+        product_utils.delete_entity(product_id)
 
 
 @pytest.mark.parametrize("unit_name, shared, cantitate, expected", [
@@ -188,6 +205,11 @@ def test_google_feed_treats_expired_list_as_unavailable():
     # Two sizes in one name are ambiguous, so no unit price is published
     ("Cutie 2x250g + 1kg", False, 1, None),
     ("Sticla de 0,75l", False, 1, (0.75, "l", "l")),
+    # Romanian: "de" after the number, and a dot grouping thousands
+    ("Pachet 500 de grame", False, 1, (500, "g", "kg")),
+    ("Set 20 de lămâi", False, 1, None),
+    ("Caserola 1.500 g", False, 1, (1500, "g", "kg")),
+    ("Sticla 0.750 l", False, 1, (0.75, "l", "l")),
     ("gr.", True, 600, (600, "g", "kg")),
     ("kg.", True, 1, (1, "kg", "kg")),
     ("kilograme", True, 2, (2, "kg", "kg")),
@@ -203,8 +225,7 @@ def test_product_offer_unit_pricing(unit_name, shared, cantitate, expected):
         unit_id = get_or_create_unit(unit_name)
     else:
         _, unit_id = unit_utils.create_entity(f"{unit_name} {uuid.uuid4().hex[:8]}")
-    _, category_id = category_utils.create_entity(f"Offer Category {str(uuid.uuid4())[:8]}")
-    product_id = create_product(category_id, unit_id, cantitate=cantitate, pret=10, with_image=False)
+    product_id = create_product(1, unit_id, cantitate=cantitate, pret=10, with_image=False)
     try:
         offer = fetch_offer(product_id)
 

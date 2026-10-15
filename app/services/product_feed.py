@@ -4,11 +4,13 @@ Builds an RSS 2.0 feed in Google's product data format, so Merchant Center can r
 prices, availability and unit pricing without rendering the client-side storefront.
 """
 import logging
+import re
 from typing import Iterable, Optional
 from xml.etree import ElementTree as ET
 
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from app.core.constants import PLACEHOLDER_URL_BASE, UPLOADS_URL_BASE
 from app.core.image_versions import resolve_image_versions
 from app.models.list_product_ordered import ListProductOrdered
 from app.models.product import Product
@@ -24,7 +26,11 @@ ET.register_namespace("g", GOOGLE_NS)
 BRAND_NAME = "Paine cu Maia de la Andreea"
 CURRENCY = "RON"
 MAX_ADDITIONAL_IMAGES = 10
-PRODUCT_PLACEHOLDER_URL = "/api/v1/static/placeholders/product_placeholder.jpg"
+PRODUCT_PLACEHOLDER_URL = f"{PLACEHOLDER_URL_BASE}/product_placeholder.jpg"
+
+# Characters XML 1.0 forbids; ElementTree writes them out raw, and one of them in any
+# product field would make Merchant Center reject the whole document
+_XML_INVALID_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
 
 
 def get_current_stock(db: Session, product_ids: Optional[Iterable[int]] = None) -> dict[int, Optional[int]]:
@@ -77,16 +83,13 @@ def build_product_offer(db: Session, product_id: int) -> Optional[dict]:
         "price": product.pret,
         "currency": CURRENCY,
         "availability": get_availability(product.id, get_current_stock(db, product_ids=[product.id])),
-        "unit_pricing": None if unit_pricing is None else {
-            "measure": {"value": unit_pricing.measure_value, "unit": unit_pricing.measure_unit},
-            "base": {"value": unit_pricing.base_value, "unit": unit_pricing.base_unit},
-        },
+        "unit_pricing": None if unit_pricing is None else unit_pricing.offer_values(),
     }
 
 
 def _image_url(api_base_url: str, image_path: str) -> str:
     original = resolve_image_versions(image_path, placeholder_url=PRODUCT_PLACEHOLDER_URL)["original"]
-    return f"{api_base_url}/api/v1/static/uploads/{original}"
+    return f"{api_base_url}{UPLOADS_URL_BASE}/{original}"
 
 
 def build_feed_items(db: Session, frontend_url: str, api_base_url: str) -> list[dict]:
@@ -131,6 +134,7 @@ def build_feed_items(db: Session, frontend_url: str, api_base_url: str) -> list[
 
 
 def _add(parent: ET.Element, tag: str, text: Optional[str]) -> None:
+    text = _XML_INVALID_CHARS.sub("", text) if text else text
     if text:
         ET.SubElement(parent, tag).text = text
 

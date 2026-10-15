@@ -8,7 +8,7 @@ class UnitPricingAmount(BaseModel):
     unit: Literal["g", "kg", "ml", "l"] = Field(examples=["g"])
 
 
-class UnitPricing(BaseModel):
+class OfferUnitPricing(BaseModel):
     """How much one item holds (measure) and the base it is priced per (base)."""
 
     measure: UnitPricingAmount
@@ -22,6 +22,6 @@ class ProductOffer(BaseModel):
     price: int = Field(description="Price in whole lei", examples=[16])
     currency: Literal["RON"]
     availability: Literal["in_stock", "out_of_stock"]
-    unit_pricing: Optional[UnitPricing] = Field(
+    unit_pricing: Optional[OfferUnitPricing] = Field(
         None, description="Set only for products sold by weight or volume"
     )

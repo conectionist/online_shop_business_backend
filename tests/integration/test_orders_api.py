@@ -2,26 +2,42 @@ from datetime import datetime, date, timezone
 import os
 import requests
 from integration.test_auth_utils import auth_utils
+from integration.test_lists_api import ListTestUtils
 import pytest
 
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 API_V1 = f"{API_BASE_URL}/api/v1"
 
+list_utils = ListTestUtils()
 
-def _get_any_list_id_or_skip():
-    """Get any available list ID for testing"""
+
+def _open_list_for_orders(list_id):
+    """Make *list_id* the list customers can order from (publishing unpublishes the others)."""
+    resp = requests.get(f"{API_V1}/liste/published")
+    assert resp.status_code == 200, resp.text
+    published = resp.json()
+    if published is None or published["id"] != list_id:
+        list_utils.update_entity(list_id, is_published=True)
+
+
+def _get_orderable_list_id_or_skip():
+    """Return the first list's ID, opening it for orders.
+
+    Orders are only accepted for the published, unexpired list, and other tests
+    publish lists of their own. The first list is seed list 1 (delivery types 1-3).
+    """
     resp = requests.get(f"{API_V1}/liste")
     assert resp.status_code == 200, f"Failed to list lists: {resp.text}"
     lists = resp.json()
     if not lists:
         pytest.skip("No lists available in test environment")
-        return None
+    _open_list_for_orders(lists[0]["id"])
     return lists[0]["id"]
 
 
 def test_orders_create_public_success():
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     payload = {
         "nume_client": f"John Doe {int(datetime.now(timezone.utc).timestamp()*1000)}",
         "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
@@ -41,7 +57,7 @@ def test_orders_create_public_success():
 
 
 def test_orders_create_public_and_read_with_auth():
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     payload = {
         "nume_client": f"John Doe Auth {int(datetime.now(timezone.utc).timestamp()*1000)}",
         "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
@@ -71,7 +87,7 @@ def test_orders_create_public_and_read_with_auth():
 
 def test_orders_list_and_get_require_auth():
     # Create an order without auth (public) to have an ID
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     payload = {
         "nume_client": f"Jane Doe {int(datetime.now(timezone.utc).timestamp()*1000)}",
         "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
@@ -103,13 +119,7 @@ def test_orders_endpoints_invalid_token_returns_401():
 
 
 def test_orders_create_with_items_success():
-    # Discover a list
-    list_resp = requests.get(f"{API_V1}/liste")
-    assert list_resp.status_code == 200, list_resp.text
-    lists = list_resp.json()
-    if not lists:
-        pytest.skip("No lists available in test environment")
-    liste_id = lists[0]["id"]
+    liste_id = _get_orderable_list_id_or_skip()
 
     # Discover a product (and unit)
     prod_resp = requests.get(f"{API_V1}/products")
@@ -152,12 +162,7 @@ def test_orders_create_with_items_success():
 
 
 def _create_minimal_order_and_return_id():
-    list_resp = requests.get(f"{API_V1}/liste")
-    assert list_resp.status_code == 200, list_resp.text
-    lists = list_resp.json()
-    if not lists:
-        pytest.skip("No lists available in test environment")
-    liste_id = lists[0]["id"]
+    liste_id = _get_orderable_list_id_or_skip()
 
     payload = {
         "nume_client": f"Patch/Delete Target {int(datetime.now(timezone.utc).timestamp()*1000)}",
@@ -225,7 +230,7 @@ def _discover_product_and_unit_or_skip():
 
 def test_orders_items_crud_lifecycle():
     # Arrange
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     produse_id, unitati_id, pret = _discover_product_and_unit_or_skip()
     if not auth_utils.access_token:
         auth_utils.login()
@@ -273,7 +278,7 @@ def test_orders_items_crud_lifecycle():
 def test_orders_filters_nume_client_list_id_date_range():
     if not auth_utils.access_token:
         auth_utils.login()
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     now = datetime.now(timezone.utc)
     iso = now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     # Create two orders
@@ -301,7 +306,7 @@ def test_orders_filters_nume_client_list_id_date_range():
 
 
 def test_orders_write_with_invalid_token_returns_401():
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     payload = {
         "nume_client": f"Invalid Token Write {int(datetime.now(timezone.utc).timestamp()*1000)}",
         "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
@@ -318,7 +323,7 @@ def test_orders_write_with_invalid_token_returns_401():
 def test_orders_validation_errors():
     if not auth_utils.access_token:
         auth_utils.login()
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     # Create order
     order_payload = {
         "nume_client": f"Validation Target {int(datetime.now(timezone.utc).timestamp()*1000)}",
@@ -353,7 +358,7 @@ def test_orders_validation_errors():
 def test_orders_attempt_change_liste_id_ignored():
     if not auth_utils.access_token:
         auth_utils.login()
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     # Create
     payload = {
         "nume_client": f"Immutable List {int(datetime.now(timezone.utc).timestamp()*1000)}",
@@ -380,7 +385,7 @@ def test_orders_attempt_change_liste_id_ignored():
 
 def test_orders_create_without_required_fields_fails():
     """Test that order creation fails without delivery_type_id and payment_method_id"""
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     
     # Test missing delivery_type_id
     payload_missing_delivery = {
@@ -405,7 +410,7 @@ def test_orders_create_without_required_fields_fails():
 
 def test_orders_create_with_home_delivery_requires_address():
     """Test that home delivery requires delivery address"""
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     
     # Test home delivery without address (should fail)
     payload_home_no_address = {
@@ -459,7 +464,7 @@ def test_orders_filter_by_delivery_and_payment_methods():
     if not auth_utils.access_token:
         auth_utils.login()
     
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     
     # Create orders with different delivery and payment methods
     orders_data = [
@@ -506,7 +511,7 @@ def test_orders_filter_by_delivery_and_payment_methods():
 
 def test_orders_phone_number_validation_valid_formats():
     """Test that valid phone number formats are accepted"""
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     
     # Test valid phone number formats
     valid_phones = [
@@ -538,7 +543,7 @@ def test_orders_phone_number_validation_valid_formats():
 
 def test_orders_phone_number_validation_invalid_formats():
     """Test that invalid phone number formats are rejected with 422"""
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     
     # Test invalid phone number formats
     invalid_phones = [
@@ -570,7 +575,7 @@ def test_orders_phone_number_validation_invalid_formats():
 
 def test_orders_phone_number_optional_field():
     """Test that phone_number is truly optional"""
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     
     # Test without phone_number field
     payload_no_phone = {
@@ -607,7 +612,7 @@ def test_orders_phone_number_update_validation():
     if not auth_utils.access_token:
         auth_utils.login()
     
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     
     # Create order with valid phone number
     payload = {
@@ -646,7 +651,7 @@ def test_orders_phone_number_update_validation():
 
 def test_orders_phone_number_max_length_validation():
     """Test phone number maximum length validation"""
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     
     # Test exactly 20 characters (should work)
     phone_20_chars = "12345678901234567890"  # 20 digits
@@ -670,7 +675,7 @@ def test_orders_phone_number_max_length_validation():
 
 def test_orders_phone_number_whitespace_handling():
     """Test that whitespace in phone numbers is handled correctly"""
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     
     # Test phone number with leading/trailing whitespace (should be trimmed)
     payload = {
@@ -703,12 +708,7 @@ def test_orders_phone_number_whitespace_handling():
 def test_orders_merge_similar_basic_merge():
     """Merging two orders for same customer (case/diacritics-insensitive) within the same list."""
     # Arrange
-    list_resp = requests.get(f"{API_V1}/liste")
-    assert list_resp.status_code == 200, list_resp.text
-    lists = list_resp.json()
-    if not lists:
-        pytest.skip("No lists available in test environment")
-    liste_id = lists[0]["id"]
+    liste_id = _get_orderable_list_id_or_skip()
 
     produse_id, unitati_id, pret = _discover_product_and_unit_or_skip()
     # Create oldest order
@@ -792,7 +792,7 @@ def test_orders_merge_similar_basic_merge():
 
 def test_orders_merge_similar_different_lists_not_merged():
     """Orders with same normalized name across different lists should not merge."""
-    # Arrange two distinct lists
+    # Arrange two distinct lists; only one list is open for orders at a time
     list_resp = requests.get(f"{API_V1}/liste")
     assert list_resp.status_code == 200, list_resp.text
     lists = list_resp.json()
@@ -808,10 +808,16 @@ def test_orders_merge_similar_different_lists_not_merged():
         "delivery_type_id": 1,
         "payment_method_id": 5,
     }
+    _open_list_for_orders(list_a)
     r_a = requests.post(f"{API_V1}/orders/", json={**base_payload, "liste_id": list_a})
     assert r_a.status_code == 201, r_a.text
-    r_b = requests.post(f"{API_V1}/orders/", json={**base_payload, "liste_id": list_b})
-    assert r_b.status_code == 201, r_b.text
+    try:
+        _open_list_for_orders(list_b)
+        r_b = requests.post(f"{API_V1}/orders/", json={**base_payload, "liste_id": list_b})
+        assert r_b.status_code == 201, r_b.text
+    finally:
+        # The other tests order from the first list
+        _open_list_for_orders(list_a)
 
     if not auth_utils.access_token:
         auth_utils.login()
@@ -826,7 +832,7 @@ def test_orders_merge_similar_different_lists_not_merged():
 # ---------- Duplicate detection tests ----------
 
 def test_orders_create_duplicate_without_items_returns_409():
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     name = f"Dup No Items {int(datetime.now(timezone.utc).timestamp()*1000)}"
     payload = {
         "nume_client": name,
@@ -849,7 +855,7 @@ def test_orders_create_duplicate_without_items_returns_409():
 
 
 def test_orders_create_duplicate_with_items_returns_409():
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     # Discover a product
     prod_resp = requests.get(f"{API_V1}/products")
     assert prod_resp.status_code == 200, prod_resp.text
@@ -884,7 +890,7 @@ def test_orders_create_duplicate_with_items_returns_409():
 
 
 def test_orders_create_same_products_split_items_still_409():
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     # Discover a product
     prod_resp = requests.get(f"{API_V1}/products")
     assert prod_resp.status_code == 200, prod_resp.text
@@ -927,7 +933,7 @@ def test_orders_create_same_products_split_items_still_409():
 
 
 def test_orders_create_different_quantities_returns_201():
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     # Discover a product
     prod_resp = requests.get(f"{API_V1}/products")
     assert prod_resp.status_code == 200, prod_resp.text
@@ -1049,7 +1055,7 @@ def test_orders_update_soft_deleted_order_fails():
 
 def test_orders_duplicate_detection_excludes_soft_deleted():
     """Test that duplicate detection excludes soft-deleted orders"""
-    list_id = _get_any_list_id_or_skip()
+    list_id = _get_orderable_list_id_or_skip()
     name = f"Dup Exclude Deleted {int(datetime.now(timezone.utc).timestamp()*1000)}"
     
     # Create first order
@@ -1152,3 +1158,47 @@ def test_orders_soft_delete_vs_hard_delete():
     # Verify hard-deleted order cannot be restored (doesn't exist)
     restore_hard_resp = auth_utils.make_authenticated_request("POST", f"{API_V1}/orders/{order2_id}/restore")
     assert restore_hard_resp.status_code == 404, "Hard-deleted order should not be restorable"
+
+
+# ---------- Only the open list accepts orders ----------
+
+def _post_minimal_order(list_id):
+    payload = {
+        "nume_client": f"Closed List {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
+    }
+    return requests.post(f"{API_V1}/orders/", json=payload)
+
+
+def _assert_list_not_open(resp, list_id):
+    # 400, not 409: the storefront treats an unknown 409 as a duplicate, i.e. as success
+    assert resp.status_code == 400, f"Expected 400, got {resp.status_code}: {resp.text}"
+    detail = resp.json()["detail"]
+    assert detail["error_code"] == "LIST_NOT_OPEN", detail
+    assert detail["list_id"] == list_id, detail
+
+
+def test_orders_create_for_unpublished_list_returns_400():
+    _, list_id = list_utils.create_entity(is_published=False)
+    try:
+        _assert_list_not_open(_post_minimal_order(list_id), list_id)
+    finally:
+        list_utils.delete_entity(list_id)
+
+
+def test_orders_create_for_expired_list_returns_400():
+    _, list_id = list_utils.create_entity_with_expiration("2020-01-02T00:00:00", date="2020-01-01")
+    try:
+        _assert_list_not_open(_post_minimal_order(list_id), list_id)
+    finally:
+        list_utils.delete_entity(list_id)
+
+
+def test_orders_create_for_deleted_list_returns_400():
+    _, list_id = list_utils.create_entity(is_published=True)
+    list_utils.delete_entity(list_id)
+
+    _assert_list_not_open(_post_minimal_order(list_id), list_id)

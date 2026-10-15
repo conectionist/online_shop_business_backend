@@ -30,12 +30,15 @@ _UNIT_ALIASES = {
 }
 
 # Size embedded in a container unit name, e.g. "Caserola de 250gr", "Pachet 2x400g",
-# "Borcan 1/2 kg". \w is Unicode-aware, so "Tava de 12 găluște" is not read as 12 g.
+# "Borcan 1/2 kg", "Pachet 500 de grame". \w is Unicode-aware, so "Tava de 12 găluște"
+# is not read as 12 g. As in Romanian, a dot grouping three digits is a thousands
+# separator ("1.500 g" is 1500 g), while "0.750 l" and "1,5 kg" are decimals.
 _EMBEDDED_SIZE = re.compile(
     r"(?<![\w.,/])"
     r"(?:(?P<count>\d+)\s*[x×*]\s*)?"
-    r"(?P<amount>\d+(?:[.,]\d+)?)(?:\s*/\s*(?P<divisor>\d+))?"
-    rf"\s*(?P<unit>{'|'.join(sorted(_UNIT_ALIASES, key=len, reverse=True))})\.?(?!\w)"
+    r"(?P<amount>(?P<grouped>[1-9]\d{0,2}(?:\.\d{3})+)(?!\d)|\d+(?:[.,]\d+)?)"
+    r"(?:\s*/\s*(?P<divisor>\d+))?"
+    rf"\s*(?:de\s+)?(?P<unit>{'|'.join(sorted(_UNIT_ALIASES, key=len, reverse=True))})\.?(?!\w)"
 )
 
 # Factor to the smallest unit of each dimension (g or ml)
@@ -61,6 +64,13 @@ class UnitPricing:
         measure = format(self.measure_value.normalize(), "f")
         return f"{measure}{self.measure_unit}", f"{self.base_value}{self.base_unit}"
 
+    def offer_values(self) -> dict:
+        """Return the unit pricing as GET /products/{id}/offer serves it (schemas.product_offer)."""
+        return {
+            "measure": {"value": self.measure_value, "unit": self.measure_unit},
+            "base": {"value": self.base_value, "unit": self.base_unit},
+        }
+
 
 def _parse_unit_name(name: str) -> Optional[tuple[Decimal, str]]:
     """Return (amount per item, unit) for a unit name, or None if it has no weight or volume."""
@@ -77,11 +87,11 @@ def _parse_unit_name(name: str) -> Optional[tuple[Decimal, str]]:
     divisor = Decimal(match.group("divisor") or 1)
     if divisor == 0:
         return None
-    amount = (
-        Decimal(match.group("count") or 1)
-        * Decimal(match.group("amount").replace(",", "."))
-        / divisor
-    )
+    if match.group("grouped"):
+        amount_text = match.group("amount").replace(".", "")
+    else:
+        amount_text = match.group("amount").replace(",", ".")
+    amount = Decimal(match.group("count") or 1) * Decimal(amount_text) / divisor
     return amount, _UNIT_ALIASES[match.group("unit")]
 
 

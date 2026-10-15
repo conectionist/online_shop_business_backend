@@ -1,3 +1,5 @@
 pytest
 requests
 pytest-json-report
+# Europe/Bucharest for the list expiry tests (slim images have no zoneinfo database)
+tzdata

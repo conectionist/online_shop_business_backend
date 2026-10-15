@@ -2,6 +2,7 @@ import os
 import requests
 import uuid
 import datetime
+from zoneinfo import ZoneInfo
 from integration.test_utils import EntityTestUtils
 from integration.test_delivery_schedules_api import DeliveryScheduleTestUtils
 from integration.test_auth_utils import auth_utils
@@ -1325,3 +1326,52 @@ def test_single_published_list_constraint_explicit_false():
         except:
             pass
         raise e
+
+
+SHOP_TIMEZONE = ZoneInfo("Europe/Bucharest")
+
+
+def _create_list_expiring_at(list_utils, expires_at):
+    """Create a published list expiring at *expires_at* (naive Romania-local time)."""
+    # The list date must be before the expiry, so use the day before
+    list_date = (expires_at.date() - datetime.timedelta(days=1)).isoformat()
+    return list_utils.create_entity_with_expiration(expires_at.strftime("%Y-%m-%dT%H:%M:%S"), date=list_date)
+
+
+def test_published_list_endpoint_returns_the_active_list():
+    list_utils = ListTestUtils()
+    shop_now = datetime.datetime.now(SHOP_TIMEZONE).replace(tzinfo=None)
+    _, list_id = _create_list_expiring_at(list_utils, shop_now + datetime.timedelta(hours=2))
+    try:
+        response = requests.get(f"{list_utils.base_url}/published")
+        assert response.status_code == 200, response.text
+        assert response.json()["id"] == list_id
+
+        # Publishing this list unpublished every other list, and it hasn't expired
+        response = requests.get(f"{list_utils.base_url}/last-expired")
+        assert response.status_code == 200, response.text
+        assert response.json() is None
+    finally:
+        list_utils.delete_entity(list_id)
+
+
+def test_published_list_expiry_is_checked_in_romania_time():
+    """
+    A list that expired 30 minutes ago in Romania is no longer published.
+
+    Romania is 2-3 hours ahead of UTC, so comparing against naive UTC time (or a
+    browser's local time elsewhere) would still treat the list as active.
+    """
+    list_utils = ListTestUtils()
+    shop_now = datetime.datetime.now(SHOP_TIMEZONE).replace(tzinfo=None)
+    _, list_id = _create_list_expiring_at(list_utils, shop_now - datetime.timedelta(minutes=30))
+    try:
+        response = requests.get(f"{list_utils.base_url}/published")
+        assert response.status_code == 200, response.text
+        assert response.json() is None
+
+        response = requests.get(f"{list_utils.base_url}/last-expired")
+        assert response.status_code == 200, response.text
+        assert response.json()["id"] == list_id
+    finally:
+        list_utils.delete_entity(list_id)

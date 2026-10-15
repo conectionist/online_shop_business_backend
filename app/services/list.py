@@ -1,10 +1,55 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from fastapi import HTTPException, status, BackgroundTasks
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from typing import List as TypeList, Optional
 
 from app.models.list import List
 from app.schemas.list import ListCreate, ListUpdate
+
+# expiration_date is stored as naive Romania-local time
+SHOP_TIMEZONE = ZoneInfo("Europe/Bucharest")
+
+
+def _shop_now() -> datetime:
+    return datetime.now(SHOP_TIMEZONE).replace(tzinfo=None)
+
+
+def get_current_published_list(db: Session) -> Optional[List]:
+    """Return the list customers can order from right now, or None.
+
+    Published, not deleted and not expired. The storefront reads it through
+    GET /liste/published, and the Merchant feed and product offers use it for
+    availability, so all of them agree on when a list expires.
+    """
+    return (
+        db.query(List)
+        .filter(
+            List.is_published == 1,
+            List.is_deleted == 0,
+            or_(List.expiration_date.is_(None), List.expiration_date > _shop_now()),
+        )
+        .order_by(List.id.desc())
+        .first()
+    )
+
+
+def get_last_expired_published_list(db: Session) -> Optional[List]:
+    """Return the most recently expired published list, or None (GET /liste/last-expired)."""
+    return (
+        db.query(List)
+        .filter(
+            List.is_published == 1,
+            List.is_deleted == 0,
+            List.expiration_date.is_not(None),
+            List.expiration_date <= _shop_now(),
+        )
+        .order_by(List.expiration_date.desc())
+        .first()
+    )
 
 
 def _ensure_single_published_list(db: Session, list_id: int = None):

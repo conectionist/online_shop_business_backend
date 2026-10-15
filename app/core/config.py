@@ -3,6 +3,7 @@ import os
 import sys
 import logging
 from typing import List
+from urllib.parse import urlparse
 
 # Configure logging based on LOG_LEVEL env (defaults to INFO)
 _log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -12,7 +13,7 @@ logging.getLogger(__name__).setLevel(_log_level)
 logger = logging.getLogger(__name__)
 
 # API version information
-API_VERSION = "6.3.1"
+API_VERSION = "6.4.0"
 API_TITLE = "Online Shop API"
 API_DESCRIPTION = "API for online shop business"
 
@@ -111,9 +112,28 @@ COOKIE_PATH = get_optional_env_var(
     "Path attribute for auth cookies."
 ).strip() or "/"
 
-# Frontend URL (used by clients, links in notifications, etc.)
+# Frontend URL (used by clients, links in notifications, the Merchant feed, etc.)
 _frontend_url_raw = os.getenv("FRONTEND_URL", "").strip()
 FRONTEND_URL = _frontend_url_raw if _frontend_url_raw else "http://localhost:3000"
+
+# Public origin of this API (e.g. https://api.example.com), for absolute links such as
+# the Merchant feed's image URLs. Empty means "use the request's origin", which is only
+# right when no proxy sits in front of the API (dev/test).
+PUBLIC_API_URL = os.getenv("PUBLIC_API_URL", "").strip().rstrip("/")
+
+# Production links are read by Google and customers, so they must be real public URLs.
+# They must be https: auth cookies are Secure in production anyway, and this also rejects
+# values without a scheme and internal URLs such as http://api:8000.
+if ENVIRONMENT == "production":
+    for _url_var, _url_value in (("FRONTEND_URL", _frontend_url_raw), ("PUBLIC_API_URL", PUBLIC_API_URL)):
+        _url = urlparse(_url_value)
+        if _url.scheme != "https" or not _url.hostname or _url.hostname in ("localhost", "127.0.0.1"):
+            logger.error(
+                "CRITICAL: Production requires %s to be its public https URL (e.g. https://example.com); got %r.",
+                _url_var,
+                _url_value,
+            )
+            sys.exit(1)
 
 # Cross-Origin Resource Policy (CORP)
 # Values: "same-origin", "same-site", "cross-origin"
@@ -272,6 +292,7 @@ class Settings:
         self.ALLOWED_HOSTS = ALLOWED_HOSTS
         self.ENVIRONMENT = ENVIRONMENT
         self.FRONTEND_URL = FRONTEND_URL
+        self.PUBLIC_API_URL = PUBLIC_API_URL
         self.CORP_POLICY = CORP_POLICY
         
         # JWT Settings

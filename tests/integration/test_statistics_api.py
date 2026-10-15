@@ -5,6 +5,7 @@ import pytest
 import requests
 
 from integration.test_auth_utils import auth_utils
+from integration.test_lists_api import ListTestUtils
 
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
@@ -27,12 +28,21 @@ def _get(path: str, **params):
     return auth_utils.make_authenticated_request("GET", f"{API_V1}/{path}", params=params)
 
 
-def _discover_list_or_skip():
+def _discover_orderable_list_or_skip():
+    """Return the first list (seed list 1), opening it for orders.
+
+    Orders are only accepted for the published, unexpired list, and other tests
+    publish lists of their own.
+    """
     resp = requests.get(f"{API_V1}/liste")
     assert resp.status_code == 200, resp.text
     lists = resp.json()
     if not lists:
         pytest.skip("No lists available in test environment")
+    published = requests.get(f"{API_V1}/liste/published")
+    assert published.status_code == 200, published.text
+    if published.json() is None or published.json()["id"] != lists[0]["id"]:
+        ListTestUtils().update_entity(lists[0]["id"], is_published=True)
     return lists[0]
 
 
@@ -140,7 +150,7 @@ def test_statistics_rejects_inverted_date_range():
 
 
 def test_statistics_order_lifecycle_updates_figures():
-    lst = _discover_list_or_skip()
+    lst = _discover_orderable_list_or_skip()
     product = _discover_product_or_skip()
     _login()
     period = {"start_date": lst["data"], "end_date": lst["data"]}
@@ -226,7 +236,7 @@ def test_statistics_products_structure():
 
 
 def test_statistics_marking_an_ordered_product_unavailable_counts_as_sold_out():
-    lst = _discover_list_or_skip()
+    lst = _discover_orderable_list_or_skip()
     _login()
     resp = requests.get(f"{API_V1}/liste/{lst['id']}/products")
     assert resp.status_code == 200, resp.text

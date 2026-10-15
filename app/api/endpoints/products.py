@@ -34,6 +34,7 @@ from app.models.product import Product
 from app.schemas.product import Product as ProductSchema
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.schemas.product_image import ProductImageCreate
+from app.schemas.product_offer import ProductOffer
 from app.services.product import (
     create_product,
     get_product_by_id,
@@ -43,6 +44,7 @@ from app.services.product import (
     update_product,
 )
 from app.services.product_image import create_product_image
+from app.services.product_feed import build_product_offer
 
 router = APIRouter()
 
@@ -208,6 +210,27 @@ def read_product(
         set_cached_response(cache_key, payload)
         return payload
     return product
+
+
+@router.get("/{product_id}/offer", response_model=ProductOffer, responses={
+    200: {"description": "Successful Response"},
+    404: {"description": "Product not found"},
+    422: {"description": "Validation Error"}
+})
+def read_product_offer(
+    product_id: int = Path(..., gt=0, description="The ID of the product"),
+    db: Session = Depends(get_db),
+):
+    """
+    Get a product's price, availability and unit pricing as the Google Merchant feed lists them (PUBLIC).
+
+    The storefront builds its product structured data from this, so it always agrees
+    with /feeds/google.xml. Not cached: availability changes when a list expires.
+    """
+    offer = build_product_offer(db, product_id)
+    if offer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Product with ID {product_id} not found")
+    return offer
 
 
 @router.post("/", response_model=ProductSchema, status_code=status.HTTP_201_CREATED, 

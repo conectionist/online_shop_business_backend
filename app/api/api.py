@@ -22,6 +22,7 @@ from app.api.endpoints import (
     payment_types,
     uploads,
     statistics,
+    feeds,
 )
 
 api_router = APIRouter()
@@ -127,4 +128,9 @@ api_router.include_router(
     statistics.router,
     prefix="/statistics",
     tags=["statistics"],
+)
+api_router.include_router(
+    feeds.router,
+    prefix="/feeds",
+    tags=["feeds"],
 )

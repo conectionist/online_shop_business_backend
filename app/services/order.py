@@ -528,15 +528,6 @@ def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = Non
 
         _validate_foreign_keys(db, order_in)
 
-        # Reject orders for unpublished, deleted or expired lists
-        _validate_list_open(db, order_in.liste_id)
-
-        # Validate delivery method availability for the selected list
-        _validate_delivery_method_availability(db, order_in.liste_id, order_in.delivery_type_id)
-        
-        # Validate delivery address based on delivery type
-        _validate_delivery_address(db, order_in.delivery_type_id, order_in.delivery_address)
-
         # Duplicate detection: same nume_client, same liste_id, and identical items (product and quantity)
         duplicate = _is_duplicate_order(db, order_in)
         if duplicate is not None:
@@ -548,6 +539,18 @@ def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = Non
                     "order_id": duplicate.id,
                 },
             )
+
+        # Reject orders for unpublished, deleted or expired lists. Checked after duplicate
+        # detection, so a retry of an order placed before the list closed still gets 409
+        # DUPLICATE_ORDER, which the storefront treats as success; and before the delivery
+        # checks, so an order for a closed list is told the list is closed.
+        _validate_list_open(db, order_in.liste_id)
+
+        # Validate delivery method availability for the selected list
+        _validate_delivery_method_availability(db, order_in.liste_id, order_in.delivery_type_id)
+
+        # Validate delivery address based on delivery type
+        _validate_delivery_address(db, order_in.delivery_type_id, order_in.delivery_address)
 
         db_order = OrderModel(
             nume_client=order_in.nume_client.strip(),

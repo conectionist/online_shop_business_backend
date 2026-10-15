@@ -1202,3 +1202,35 @@ def test_orders_create_for_deleted_list_returns_400():
     list_utils.delete_entity(list_id)
 
     _assert_list_not_open(_post_minimal_order(list_id), list_id)
+
+
+def test_orders_duplicate_of_an_order_placed_before_the_list_closed_returns_409():
+    # The storefront retries a submission after a network error or 5xx and treats 409
+    # DUPLICATE_ORDER as success, so a retry that lands after closing time must still be
+    # recognised as the order it already placed, not refused as LIST_NOT_OPEN
+    list_id = _get_orderable_list_id_or_skip()
+    stamp = int(datetime.now(timezone.utc).timestamp() * 1000)
+    payload = {
+        "nume_client": f"Retry After Close {stamp}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": list_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
+    }
+    resp = requests.post(f"{API_V1}/orders/", json=payload)
+    assert resp.status_code == 201, resp.text
+
+    list_utils.update_entity(list_id, is_published=False)
+    try:
+        resp = requests.post(f"{API_V1}/orders/", json=payload)
+        assert resp.status_code == 409, f"Expected 409, got {resp.status_code}: {resp.text}"
+        assert resp.json()["detail"]["error_code"] == "DUPLICATE_ORDER", resp.text
+
+        # A new order for the closed list is still refused
+        _assert_list_not_open(
+            requests.post(f"{API_V1}/orders/", json={**payload, "nume_client": f"New After Close {stamp}"}),
+            list_id,
+        )
+    finally:
+        # The other tests order from this list
+        _open_list_for_orders(list_id)

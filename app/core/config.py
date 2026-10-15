@@ -121,14 +121,17 @@ FRONTEND_URL = _frontend_url_raw if _frontend_url_raw else "http://localhost:300
 # right when no proxy sits in front of the API (dev/test).
 PUBLIC_API_URL = os.getenv("PUBLIC_API_URL", "").strip().rstrip("/")
 
-# Production links are read by Google and customers, so they must be real public URLs
+# Production links are read by Google and customers, so they must be real public URLs.
+# They must be https: auth cookies are Secure in production anyway, and this also rejects
+# values without a scheme and internal URLs such as http://api:8000.
 if ENVIRONMENT == "production":
     for _url_var, _url_value in (("FRONTEND_URL", _frontend_url_raw), ("PUBLIC_API_URL", PUBLIC_API_URL)):
-        if not _url_value or urlparse(_url_value).hostname in ("localhost", "127.0.0.1"):
+        _url = urlparse(_url_value)
+        if _url.scheme != "https" or not _url.hostname or _url.hostname in ("localhost", "127.0.0.1"):
             logger.error(
-                "CRITICAL: Production requires %s to be set to its public URL (e.g. https://example.com), "
-                "not empty or localhost.",
+                "CRITICAL: Production requires %s to be its public https URL (e.g. https://example.com); got %r.",
                 _url_var,
+                _url_value,
             )
             sys.exit(1)
 

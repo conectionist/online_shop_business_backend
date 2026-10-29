@@ -49,7 +49,10 @@ ORDER_RATE_LIMIT_WINDOW=day
 
 ## Behaviour
 
-- **Key:** Client IP from `X-Forwarded-For` (first element) when behind a trusted proxy, else `request.client.host`.
+- **Key:** The client IP as Uvicorn resolves it (`request.client.host`). Uvicorn takes it from
+  `X-Forwarded-For` only when the request comes from a proxy listed in `FORWARDED_ALLOW_IPS`, so
+  a client cannot choose its own key. If the proxy is missing from that list, every customer
+  shares the proxy's IP and one limit; the API logs a warning the first time it sees this.
 - **Over limit:** HTTP 429 with detail `"Too many orders from this IP. Please try again later."`
 - **Storage:** In-memory by default (per process; with multiple workers the effective limit per IP is roughly limit × workers unless you switch to Redis).
 

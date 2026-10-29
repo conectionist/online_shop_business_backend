@@ -107,11 +107,12 @@ FORWARDED_ALLOW_IPS="${FORWARDED_ALLOW_IPS:-127.0.0.1}"
 # Normalize USE_PROXY_HEADERS for comparison (true/1/yes are treated as enabled)
 USE_PROXY_HEADERS_NORMALIZED=$(echo "${USE_PROXY_HEADERS}" | tr '[:upper:]' '[:lower:]')
 
-UVICORN_PROXY_FLAGS=""
 if [ "${USE_PROXY_HEADERS_NORMALIZED}" = "true" ] || [ "${USE_PROXY_HEADERS_NORMALIZED}" = "1" ] || [ "${USE_PROXY_HEADERS_NORMALIZED}" = "yes" ]; then
     UVICORN_PROXY_FLAGS="--proxy-headers --forwarded-allow-ips ${FORWARDED_ALLOW_IPS}"
     echo "Uvicorn proxy headers ENABLED; trusting X-Forwarded-* from: ${FORWARDED_ALLOW_IPS}"
 else
+    # Uvicorn trusts proxy headers from FORWARDED_ALLOW_IPS unless told not to.
+    UVICORN_PROXY_FLAGS="--no-proxy-headers"
     echo "Uvicorn proxy headers DISABLED; ignoring X-Forwarded-* headers"
 fi
 

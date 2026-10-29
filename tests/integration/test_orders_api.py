@@ -161,6 +161,42 @@ def test_orders_create_with_items_success():
     assert len(created["items"]) == 1
 
 
+@pytest.mark.parametrize("sent_price", [0, "catalogue + 1000", None])
+def test_orders_create_stores_current_price_whatever_price_is_sent(sent_price):
+    liste_id = _get_orderable_list_id_or_skip()
+
+    products = requests.get(f"{API_V1}/products").json()
+    if not products:
+        pytest.skip("No products available in test environment")
+    product = products[0]
+
+    item = {
+        "produse_id": product["id"],
+        "cantitate_produs": 2,
+        "unitati_id": product["unitati_id"],
+    }
+    if sent_price == "catalogue + 1000":
+        item["pret_produs"] = product["pret"] + 1000
+    elif sent_price is not None:
+        item["pret_produs"] = sent_price
+
+    payload = {
+        "nume_client": f"Price Check {sent_price} {int(datetime.now(timezone.utc).timestamp()*1000)}",
+        "data_plasarii": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "liste_id": liste_id,
+        "delivery_type_id": 1,  # Ridicare de la sediu
+        "payment_method_id": 5,  # Cash
+        "items": [item],
+    }
+
+    resp = requests.post(f"{API_V1}/orders/", json=payload)
+    assert resp.status_code == 201, resp.text
+    stored = resp.json()["items"]
+    assert len(stored) == 1
+    assert stored[0]["pret_produs"] == product["pret"]
+    assert stored[0]["cantitate_produs"] == 2
+
+
 def _create_minimal_order_and_return_id():
     liste_id = _get_orderable_list_id_or_skip()
 

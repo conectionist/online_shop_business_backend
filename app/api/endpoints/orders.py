@@ -191,7 +191,8 @@ def create_order_endpoint(
     - Delivery type must be available for the selected list
     - Delivery address is required for home delivery types
     - Payment method must exist in the system
-    
+    - Each item is stored at the product's current price; an item's `pret_produs` is ignored
+
     **Example Request Body:**
     ```json
     {

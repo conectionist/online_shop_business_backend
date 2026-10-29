@@ -22,6 +22,7 @@ from app.utils.text_matching import normalize_name_for_matching, normalize_roman
 from app.schemas.order import (
     Order as OrderSchema,
     OrderCreate,
+    OrderCreateItem,
     OrderUpdate,
     OrderItemBase,
     OrderFilterParams,
@@ -395,6 +396,26 @@ def _fill_missing_item_price(db: Session, item: OrderItemBase, liste_id: int) ->
     return product.pret
 
 
+def _current_price(db: Session, item: OrderCreateItem) -> int:
+    """The price a new order's item is stored at: the product's price now.
+
+    Orders are placed without logging in, so a price sent with one is never stored.
+    A different price is logged; it usually means the customer's cart is older than
+    the last price change.
+    """
+    product = db.query(Product).filter(Product.id == item.produse_id).first()
+    if not product:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Product {item.produse_id} not found")
+    if item.pret_produs is not None and item.pret_produs != product.pret:
+        logger.warning(
+            "Order item for product %s was sent with price %s; storing its current price %s",
+            item.produse_id,
+            item.pret_produs,
+            product.pret,
+        )
+    return product.pret
+
+
 def _check_stock(db: Session, liste_id: int, produse_id: int, requested_qty: int):
     # Optional stock check: if stoc_produs exists and is not null, ensure sufficient stock
     lp = db.query(ListProductOrdered).filter(
@@ -570,7 +591,7 @@ def create_order(db: Session, order_in: OrderCreate, source: Optional[str] = Non
         if order_in.items:
             for item in order_in.items:
                 _check_stock(db, order_in.liste_id, item.produse_id, item.cantitate_produs)
-                price = _fill_missing_item_price(db, item, order_in.liste_id)
+                price = _current_price(db, item)
                 db_item = OrderItemModel(
                     comenzi_id=db_order.id,
                     produse_id=item.produse_id,

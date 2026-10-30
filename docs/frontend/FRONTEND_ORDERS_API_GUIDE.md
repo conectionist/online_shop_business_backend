@@ -216,7 +216,7 @@ async function removeOrderItem(token, orderId, productId) {
 ### Notes & Constraints
 - All write operations require a valid admin token.
 - `produse_id` and `unitati_id` must be valid; quantities must be > 0.
-- `pret_produs` is captured at order-time (snapshot). If omitted, backend may fill from product price depending on configuration.
+- `pret_produs` is captured at order-time (snapshot). When an order is created, each item is stored at the product's current price, and any `pret_produs` sent is ignored. Admins can change it later through the order item endpoints.
 - `liste_id` is immutable after creation.
 - Filtering by date uses full ISO timestamps (UTC suggested).
 

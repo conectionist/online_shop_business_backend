@@ -44,6 +44,16 @@ class OrderItemBase(BaseModel):
     unitati_id: Annotated[int, Field(gt=0, description="Unit of measurement ID")]
 
 
+class OrderCreateItem(OrderItemBase):
+    """An item of a new order. Customers place orders, so they don't set the price."""
+
+    pret_produs: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Ignored: the order stores the product's current price",
+    )
+
+
 class OrderItem(OrderItemBase):
     """Schema for returning order item data"""
 
@@ -61,7 +71,7 @@ class OrderCreate(BaseModel):
     payment_method_id: Annotated[int, Field(gt=0, description="Payment method ID (required)")]
     delivery_address: Optional[str] = Field(None, max_length=150, description="Optional delivery address for home delivery")
     order_notes: Optional[str] = Field(None, max_length=500, description="Optional order notes")
-    items: Optional[List[OrderItemBase]] = Field(default=None, description="Optional order items to create together with the order")
+    items: Optional[List[OrderCreateItem]] = Field(default=None, description="Optional order items to create together with the order")
 
     @field_validator('nume_client')
     @classmethod

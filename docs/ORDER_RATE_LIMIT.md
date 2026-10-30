@@ -49,7 +49,18 @@ ORDER_RATE_LIMIT_WINDOW=day
 
 ## Behaviour
 
-- **Key:** Client IP from `X-Forwarded-For` (first element) when behind a trusted proxy, else `request.client.host`.
+- **Key:** The client IP as Uvicorn resolves it (`request.client.host`). Uvicorn takes it from
+  `X-Forwarded-For` only when the request comes from a proxy listed in `FORWARDED_ALLOW_IPS`, so
+  a client cannot choose its own key. If the proxy is missing from that list, every customer
+  shares the proxy's IP and one limit; the API logs a warning when it sees this, at most hourly.
+- **Production refuses to start** unless `USE_PROXY_HEADERS` is true and `FORWARDED_ALLOW_IPS`
+  lists IP addresses or networks other than loopback (`app/core/proxy_settings.py`). The default
+  `127.0.0.1` never matches the proxy from inside the container.
+- **Never set `FORWARDED_ALLOW_IPS=*`.** Uvicorn then trusts everyone and takes the first
+  `X-Forwarded-For` entry, which the client writes, so clients choose their own key again.
+- **Trusting the Docker gateway** (e.g. `172.18.0.1`, when the proxy runs on the host) also
+  trusts connections Docker relays to the published port 8000 from outside. Keep that port
+  unreachable except through the proxy: publish it as `127.0.0.1:8000:8000`, or firewall it.
 - **Over limit:** HTTP 429 with detail `"Too many orders from this IP. Please try again later."`
 - **Storage:** In-memory by default (per process; with multiple workers the effective limit per IP is roughly limit × workers unless you switch to Redis).
 

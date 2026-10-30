@@ -5,6 +5,8 @@ import logging
 from typing import List
 from urllib.parse import urlparse
 
+from app.core.proxy_settings import production_proxy_settings_error
+
 # Configure logging based on LOG_LEVEL env (defaults to INFO)
 _log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
 _log_level = getattr(logging, _log_level_name, logging.INFO)
@@ -280,6 +282,16 @@ LOGIN_RATE_LIMIT_WINDOW = get_optional_env_var(
     "Login rate limit window: second, minute, hour, day, or Nhour, Nday, etc. (no space)"
 ).strip()
 LOGIN_RATE_LIMIT_STRING = f"{LOGIN_RATE_LIMIT_MAX}/{LOGIN_RATE_LIMIT_WINDOW}"
+
+# Both limits count per client IP, which takes Uvicorn trusting the reverse proxy.
+_proxy_settings_error = production_proxy_settings_error(
+    ENVIRONMENT,
+    os.getenv("USE_PROXY_HEADERS", "true"),
+    os.getenv("FORWARDED_ALLOW_IPS", ""),
+)
+if _proxy_settings_error:
+    logger.error("CRITICAL: %s", _proxy_settings_error)
+    sys.exit(1)
 
 # For compatibility with the rest of the application
 class Settings:

@@ -52,9 +52,10 @@ services:
       - VAPID_SUBJECT=${VAPID_SUBJECT}
       # Disable OpenAPI docs in production for security
       - ENABLE_OPENAPI_DOCS=true
-      # Reverse proxy: which IPs may set X-Forwarded-* headers (default 127.0.0.1)
+      # Reverse proxy: which IPs may set X-Forwarded-* headers. Production requires your proxy's
+      # address here and refuses to start without it (see .env.example).
       - USE_PROXY_HEADERS=${USE_PROXY_HEADERS:-true}
-      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-}
       # Order creation rate limit (per-IP): max orders per IP per window (see docs/ORDER_RATE_LIMIT.md)
       - ORDER_RATE_LIMIT_MAX=${ORDER_RATE_LIMIT_MAX:-10}
       - ORDER_RATE_LIMIT_WINDOW=${ORDER_RATE_LIMIT_WINDOW:-24hour}
